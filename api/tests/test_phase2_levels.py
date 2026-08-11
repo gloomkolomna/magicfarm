@@ -17,6 +17,19 @@ def _credit(client, amount):
     ])
 
 
+def _give_coins(vk_id: int, amount: int):
+    from tests.conftest import TestingSessionLocal
+    from models import User
+    s = TestingSessionLocal()
+    try:
+        u = s.query(User).filter(User.vk_id == vk_id).first()
+        if u:
+            u.coins = (u.coins or 0) + amount
+            s.commit()
+    finally:
+        s.close()
+
+
 def _field_with_bed(admin_client):
     r = admin_client.post("/api/admin/fields", json={
         "name": "УровниТест", "code": "lvl_test", "cols": 3, "rows": 2,
@@ -32,47 +45,18 @@ def _field_with_bed(admin_client):
     return fid
 
 
-def test_levels_empty_when_no_variant(admin_client):
+def test_levels_list(admin_client):
     with make_user_client(123, "player") as c:
         r = c.get("/api/levels")
         assert r.status_code == 200
-        assert r.json() == []
-
-
-def test_set_route_variant(admin_client):
-    with make_user_client(123, "player") as c:
-        r = c.put("/api/levels/route-variant", json={"variant": 1})
-        assert r.status_code == 200
-        assert r.json()["route_variant"] == 1
-
-        r = c.get("/api/levels")
-        assert len(r.json()) == 3
-
-
-def test_route_variant_immutable(admin_client):
-    with make_user_client(123, "player") as c:
-        c.put("/api/levels/route-variant", json={"variant": 1})
-        r = c.put("/api/levels/route-variant", json={"variant": 2})
-        assert r.status_code == 409
-
-
-def test_set_route_variant_invalid(admin_client):
-    with make_user_client(123, "player") as c:
-        r = c.put("/api/levels/route-variant", json={"variant": 5})
-        assert r.status_code == 400
-        r = c.put("/api/levels/route-variant", json={"variant": 0})
-        assert r.status_code == 400
-
-
-def test_set_route_variant_no_gates(admin_client):
-    with make_user_client(123, "player") as c:
-        r = c.put("/api/levels/route-variant", json={"variant": 4})
-        assert r.status_code == 400
+        data = r.json()
+        assert len(data) == 3
+        assert data[0]["level"] == 1
+        assert data[0]["coins_required"] == 800
 
 
 def test_advance_level_insufficient(admin_client):
     with make_user_client(123, "player") as c:
-        c.put("/api/levels/route-variant", json={"variant": 1})
         r = c.post("/api/levels/advance")
         assert r.status_code == 400
 
@@ -81,7 +65,6 @@ def test_advance_level_requires_plots(admin_client):
     fid = _field_with_bed(admin_client)
     with make_user_client(123, "player") as c:
         _credit(c, 50000)
-        c.put("/api/levels/route-variant", json={"variant": 1})
         r = c.post(f"/api/fields/{fid}/cells/1/1/plant", json={"plant_id": 1, "qty": 1})
         assert r.status_code == 201
         pid = r.json()["plot"]["id"]
@@ -99,39 +82,116 @@ def test_advance_level_requires_plots(admin_client):
 
 
 def test_admin_crud_levels(admin_client):
-    r = admin_client.get("/api/admin/levels?variant=1")
+    r = admin_client.get("/api/admin/levels")
     assert r.status_code == 200
     assert len(r.json()) == 3
 
-    r = admin_client.put("/api/admin/levels", json={
-        "variant": 3, "level": 1, "coins_required": 500, "plots_required": 1,
+    r = admin_client.put("/api/admin/levels", params={
+        "level": 4, "coins_required": 500, "plots_required": 1,
+        "unlock_type": "Животноводство +2",
     })
     assert r.status_code == 200
     assert r.json()["coins_required"] == 500
+    assert r.json()["unlock_type"] == "Животноводство +2"
 
-    r = admin_client.get("/api/admin/levels?variant=3")
-    assert len(r.json()) == 1
+    r = admin_client.get("/api/admin/levels")
+    assert len(r.json()) == 4
 
-    r = admin_client.delete("/api/admin/levels/3/1")
+    r = admin_client.delete("/api/admin/levels/4")
     assert r.status_code == 204
 
-    r = admin_client.get("/api/admin/levels?variant=3")
-    assert len(r.json()) == 0
+    r = admin_client.get("/api/admin/levels")
+    assert len(r.json()) == 3
 
 
 def test_admin_levels_validation(admin_client):
-    r = admin_client.put("/api/admin/levels", json={
-        "variant": 5, "level": 1, "coins_required": 100, "plots_required": 1,
+    r = admin_client.put("/api/admin/levels", params={
+        "level": 0, "coins_required": 100, "plots_required": 1,
     })
     assert r.status_code == 400
 
-    r = admin_client.put("/api/admin/levels", json={
-        "variant": 1, "level": 17, "coins_required": 100, "plots_required": 1,
+    r = admin_client.put("/api/admin/levels", params={
+        "level": 17, "coins_required": 100, "plots_required": 1,
     })
     assert r.status_code == 400
+
+
+def test_admin_levels_invalid_unlock(admin_client):
+    r = admin_client.put("/api/admin/levels", params={
+        "level": 5, "coins_required": 100, "plots_required": 1,
+        "unlock_type": "Непонятно что",
+    })
+    assert r.status_code == 400
+
+
+def test_admin_upload_level_image(admin_client):
+    img = _real_img()
+    r = admin_client.post("/api/admin/levels/1/image", files=[
+        ("image", ("level1.png", img, "image/png")),
+    ])
+    assert r.status_code == 200
+    data = r.json()
+    assert data["image_url"] is not None
+    assert data["image_url"].startswith("/api/uploads/level_1_")
 
 
 def test_admin_levels_player_forbidden(admin_client):
     with make_user_client(123, "player") as c:
         r = c.get("/api/admin/levels")
         assert r.status_code == 403
+
+
+def test_advance_unlocks_barnyard(admin_client):
+    admin_client.put("/api/admin/levels", params={
+        "level": 1, "coins_required": 100, "plots_required": 0,
+        "unlock_type": "Животноводство +2",
+    })
+    with make_user_client(2001, "player") as c:
+        c.get("/api/me")
+        _give_coins(2001, 50000)
+        r = c.post("/api/levels/advance")
+        assert r.status_code == 200, r.text
+        me = c.get("/api/me").json()
+        assert me["unlocked_barnyard"] == 10
+
+
+def test_advance_unlocks_pets(admin_client):
+    admin_client.put("/api/admin/levels", params={
+        "level": 1, "coins_required": 100, "plots_required": 0,
+        "unlock_type": "Питомец-помощник +1",
+    })
+    with make_user_client(2002, "player") as c:
+        c.get("/api/me")
+        _give_coins(2002, 50000)
+        r = c.post("/api/levels/advance")
+        assert r.status_code == 200, r.text
+        me = c.get("/api/me").json()
+        assert me["unlocked_pets"] == 6
+
+
+def test_advance_unlocks_garden(admin_client):
+    admin_client.put("/api/admin/levels", params={
+        "level": 1, "coins_required": 100, "plots_required": 0,
+        "unlock_type": "Сад 1 уровня",
+    })
+    with make_user_client(2003, "player") as c:
+        c.get("/api/me")
+        _give_coins(2003, 50000)
+        r = c.post("/api/levels/advance")
+        assert r.status_code == 200, r.text
+        me = c.get("/api/me").json()
+        assert me["unlocked_garden_level"] == 1
+
+
+def test_advance_unlocks_plot_level(admin_client):
+    admin_client.put("/api/admin/levels", params={
+        "level": 1, "coins_required": 100, "plots_required": 0,
+        "unlock_type": "Грядка 2 уровня",
+    })
+    with make_user_client(2004, "player") as c:
+        c.get("/api/me")
+        _give_coins(2004, 50000)
+        r = c.post("/api/levels/advance")
+        assert r.status_code == 200, r.text
+        me = c.get("/api/me").json()
+        assert me["unlocked_plot_level"] == 2

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type Pet } from '../api/endpoints';
+import { api, type CrystalCard, type Pet } from '../api/endpoints';
+import { mediaUrl } from '../api/media';
 
 interface UserPet {
   id: number;
@@ -37,6 +38,7 @@ export default function PetsPage() {
 
   const [selectOpen, setSelectOpen] = useState(false);
   const [settleResult, setSettleResult] = useState<SettleResult | null>(null);
+  const [crystalCards, setCrystalCards] = useState<CrystalCard[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +58,10 @@ export default function PetsPage() {
 
   useEffect(() => { if (!sessionLoading) load(); }, [load, sessionLoading]);
 
+  useEffect(() => {
+    api.crystalCards().then(setCrystalCards).catch(() => {});
+  }, []);
+
   const ownedPetIds = new Set(userPets.map((p) => p.pet_id));
 
   async function doSettle(pet: Pet) {
@@ -70,14 +76,12 @@ export default function PetsPage() {
     } finally { setBusy(false); }
   }
 
-  if (loading) return <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}><div className="fm-card">Загрузка…</div></div>;
+  if (loading) return <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}><div className="fm-card">Загрузка…</div></div>;
 
   const slots = Array.from({ length: TOTAL_SLOTS }, (_, i) => userPets[i] ?? null);
 
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <h1 style={{ textAlign: 'center' }}>🐾 Поселение питомцев</h1>
-
+    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
 
       <div className="fm-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
@@ -160,22 +164,31 @@ export default function PetsPage() {
             Вытянуто {settleResult.drawn_cards.length} карт:
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 14 }}>
-            {settleResult.drawn_cards.map((card, idx) => (
-              <div
-                key={idx}
-                className="fm-card"
-                style={{
-                  width: 56, height: 72, display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', justifyContent: 'center', fontSize: 12,
-                  border: card.is_treasure ? '2px solid gold' : undefined,
-                  background: card.is_treasure ? 'rgba(255,215,0,0.12)' : undefined,
-                }}
-              >
-                <div style={{ fontSize: 18 }}>{COLOR_LABEL[card.color] || '⚪'}</div>
-                <div style={{ fontWeight: 700 }}>{card.value}</div>
-                {card.is_treasure && <div style={{ fontSize: 10, color: 'gold' }}>★</div>}
-              </div>
-            ))}
+            {settleResult.drawn_cards.map((card, idx) => {
+              const cardImg = crystalCards.find(
+                cc => cc.color === card.color && cc.value === card.value && cc.is_treasure === card.is_treasure
+              )?.image_url;
+              return (
+                <div
+                  key={idx}
+                  className="fm-card"
+                  style={{
+                    width: 72, height: 96, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', fontSize: 12, padding: 4,
+                    border: card.is_treasure ? '2px solid gold' : undefined,
+                    background: card.is_treasure ? 'rgba(255,215,0,0.12)' : undefined,
+                  }}
+                >
+                  {cardImg ? (
+                    <img src={mediaUrl(cardImg)} alt="" style={{ width: '100%', height: 'auto', maxHeight: 60, objectFit: 'contain', marginBottom: 2 }} />
+                  ) : (
+                    <div style={{ fontSize: 24 }}>{COLOR_LABEL[card.color] || '⚪'}</div>
+                  )}
+                  <div style={{ fontWeight: 700, fontSize: 11 }}>{card.value}</div>
+                  {card.is_treasure && <div style={{ fontSize: 10, color: 'gold' }}>★</div>}
+                </div>
+              );
+            })}
           </div>
           <div className="fm-card" style={{ textAlign: 'center', background: 'rgba(255,255,255,0.06)', marginBottom: 8 }}>
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Требуется крестиков</div>
@@ -196,7 +209,7 @@ export default function PetsPage() {
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, maxHeight: '85vh', overflowY: 'auto' }}>
+      <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 'calc(var(--shell-max-width) * 0.7)', maxHeight: '85vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <h2 style={{ margin: 0 }}>{title}</h2>
           <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={onClose}>✕</button>

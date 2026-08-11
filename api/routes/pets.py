@@ -57,6 +57,13 @@ def settle_pet(
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот питомец уже заселён")
 
+    current_count = db.query(UserPet).filter(UserPet.user_id == user.vk_id).count()
+    if current_count >= (user.unlocked_pets or 0):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Нет свободных слотов для питомцев. Повысьте уровень, чтобы открыть новые.",
+        )
+
     cards = draw_cards(db, 10, False)
     required = calculate_norm(db, user, cards)
 

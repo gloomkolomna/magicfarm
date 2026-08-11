@@ -32,7 +32,6 @@ export default function FieldsPage() {
   const [bgUrl, setBgUrl] = useState('');
   const [page, setPage] = useState(0);
   const [potions, setPotions] = useState<any[]>([]);
-  const [routeVariant, setRouteVariant] = useState<number | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -41,24 +40,14 @@ export default function FieldsPage() {
       api.userPotions().catch(() => [] as any[]),
       api.levels().catch(() => [] as any[]),
     ])
-      .then(([flds, bg, pots, lvls]) => {
+      .then(([flds, bg, pots]) => {
         setFields(flds);
         setBgUrl(bg.url);
         setPotions(pots);
-        setRouteVariant(lvls.length > 0 ? lvls[0].variant : null);
       })
       .catch((e) => setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')))
       .finally(() => setLoading(false));
   }, []);
-
-  async function handleSetVariant(v: number) {
-    try {
-      await api.setRouteVariant(v);
-      setRouteVariant(v);
-    } catch (e: any) {
-      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-    }
-  }
 
   const unactivated = potions.filter((p: any) => p.activated === false);
 
@@ -77,7 +66,7 @@ export default function FieldsPage() {
   const handleNext = () => { if (safePage < totalPages - 1) setPage(safePage + 1); };
 
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}>
+    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       {user && (
         <div className="fm-card fm-rise" style={{ textAlign: 'center', marginBottom: 14 }}>
           <div style={{ fontSize: 24, marginBottom: 4 }}>🏆 Уровень {userLevel}</div>
@@ -93,27 +82,8 @@ export default function FieldsPage() {
               </span>
             </div>
           )}
-          {routeVariant === null && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 13, marginBottom: 4, color: 'var(--text-secondary)' }}>
-                Выберите вариант маршрута:
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
-                {[1, 2, 3, 4].map((v) => (
-                  <button
-                    key={v}
-                    className="fm-btn fm-btn--primary"
-                    style={{ fontSize: 14, padding: '4px 16px' }}
-                    onClick={() => handleSetVariant(v)}
-                  >
-                    Вариант {v}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
           <button
-            className="fm-btn fm-btn--secondary"
+            className="fm-btn fm-btn-outline"
             style={{ marginTop: 10 }}
             onClick={() => nav('/onboarding')}
           >
@@ -121,12 +91,8 @@ export default function FieldsPage() {
           </button>
         </div>
       )}
-      <h1 style={{ textAlign: 'center' }}>🗺️ Поля фермы</h1>
-
       {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
-
       {bgUrl && <img src={bgUrl} alt="" style={{ width: '100%', borderRadius: 12, marginBottom: 14 }} />}
-
       {loading ? (
         <div className="fm-card">Загрузка полей…</div>
       ) : fields.length === 0 ? (

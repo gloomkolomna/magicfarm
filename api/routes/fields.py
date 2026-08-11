@@ -157,6 +157,17 @@ def plant_on_cell(
             detail=f"В этой локации можно сажать только растения категории '{f.plant_category}'",
         )
 
+    if plant_obj.category == "garden_beds" and plant_obj.level > (user.unlocked_plot_level or 1):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Грядки {plant_obj.level} уровня пока недоступны. Повысьте уровень.",
+        )
+    if plant_obj.category == "orchard" and plant_obj.level > (user.unlocked_garden_level or 0):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Сады {plant_obj.level} уровня пока недоступны. Повысьте уровень.",
+        )
+
     if req.qty < 1 or req.qty > MAX_PLOT_QTY:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -244,6 +255,7 @@ def harvest_cell(
 
     plot.status = "planted"
     plot.accumulated = 0
+    plot.norm_revealed = False
     plot.completed_at = plot.completed_at or datetime.datetime.utcnow()
 
     from models import Inventory

@@ -157,9 +157,7 @@ export default function PotionsPage() {
   const sortedLevels = Object.keys(groupedByLevel).sort((a, b) => Number(a) - Number(b));
 
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <h1 style={{ textAlign: 'center' }}>🧪 Зельеварение</h1>
-
+    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       {msg && (
         <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }} role="status">{msg}</div>
       )}
@@ -345,7 +343,7 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
       <div
         className="fm-card fm-rise"
         onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 460, maxHeight: '85vh', overflowY: 'auto' }}
+        style={{ width: '100%', maxWidth: 'calc(var(--shell-max-width) * 0.767)', maxHeight: '85vh', overflowY: 'auto' }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <h2 style={{ margin: 0 }}>{title}</h2>

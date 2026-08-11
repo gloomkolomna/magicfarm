@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type Animal, type BarnyardPen, type BarnyardProduceResult } from '../api/endpoints';
+import { api, type Animal, type BarnyardPen, type BarnyardProduceResult, type CrystalCard } from '../api/endpoints';
+import { mediaUrl } from '../api/media';
 
 const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
@@ -19,6 +20,10 @@ export default function BarnyardPage() {
   const [investAmount, setInvestAmount] = useState('');
 
   const [produceResult, setProduceResult] = useState<BarnyardProduceResult | null>(null);
+  const [showDiceVideo, setShowDiceVideo] = useState(false);
+  const [diceVideoUrl, setDiceVideoUrl] = useState<string | null>(null);
+  const [diceFaces, setDiceFaces] = useState<(string | null)[]>([null, null, null, null, null, null, null]);
+  const [crystalCards, setCrystalCards] = useState<CrystalCard[]>([]);
 
   const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string } | null>(null);
 
@@ -33,6 +38,21 @@ export default function BarnyardPage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    Promise.all([
+      api.gameMediaByCode('dice_roll').then(gm => setDiceVideoUrl(gm.url ? mediaUrl(gm.url) : null)).catch(() => {}),
+      ...([1, 2, 3, 4, 5, 6].map(i =>
+        api.gameMediaByCode(`dice_face_${i}`).then(gm => gm.url ? mediaUrl(gm.url) : null).catch(() => null)
+      )),
+      api.crystalCards().catch(() => [] as CrystalCard[]),
+    ]).then(([_video, ...results]) => {
+      const faces = results.slice(0, 6) as (string | null)[];
+      const cards = results[6] as CrystalCard[];
+      setDiceFaces([null, ...faces]);
+      if (cards) setCrystalCards(cards);
+    });
   }, []);
 
   useEffect(() => { if (!sessionLoading) load(); }, [load, sessionLoading]);
@@ -76,6 +96,7 @@ export default function BarnyardPage() {
     setBusy(true); setMsg(null);
     try {
       const result = await api.barnyardProduce(pen.id);
+      setShowDiceVideo(!!diceVideoUrl);
       setProduceResult(result);
       await load(); await refresh();
     } catch (e: any) {
@@ -85,7 +106,7 @@ export default function BarnyardPage() {
 
   if (loading) {
     return (
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}>
+      <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
         <div className="fm-card">Загрузка скотного двора…</div>
       </div>
     );
@@ -95,9 +116,7 @@ export default function BarnyardPage() {
 
   return (
     <>
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}>
-        <h1 style={{ textAlign: 'center' }}>🐄 Скотный двор</h1>
-
+      <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
         {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
 
         {sorted.length === 0 ? (
@@ -241,24 +260,45 @@ export default function BarnyardPage() {
 
       {/* Модалка результата продукции */}
       {produceResult && (
-        <Modal title="🎲 Результат броска" onClose={() => setProduceResult(null)}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 10 }}>
-              {DICE_FACES[produceResult.die] || produceResult.die}
+        <Modal title="🎲 Результат броска" onClose={() => { setProduceResult(null); setShowDiceVideo(false); }} wide={showDiceVideo}>
+          {showDiceVideo && diceVideoUrl ? (
+            <div style={{ textAlign: 'center' }}>
+              <video
+                src={diceVideoUrl}
+                autoPlay
+                muted
+                playsInline
+                style={{ width: '100%', maxHeight: '50vh', borderRadius: 8, marginBottom: 8 }}
+                onEnded={() => setShowDiceVideo(false)}
+                onError={() => setShowDiceVideo(false)}
+              />
+              <button className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => setShowDiceVideo(false)}>
+                Пропустить
+              </button>
             </div>
-            <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>
-              {produceResult.animal_name}
+          ) : (
+            <div style={{ textAlign: 'center' }}>
+              {diceFaces[produceResult.die] ? (
+                <img src={diceFaces[produceResult.die]!} alt="" style={{ width: '30vw', maxWidth: 200, height: 'auto', marginBottom: 10 }} />
+              ) : (
+                <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 10 }}>
+                  {DICE_FACES[produceResult.die] || produceResult.die}
+                </div>
+              )}
+              <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                {produceResult.animal_name}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
+                Норма вышивки: {produceResult.required} крестиков
+              </div>
+              <div className="fm-chip" style={{ display: 'inline-block', fontSize: 16 }}>
+                +{produceResult.product_coins} 🪙
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>
+                Вышейте норму, отчитайтесь о вышивке — и продукция станет доступна.
+              </p>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
-              Норма вышивки: {produceResult.required} крестиков
-            </div>
-            <div className="fm-chip" style={{ display: 'inline-block', fontSize: 16 }}>
-              +{produceResult.product_coins} 🪙
-            </div>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>
-              Вышейте норму, отчитайтесь о вышивке — и продукция станет доступна.
-            </p>
-          </div>
+          )}
         </Modal>
       )}
 
@@ -266,14 +306,25 @@ export default function BarnyardPage() {
       {cardResult && (
         <Modal title={cardResult.title} onClose={() => setCardResult(null)}>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-            {cardResult.cards.map((c, i) => (
-              <div key={i} style={{ textAlign: 'center', padding: '8px 12px', borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>
-                  {c.color === 'green' ? '🟢' : c.color === 'blue' ? '🔵' : '🟣'} {c.is_treasure ? '✨' : ''}
+            {cardResult.cards.map((c, i) => {
+              const cardImg = crystalCards.find(
+                cc => cc.color === c.color && cc.value === c.value && cc.is_treasure === c.is_treasure
+              )?.image_url;
+              return (
+                <div key={i} style={{ textAlign: 'center', padding: 6, borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border)', minWidth: 100 }}>
+                  {cardImg ? (
+                    <img src={mediaUrl(cardImg)} alt="" style={{ width: '30vw', maxWidth: 160, height: 'auto', objectFit: 'contain', marginBottom: 4 }} />
+                  ) : (
+                    <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 4 }}>
+                      {c.is_treasure ? '💎' : c.color === 'green' ? '🟢' : c.color === 'blue' ? '🔵' : '🟣'}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {c.is_treasure ? 'Сокровище' : `${c.value}`}
+                  </div>
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 700 }}>{c.is_treasure ? '★' : c.value}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
             Вложите крестики по норме каждого кристалла — и загон будет готов.
@@ -284,10 +335,10 @@ export default function BarnyardPage() {
   );
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, maxHeight: '85vh', overflowY: 'auto' }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: wide ? 8 : 16 }}>
+      <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: wide ? '95vw' : 'calc(var(--shell-max-width) * 0.7)', maxHeight: wide ? '95vh' : '85vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <h2 style={{ margin: 0 }}>{title}</h2>
           <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={onClose}>✕</button>

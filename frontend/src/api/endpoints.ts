@@ -37,20 +37,23 @@ export interface OrderTemplateCreate {
 }
 
 export interface LevelGate {
-  variant: number;
   level: number;
   coins_required: number;
   plots_required: number;
-  rewards: Record<string, unknown> | null;
+  unlock_type: string | null;
+  image_url: string | null;
 }
 
-export interface LevelGateCreate {
-  variant: number;
-  level: number;
-  coins_required: number;
-  plots_required: number;
-  rewards?: Record<string, unknown> | null;
-}
+export const UNLOCK_OPTIONS = [
+  'Животноводство +1',
+  'Животноводство +2',
+  'Питомец-помощник +1',
+  'Сад 1 уровня',
+  'Сад 2 уровня',
+  'Сад 3 уровня',
+  'Грядка 2 уровня',
+  'Грядка 3 уровня',
+] as const;
 
 export interface PotionRecipe {
   id: number;
@@ -143,6 +146,7 @@ export interface Plot {
   crystal_color: string | null;
   crystal_count: number | null;
   drawn_cards_json: string | null;
+  norm_revealed: boolean;
   created_at: string | null;
   completed_at: string | null;
 }
@@ -313,10 +317,31 @@ export interface Tent {
   crystal_count: number | null;
 }
 
+export interface PlantBed {
+  id: number;
+  field_id: number;
+  col1: number;
+  row1: number;
+  col2: number;
+  row2: number;
+  plant_category: string | null;
+}
+
+export interface PetZone {
+  id: number;
+  field_id: number;
+  col1: number;
+  row1: number;
+  col2: number;
+  row2: number;
+}
+
 export interface FieldDetail extends FieldInfo {
   cells: FieldCellDetail[];
   plants: Plant[];
   tents?: Tent[];
+  plant_beds?: PlantBed[];
+  pet_zones?: PetZone[];
 }
 
 export interface NormImage {
@@ -346,10 +371,27 @@ export interface BarnyardProduceResult {
   product_coins: number;
 }
 
+export interface GameMedia {
+  id: number;
+  code: string;
+  kind: string;
+  url: string | null;
+}
+
+export interface CrystalCard {
+  id: number;
+  color: string;
+  value: number;
+  is_treasure: boolean;
+  image_url: string | null;
+}
+
 export const api = {
   // ── Производства / склад ──
   investPlot: (plot_id: number, amount: number) =>
     client.post<Plot>(`/farm/plots/${plot_id}/invest`, { amount }).then((r) => r.data),
+  revealNorm: (plot_id: number) =>
+    client.post<Plot>(`/farm/plots/${plot_id}/reveal-norm`).then((r) => r.data),
   craftProduct: (production_id: number, amount: number, product_id: number, qty = 1) =>
     client
       .post<Production>(`/farm/productions/${production_id}/craft`, { amount, product_id, qty })
@@ -366,11 +408,14 @@ export const api = {
       .then((r) => r.data),
 
   // ── Фото-отчёты по вышивке ──
-  createStitchReport: (amount: number, photo: File, note?: string) => {
+  createStitchReport: (amount: number, photoBefore: File, photoAfter: File, note?: string, contextType?: string, contextId?: number) => {
     const form = new FormData();
     form.append('amount', String(amount));
     if (note) form.append('note', note);
-    form.append('photo', photo);
+    form.append('photo_before', photoBefore);
+    form.append('photo_after', photoAfter);
+    if (contextType) form.append('context_type', contextType);
+    if (contextId != null) form.append('context_id', String(contextId));
     return client
       .post<StitchReport>('/stitches/reports', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -478,6 +523,32 @@ export const api = {
   adminDeleteTent: (fieldId: number, tentId: number) =>
     client.delete(`/admin/fields/${fieldId}/tents/${tentId}`).then((r) => r.data),
 
+  adminCreatePlantBed: (fieldId: number, col1: number, row1: number, col2: number, row2: number) => {
+    const form = new FormData();
+    form.append('col1', String(col1));
+    form.append('row1', String(row1));
+    form.append('col2', String(col2));
+    form.append('row2', String(row2));
+    return client
+      .post<PlantBed>(`/admin/fields/${fieldId}/plant-beds`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => r.data);
+  },
+  adminDeletePlantBed: (fieldId: number, bedId: number) =>
+    client.delete(`/admin/fields/${fieldId}/plant-beds/${bedId}`).then((r) => r.data),
+
+  adminCreatePetZone: (fieldId: number, col1: number, row1: number, col2: number, row2: number) => {
+    const form = new FormData();
+    form.append('col1', String(col1));
+    form.append('row1', String(row1));
+    form.append('col2', String(col2));
+    form.append('row2', String(row2));
+    return client
+      .post<PetZone>(`/admin/fields/${fieldId}/pet-zones`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => r.data);
+  },
+  adminDeletePetZone: (fieldId: number, zoneId: number) =>
+    client.delete(`/admin/fields/${fieldId}/pet-zones/${zoneId}`).then((r) => r.data),
+
   // ── Каталог: растения, животные, питомцы ──
   adminPlants: () => client.get<Plant[]>('/admin/catalog/plants').then((r) => r.data),
   adminCreatePlant: (data: Partial<Plant> & { code: string; name: string }) =>
@@ -575,6 +646,10 @@ export const api = {
     client.get<StitchReport[]>(`/admin/players/${vkId}/reports`).then((r) => r.data),
   adminPlayerField: (vkId: number, fieldId: number) =>
     client.get<FieldDetail>(`/admin/players/${vkId}/fields/${fieldId}`).then((r) => r.data),
+  adminResetPlotNorm: (vkId: number, plotId: number) =>
+    client.post<any>(`/admin/players/${vkId}/plots/${plotId}/reset-norm`).then((r) => r.data),
+  adminDeletePlayerPlot: (vkId: number, plotId: number) =>
+    client.delete(`/admin/players/${vkId}/plots/${plotId}`).then((r) => r.data),
 
   // ── Админ: заказы ──
   adminOrders: (userId?: number) =>
@@ -604,12 +679,17 @@ export const api = {
     client.delete(`/admin/order-templates/${id}`).then((r) => r.data),
 
   // ── Админ: уровни ──
-  adminLevels: (variant?: number) =>
-    client.get<LevelGate[]>('/admin/levels', { params: { variant } }).then((r) => r.data),
-  adminSetLevel: (data: LevelGateCreate) =>
-    client.put<LevelGate>('/admin/levels', data).then((r) => r.data),
-  adminDeleteLevel: (variant: number, level: number) =>
-    client.delete(`/admin/levels/${variant}/${level}`).then((r) => r.data),
+  adminLevels: () =>
+    client.get<LevelGate[]>('/admin/levels').then((r) => r.data),
+  adminSetLevel: (level: number, coins_required: number, plots_required: number, unlock_type?: string | null) =>
+    client.put<LevelGate>('/admin/levels', null, { params: { level, coins_required, plots_required, unlock_type } }).then((r) => r.data),
+  adminUploadLevelImage: (level: number, file: File) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return client.post<LevelGate>(`/admin/levels/${level}/image`, fd).then((r) => r.data);
+  },
+  adminDeleteLevel: (level: number) =>
+    client.delete(`/admin/levels/${level}`).then((r) => r.data),
 
   // ── Админ: рецепты зелий ──
   adminPotionRecipes: () =>
@@ -640,10 +720,8 @@ export const api = {
     client.post<UserPotion>(`/potions/${id}/activate`).then((r) => r.data),
 
   // ── Маршруты / уровни ──
-  setRouteVariant: (variant: number) =>
-    client.put<{ route_variant: number }>('/levels/route-variant', { variant }).then((r) => r.data),
   levels: () =>
-    client.get<any[]>('/levels').then((r) => r.data),
+    client.get<LevelGate[]>('/levels').then((r) => r.data),
 
   // ── Настройки: фон ──
   getBackground: () => client.get<{ url: string }>('/settings/background').then((r) => r.data),
@@ -672,4 +750,34 @@ export const api = {
 
   sellSurplus: (itemKind: string, itemId: number, qty: number) =>
     client.post<{ coins_earned: number }>('/farm/sell-surplus', { item_kind: itemKind, item_id: itemId, qty }).then((r) => r.data),
+
+  // ── GameMedia ──
+  adminGameMedia: () =>
+    client.get<GameMedia[]>('/admin/game-media').then((r) => r.data),
+  adminCreateGameMedia: (data: { code: string; kind: string }) =>
+    client.post<GameMedia>('/admin/game-media', data).then((r) => r.data),
+  adminUpdateGameMedia: (id: number, data: { code?: string; kind?: string }) =>
+    client.put<GameMedia>(`/admin/game-media/${id}`, data).then((r) => r.data),
+  adminDeleteGameMedia: (id: number) =>
+    client.delete(`/admin/game-media/${id}`).then((r) => r.data),
+  adminUploadGameMedia: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return client.put<GameMedia>(`/admin/game-media/${id}/upload`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  gameMedia: () =>
+    client.get<GameMedia[]>('/game-media').then((r) => r.data),
+  gameMediaByCode: (code: string) =>
+    client.get<GameMedia>(`/game-media/${code}`).then((r) => r.data),
+
+  // ── CrystalCard ──
+  adminCrystalCards: () =>
+    client.get<CrystalCard[]>('/admin/catalog/crystal-cards').then((r) => r.data),
+  adminUploadCrystalCardImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<CrystalCard>(`/admin/catalog/crystal-cards/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  crystalCards: () =>
+    client.get<CrystalCard[]>('/crystal-cards').then((r) => r.data),
 };

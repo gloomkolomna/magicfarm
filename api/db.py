@@ -33,6 +33,12 @@ def init_db():
         reset_database()
     else:
         Base.metadata.create_all(bind=engine)
+    from services.card_draw import seed_cards
+    db = SessionLocal()
+    try:
+        seed_cards(db)
+    finally:
+        db.close()
 
 
 def get_db():

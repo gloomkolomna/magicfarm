@@ -26,7 +26,16 @@ def _credit(user: User, amount: int) -> None:
 
 
 def _process_context(report: "StitchReport", db: Session) -> None:
-    if report.context_type == "recipe_study" and report.context_id is not None:
+    if report.context_type == "plant_grow" and report.context_id is not None:
+        from models import Plot
+        plot = db.query(Plot).filter(Plot.id == report.context_id, Plot.user_id == report.user_id).first()
+        if plot is not None:
+            plot.accumulated = (plot.accumulated or 0) + report.amount
+            if plot.accumulated >= plot.required:
+                plot.status = "grown"
+                plot.completed_at = datetime.datetime.utcnow()
+            db.commit()
+    elif report.context_type == "recipe_study" and report.context_id is not None:
         from routes.library import complete_study
         complete_study(report.user_id, report.context_id, db)
         check_and_award(report.user_id, "first_recipe", db)
@@ -114,6 +123,15 @@ def create_report(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Количество крестиков должно быть от {MIN_AMOUNT} до {MAX_AMOUNT}",
         )
+
+    if context_type == "plant_grow" and context_id is not None:
+        from models import Plot
+        plot = db.query(Plot).filter(Plot.id == context_id, Plot.user_id == user.vk_id).first()
+        if plot is not None and amount < (plot.required - plot.accumulated):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Недостаточно крестиков. Норма грядки: {plot.required - plot.accumulated}, вы указали {amount}",
+            )
 
     if context_type is not None and context_type not in (
         "plant_grow", "recipe_study", "production",

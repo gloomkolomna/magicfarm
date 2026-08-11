@@ -62,9 +62,12 @@ class PlayerReportOut(BaseModel):
     id: int
     user_id: int
     amount: int
-    photo_url: str | None
+    photo_after_url: str | None
+    photo_before_url: str | None
     note: str | None
     status: str
+    context_type: str | None
+    context_id: int | None
     reviewer_id: int | None
     reviewed_at: str | None
     created_at: str | None
@@ -137,7 +140,7 @@ def get_player_detail(
 
     plots = db.query(Plot).filter(Plot.user_id == vk_id).order_by(Plot.created_at.desc()).all()
     productions = db.query(Production).filter(Production.user_id == vk_id).order_by(Production.created_at.desc()).all()
-    inventory = db.query(Inventory).filter(Inventory.user_id == vk_id).all()
+    inventory = db.query(Inventory).filter(Inventory.user_id == vk_id, Inventory.product_id.isnot(None)).all()
 
     return PlayerDetailOut(
         vk_id=player.vk_id,
@@ -197,7 +200,9 @@ def get_player_reports(
     return [
         PlayerReportOut(
             id=r.id, user_id=r.user_id, amount=r.amount,
-            photo_url=r.photo_url, note=r.note, status=r.status,
+            photo_after_url=r.photo_after_url, photo_before_url=r.photo_before_url,
+            note=r.note, status=r.status,
+            context_type=r.context_type, context_id=r.context_id,
             reviewer_id=r.reviewer_id,
             reviewed_at=r.reviewed_at.isoformat() if r.reviewed_at else None,
             created_at=r.created_at.isoformat() if r.created_at else None,
@@ -319,3 +324,58 @@ def get_player_field(
             ) for t in f.tents
         ],
     )
+
+
+@router.post("/{vk_id}/plots/{plot_id}/reset-norm")
+def reset_plot_norm(
+    vk_id: int,
+    plot_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    plot = db.query(Plot).filter(Plot.id == plot_id, Plot.user_id == vk_id).first()
+    if plot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Грядка не найдена")
+
+    from services.card_draw import draw_cards, cards_to_json, calculate_norm
+    from models import Plant as PlantModel
+
+    plant_obj = db.query(PlantModel).filter(PlantModel.id == plot.plant_id).first()
+    if plant_obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Растение не найдено")
+
+    level_key = f"plant_{plant_obj.level}"
+    num_cards, allow_treasure = __import__("models").CARD_DRAW_RULES.get(level_key, (1, False))
+    cards = draw_cards(db, num_cards, allow_treasure)
+    plot_user = db.query(User).filter(User.vk_id == vk_id).first()
+    required = calculate_norm(db, plot_user, cards) * plot.qty
+
+    plot.drawn_cards_json = cards_to_json(cards)
+    plot.required = required
+    plot.accumulated = 0
+    plot.norm_revealed = False
+    db.commit()
+
+    from routes.farm import _plot_to_out
+    return _plot_to_out(plot)
+
+
+@router.delete("/{vk_id}/plots/{plot_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_player_plot(
+    vk_id: int,
+    plot_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    plot = db.query(Plot).filter(Plot.id == plot_id, Plot.user_id == vk_id).first()
+    if plot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Грядка не найдена")
+
+    if plot.cell_id is not None:
+        cell = db.query(FieldCell).filter(FieldCell.id == plot.cell_id).first()
+        if cell is not None:
+            cell.occupant_user_id = None
+
+    db.delete(plot)
+    db.commit()
+    return None

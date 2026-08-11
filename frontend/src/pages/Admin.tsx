@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type AdminOrder, type Animal, type FieldDetail, type FieldInfo, type LevelGate, type LevelGateCreate, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
+import { api, type AdminOrder, type Animal, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import CrystalStandardEditor from '../components/CrystalStandardEditor';
@@ -42,7 +42,7 @@ const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
 ];
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'order-templates' | 'levels' | 'potion-recipes'>('players');
+  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'order-templates' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards'>('players');
   const [players, setPlayers] = useState<Player[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
@@ -124,6 +124,8 @@ export default function AdminPage() {
     if (tab === 'pets' && !r.has('pets')) { r.add('pets'); api.adminPets().then(setPets).catch(() => {}); }
     if (tab === 'products' && !r.has('products')) { r.add('products'); api.adminProducts().then(setCatalogProducts).catch(() => {}); }
     if (tab === 'productions' && !r.has('productions')) { r.add('productions'); api.adminProductionTemplates().then(setProdTemplates).catch(() => {}); }
+    if (tab === 'media' && !r.has('media')) { r.add('media'); api.adminGameMedia().then(setGameMedia).catch(() => {}); }
+    if (tab === 'crystal-cards' && !r.has('crystal-cards')) { r.add('crystal-cards'); api.adminCrystalCards().then(setCrystalCards).catch(() => {}); }
     if ((tab === 'orders' || tab === 'order-templates') && !r.has('orders')) {
       r.add('orders');
       Promise.all([
@@ -140,14 +142,31 @@ export default function AdminPage() {
 
   // ── Уровни ──
   const [levels, setLevels] = useState<LevelGate[]>([]);
-  const [levelForm, setLevelForm] = useState<LevelGateCreate>({ variant: 1, level: 1, coins_required: 800, plots_required: 2 });
-  const [levelVariant, setLevelVariant] = useState(1);
+  const [levelForm, setLevelForm] = useState({ level: 1, coins_required: 800, plots_required: 2, unlock_type: '' });
+  const [levelImage, setLevelImage] = useState<File | null>(null);
+  const [levelImageLevel, setLevelImageLevel] = useState(1);
 
   // ── Рецепты зелий ──
   const [potionRecipes, setPotionRecipes] = useState<PotionRecipe[]>([]);
   const [potionForm, setPotionForm] = useState<PotionRecipeCreate>({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100 });
   const [potionEditingId, setPotionEditingId] = useState<number | null>(null);
   const [potionSlotInput, setPotionSlotInput] = useState('');
+
+  const MEDIA_TYPES: { code: string; kind: string; label: string }[] = [
+    { code: 'card_shuffle', kind: 'video', label: '🎴 Видео перетасовки карт' },
+    { code: 'dice_roll', kind: 'video', label: '🎲 Видео броска кубика' },
+    { code: 'dice_face_1', kind: 'image', label: '⚀ Грань кубика 1' },
+    { code: 'dice_face_2', kind: 'image', label: '⚁ Грань кубика 2' },
+    { code: 'dice_face_3', kind: 'image', label: '⚂ Грань кубика 3' },
+    { code: 'dice_face_4', kind: 'image', label: '⚃ Грань кубика 4' },
+    { code: 'dice_face_5', kind: 'image', label: '⚄ Грань кубика 5' },
+    { code: 'dice_face_6', kind: 'image', label: '⚅ Грань кубика 6' },
+  ];
+
+  const [gameMedia, setGameMedia] = useState<GameMedia[]>([]);
+  const [mediaTypeSel, setMediaTypeSel] = useState('');
+
+  const [crystalCards, setCrystalCards] = useState<CrystalCard[]>([]);
 
   // ── Фон ──
   const [bgUrl, setBgUrl] = useState('');
@@ -582,23 +601,34 @@ export default function AdminPage() {
   }
 
   // ── Уровни ──
-  async function loadLevels(v?: number) {
-    try { setLevels(await api.adminLevels(v ?? levelVariant)); }
+  async function loadLevels() {
+    try { setLevels(await api.adminLevels()); }
     catch { /* ignore */ }
   }
   async function saveLevel() {
     setBusy(true); setMsg(null);
     try {
-      await api.adminSetLevel(levelForm);
+      await api.adminSetLevel(levelForm.level, levelForm.coins_required, levelForm.plots_required, levelForm.unlock_type || null);
       await loadLevels();
       setMsg('✓ Сохранено');
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
-  async function deleteLevel(variant: number, level: number) {
-    if (!confirm(`Удалить уровень ${level} варианта ${variant}?`)) return;
+  async function uploadLevelImage() {
+    if (!levelImage) { setMsg('✗ Выберите файл'); return; }
     setBusy(true); setMsg(null);
-    try { await api.adminDeleteLevel(variant, level); await loadLevels(); setMsg('✓ Удалено'); }
+    try {
+      await api.adminUploadLevelImage(levelImageLevel, levelImage);
+      setLevelImage(null);
+      await loadLevels();
+      setMsg('✓ Изображение загружено');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function deleteLevel(level: number) {
+    if (!confirm(`Удалить уровень ${level}?`)) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeleteLevel(level); await loadLevels(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
@@ -607,28 +637,36 @@ export default function AdminPage() {
     return (
       <div>
         <h2>📊 Уровни (маршрутный лист)</h2>
-        <div style={{ marginBottom: 10, display: 'flex', gap: 8 }}>
-          {[1, 2, 3, 4].map((v) => (
-            <button key={v} className={`fm-btn fm-btn-sm`} style={{ fontWeight: levelVariant === v ? 'bold' : 'normal' }} onClick={() => { setLevelVariant(v); loadLevels(v); }}>
-              Вариант {v}
-            </button>
-          ))}
-        </div>
-        <div className="fm-card" style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="fm-card" style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input className="fm-input" type="number" placeholder="Уровень (1-16)" value={levelForm.level || ''} onChange={(e) => setLevelForm({ ...levelForm, level: Number(e.target.value) })} style={{ width: 80 }} />
           <input className="fm-input" type="number" placeholder="Монет" value={levelForm.coins_required || ''} onChange={(e) => setLevelForm({ ...levelForm, coins_required: Number(e.target.value) })} style={{ width: 100 }} />
           <input className="fm-input" type="number" placeholder="Грядок" value={levelForm.plots_required || ''} onChange={(e) => setLevelForm({ ...levelForm, plots_required: Number(e.target.value) })} style={{ width: 80 }} />
+          <select className="fm-input" value={levelForm.unlock_type} onChange={(e) => setLevelForm({ ...levelForm, unlock_type: e.target.value })} style={{ width: 200 }}>
+            <option value="">— Что разблокируется —</option>
+            {UNLOCK_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
           <button className="fm-btn" disabled={busy} onClick={saveLevel}>💾 Сохранить</button>
         </div>
+        <div className="fm-card" style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input className="fm-input" type="number" placeholder="Уровень" value={levelImageLevel} onChange={(e) => setLevelImageLevel(Number(e.target.value))} style={{ width: 80 }} />
+          <input type="file" accept="image/*" onChange={(e) => setLevelImage(e.target.files?.[0] || null)} style={{ fontSize: 13 }} />
+          <button className="fm-btn fm-btn-sm" disabled={busy || !levelImage} onClick={uploadLevelImage}>🖼 Загрузить картинку</button>
+        </div>
         <table className="fm-table" style={{ width: '100%' }}>
-          <thead><tr><th>Вариант</th><th>Уровень</th><th>Монет</th><th>Грядок</th><th></th></tr></thead>
+          <thead><tr><th>Уровень</th><th>Картинка</th><th>Монет</th><th>Грядок</th><th>Разблокировка</th><th></th></tr></thead>
           <tbody>
             {levels.map((l) => (
-              <tr key={`${l.variant}-${l.level}`}>
-                <td>{l.variant}</td><td>{l.level}</td><td>{l.coins_required}</td><td>{l.plots_required}</td>
+              <tr key={l.level}>
+                <td>{l.level}</td>
+                <td>{l.image_url ? <img src={l.image_url} alt="" style={{ maxWidth: 60, maxHeight: 40, borderRadius: 4 }} /> : '—'}</td>
+                <td>{l.coins_required}</td>
+                <td>{l.plots_required}</td>
+                <td>{l.unlock_type || '—'}</td>
                 <td>
-                  <button className="fm-btn fm-btn-sm" onClick={() => { setLevelForm({ variant: l.variant, level: l.level, coins_required: l.coins_required, plots_required: l.plots_required, rewards: l.rewards }); }}>✎</button>
-                  <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteLevel(l.variant, l.level)}>🗑</button>
+                  <button className="fm-btn fm-btn-sm" onClick={() => { setLevelForm({ level: l.level, coins_required: l.coins_required, plots_required: l.plots_required, unlock_type: l.unlock_type || '' }); }}>✎</button>
+                  <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteLevel(l.level)}>🗑</button>
                 </td>
               </tr>
             ))}
@@ -801,14 +839,48 @@ export default function AdminPage() {
     finally { setBusy(false); }
   }
 
-  return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <h1 style={{ textAlign: 'center' }}>⚙️ Управление</h1>
+  async function saveGameMedia() {
+    const mt = MEDIA_TYPES.find(m => m.code === mediaTypeSel);
+    if (!mt) { setMsg('✗ Выберите тип'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminCreateGameMedia({ code: mt.code, kind: mt.kind });
+      setMediaTypeSel('');
+      const list = await api.adminGameMedia();
+      setGameMedia(list);
+      setMsg('✓ Создано');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
 
+  async function deleteGameMedia(id: number) {
+    if (!confirm('Удалить медиа?')) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeleteGameMedia(id); setGameMedia(await api.adminGameMedia()); setMsg('✓ Удалено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  async function uploadGameMediaFile(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadGameMedia(id, file); setGameMedia(await api.adminGameMedia()); setMsg('✓ Файл загружен'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  async function uploadCrystalCardImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadCrystalCardImage(id, file); setCrystalCards(await api.adminCrystalCards()); setMsg('✓ Картинка загружена'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
         <TabBtn active={tab === 'players'} onClick={() => setTab('players')}>👥 Игроки</TabBtn>
         <TabBtn active={tab === 'settings'} onClick={() => setTab('settings')}>🔧 Настройки</TabBtn>
-        <TabBtn active={tab === 'fields'} onClick={() => setTab('fields')}>🗺️ Карты</TabBtn>
+        <TabBtn active={tab === 'fields'} onClick={() => setTab('fields')}>🗺️ Локации</TabBtn>
         <TabBtn active={tab === 'orders'} onClick={() => setTab('orders')}>🧺 Заказы</TabBtn>
         <TabBtn active={tab === 'plants'} onClick={() => setTab('plants')}>🌱 Растения</TabBtn>
         <TabBtn active={tab === 'animals'} onClick={() => setTab('animals')}>🐄 Животные</TabBtn>
@@ -818,6 +890,8 @@ export default function AdminPage() {
         <TabBtn active={tab === 'order-templates'} onClick={() => { setTab('order-templates'); loadOrderTemplates(); }}>📋 Шаблоны заказов</TabBtn>
         <TabBtn active={tab === 'levels'} onClick={() => { setTab('levels'); loadLevels(); }}>📊 Уровни</TabBtn>
         <TabBtn active={tab === 'potion-recipes'} onClick={() => { setTab('potion-recipes'); loadPotionRecipes(); }}>🧪 Рецепты зелий</TabBtn>
+        <TabBtn active={tab === 'media'} onClick={() => setTab('media')}>🎬 Медиа</TabBtn>
+        <TabBtn active={tab === 'crystal-cards'} onClick={() => setTab('crystal-cards')}>🃏 Карты</TabBtn>
       </div>
 
       {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
@@ -848,7 +922,7 @@ export default function AdminPage() {
 
                   {playerTab === 'overview' && playerDetail && (
                     <div>
-                      <h3 style={{ marginTop: 0 }}>🗺️ Карты</h3>
+                      <h3 style={{ marginTop: 0 }}>🗺️ Локации</h3>
                       {playerFields.length === 0 ? (
                         <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Нет полей.</div>
                       ) : (
@@ -1018,7 +1092,32 @@ export default function AdminPage() {
                 <span style={{ color: '#ccc', fontSize: 14 }}>{viewField.name} · {viewField.cols}×{viewField.rows}</span>
               </div>
               <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
-                <FieldGridView field={viewField} />
+                <FieldGridView field={viewField} playerVkId={selectedPlayer?.vk_id}
+                  onResetNorm={async (plotId) => {
+                    if (!selectedPlayer || !confirm('Сбросить норму? Игроку выпадут новые случайные карты.')) return;
+                    setBusy(true);
+                    try {
+                      await api.adminResetPlotNorm(selectedPlayer.vk_id, plotId);
+                      setMsg('✓ Норма сброшена');
+                      const fd = await api.adminPlayerField(selectedPlayer.vk_id, viewField!.id);
+                      setViewField(fd);
+                    } catch (e: any) {
+                      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+                    } finally { setBusy(false); }
+                  }}
+                  onDeletePlot={async (plotId) => {
+                    if (!selectedPlayer || !confirm('Удалить грядку игрока? Растение и прогресс будут потеряны.')) return;
+                    setBusy(true);
+                    try {
+                      await api.adminDeletePlayerPlot(selectedPlayer.vk_id, plotId);
+                      setMsg('✓ Грядка удалена');
+                      const fd = await api.adminPlayerField(selectedPlayer.vk_id, viewField!.id);
+                      setViewField(fd);
+                    } catch (e: any) {
+                      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+                    } finally { setBusy(false); }
+                  }}
+                />
               </div>
             </div>
           )}
@@ -1074,7 +1173,7 @@ export default function AdminPage() {
                   )}
                   {showCreate && (
                     <div onClick={() => setShowCreate(false)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-                      <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380 }}>
+                      <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 'calc(var(--shell-max-width) * 0.633)' }}>
                         <h3 style={{ marginTop: 0 }}>➕ Новая локация</h3>
                         <label style={{ display: 'block', margin: '8px 0 6px', fontSize: 14 }}>Название</label>
                         <input className="fm-input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Огород" />
@@ -1097,10 +1196,10 @@ export default function AdminPage() {
                           <select className="fm-input" value={newFieldKind} onChange={(e) => setNewFieldKind(e.target.value)}>
                             <option value="">— без типа —</option>
                             <option value="garden_beds">🌱 Грядки</option>
-                            <option value="orchard">🍎 Сады</option>
-                            <option value="barnyard">🐄 Скотный двор</option>
+                            <option value="orchard">🍎 Сад</option>
+                            <option value="lawn">🌿 Лужайка</option>
                             <option value="house">🏠 Дом</option>
-                            <option value="brewery">🧪 Зельеварня</option>
+                            <option value="barnyard">🐄 Скотный двор</option>
                             <option value="library">📖 Библиотека</option>
                           </select>
                         </div>
@@ -1267,6 +1366,76 @@ export default function AdminPage() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === 'media' && (
+            <div>
+              <h2 style={{ marginTop: 0 }}>🎬 Медиа (видео, картинки)</h2>
+              <div className="fm-card" style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Тип медиа</label>
+                  <select className="fm-input" value={mediaTypeSel} onChange={(e) => setMediaTypeSel(e.target.value)} style={{ width: 240 }}>
+                    <option value="">— выберите —</option>
+                    {MEDIA_TYPES.filter(mt => !gameMedia.some(gm => gm.code === mt.code)).map(mt => (
+                      <option key={mt.code} value={mt.code}>{mt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <button className="fm-btn fm-btn-sm" disabled={busy || !mediaTypeSel} onClick={saveGameMedia}>➕ Создать</button>
+              </div>
+              <div className="fm-grid">
+                {gameMedia.map((gm) => {
+                  const label = MEDIA_TYPES.find(m => m.code === gm.code)?.label || gm.code;
+                  return (
+                    <div key={gm.id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
+                      <strong>{label}</strong>
+                      <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{gm.kind}</div>
+                      {gm.url ? (
+                        <div style={{ marginTop: 4, fontSize: 12, color: '#5f8' }}>✓ Загружено</div>
+                      ) : (
+                        <div style={{ marginTop: 4, fontSize: 12, color: '#f88' }}>Файла нет</div>
+                      )}
+                      <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+                        <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
+                          📁
+                          <input type="file" accept="image/*,video/*" style={{ display: 'none' }}
+                            onChange={async (e) => { const f = e.target.files?.[0]; if (f) await uploadGameMediaFile(gm.id, f); }} />
+                        </label>
+                        <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteGameMedia(gm.id)}>🗑</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {gameMedia.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Медиа пока нет. Выберите тип из списка и создайте запись для загрузки файла.</div>}
+            </div>
+          )}
+
+          {tab === 'crystal-cards' && (
+            <div>
+              <h2 style={{ marginTop: 0 }}>🃏 Карты кристаллов ({crystalCards.length})</h2>
+              <div className="fm-grid">
+                {crystalCards.map((card) => (
+                  <div key={card.id} className="fm-card fm-rise" style={{ fontSize: 13, textAlign: 'center' }}>
+                    {card.image_url ? (
+                      <img src={mediaUrl(card.image_url)} alt="" style={{ width: 80, height: 80, objectFit: 'contain', marginBottom: 4 }} />
+                    ) : (
+                      <div style={{ width: 80, height: 80, background: 'var(--bg-card)', borderRadius: 'var(--radius-sm)', margin: '0 auto 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>
+                        {card.is_treasure ? '💎' : card.color === 'green' ? '🟢' : card.color === 'blue' ? '🔵' : '🟣'}
+                      </div>
+                    )}
+                    <div>
+                      {card.is_treasure ? 'Сокровище' : `${card.color} ×${card.value}`}
+                    </div>
+                    <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer', marginTop: 4 }}>
+                      🖼️
+                      <input type="file" accept="image/*" style={{ display: 'none' }}
+                        onChange={async (e) => { const f = e.target.files?.[0]; if (f) await uploadCrystalCardImage(card.id, f); }} />
+                    </label>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </>
@@ -1514,7 +1683,8 @@ function CatalogTab({
 }
 
 
-function FieldGridView({ field }: { field: FieldDetail }) {
+function FieldGridView({ field, playerVkId, onResetNorm, onDeletePlot }: { field: FieldDetail; playerVkId?: number; onResetNorm?: (plotId: number) => void; onDeletePlot?: (plotId: number) => void }) {
+  const [selectedCell, setSelectedCell] = useState<{ col: number; row: number; plotId: number } | null>(null);
   const grid = (() => {
     const g: (FieldDetail['cells'][number] | null)[][] = [];
     for (let r = 0; r < field.rows; r++) {
@@ -1536,7 +1706,7 @@ function FieldGridView({ field }: { field: FieldDetail }) {
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ position: 'relative', width: '100%', maxWidth: 800, aspectRatio: `${field.cols}/${field.rows}` }}>
+      <div style={{ position: 'relative', width: '100%', maxWidth: 'min(800px, 100%)', aspectRatio: `${field.cols}/${field.rows}` }}>
         {field.map_url && (
           <img src={mediaUrl(field.map_url)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', borderRadius: 4 }} />
         )}
@@ -1548,11 +1718,18 @@ function FieldGridView({ field }: { field: FieldDetail }) {
               return (
                 <div
                   key={key}
+                  onClick={() => {
+                    if (cell?.plot?.id && playerVkId) {
+                      setSelectedCell({ col: ci, row: ri, plotId: cell.plot.id });
+                    }
+                  }}
+                  title={cell?.plot ? `Норма: ${cell.plot.required}✝️ · ${cell.plot.accumulated}/${cell.plot.required} · norm_revealed: ${cell.plot.norm_revealed}` : undefined}
                   style={{
                     border: `1px solid ${field.grid_color || 'rgba(255,255,255,0.08)'}`,
                     background: fill,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
                     position: 'relative',
+                    cursor: cell?.plot && playerVkId ? 'pointer' : 'default',
                   }}
                 >
                   {cell?.kind === 'bed' && cell.occupant_user_id != null && cell.plant_image_grown && cell.plot?.status === 'grown' && (
@@ -1595,6 +1772,26 @@ function FieldGridView({ field }: { field: FieldDetail }) {
           );
         })}
       </div>
+
+      {selectedCell && playerVkId && (
+        <div onClick={() => setSelectedCell(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, borderRadius: 4 }}>
+          <div className="fm-card" onClick={(e) => e.stopPropagation()} style={{ padding: 12, fontSize: 13, textAlign: 'center', minWidth: 160 }}>
+            <div style={{ marginBottom: 8, color: 'var(--text-secondary)' }}>
+              Клетка ({selectedCell.col}, {selectedCell.row})
+            </div>
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+              <button className="fm-btn fm-btn-sm" style={{ background: '#c90', borderColor: '#c90' }}
+                onClick={() => { onResetNorm?.(selectedCell.plotId); setSelectedCell(null); }}>
+                🎲 Сброс нормы
+              </button>
+              <button className="fm-btn fm-btn-sm fm-btn-danger"
+                onClick={() => { onDeletePlot?.(selectedCell.plotId); setSelectedCell(null); }}>
+                🗑 Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_role
-from models import Field, FieldCell, FieldPlant, Plant, ProductionTemplate, Tent, User
+from models import Field, FieldCell, FieldPlant, PetZone, Plant, PlantBed, ProductionTemplate, Tent, User
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/admin/fields", tags=["admin-fields"])
@@ -124,6 +124,25 @@ class TentOut(BaseModel):
     drawn_cards_json: str | None
 
 
+class PlantBedOut(BaseModel):
+    id: int
+    field_id: int
+    col1: int
+    row1: int
+    col2: int
+    row2: int
+    plant_category: str | None
+
+
+class PetZoneOut(BaseModel):
+    id: int
+    field_id: int
+    col1: int
+    row1: int
+    col2: int
+    row2: int
+
+
 class PlantOut(BaseModel):
     id: int
     code: str
@@ -149,6 +168,8 @@ class FieldDetailOut(FieldOut):
     cells: list[CellOut]
     tents: list[TentOut]
     plants: list[PlantOut]
+    plant_beds: list[PlantBedOut] = []
+    pet_zones: list[PetZoneOut] = []
 
 
 def _field_to_out(f: Field) -> FieldOut:
@@ -494,6 +515,14 @@ def _detail(f: Field) -> FieldDetailOut:
         cells=[_cell_to_out(c) for c in f.cells],
         tents=[_tent_to_out(t) for t in f.tents],
         plants=[_plant_to_out(fp.plant) for fp in f.plants],
+        plant_beds=[
+            PlantBedOut(id=pb.id, field_id=pb.field_id, col1=pb.col1, row1=pb.row1, col2=pb.col2, row2=pb.row2, plant_category=pb.plant_category)
+            for pb in f.plant_beds
+        ],
+        pet_zones=[
+            PetZoneOut(id=pz.id, field_id=pz.field_id, col1=pz.col1, row1=pz.row1, col2=pz.col2, row2=pz.row2)
+            for pz in f.pet_zones
+        ],
     )
 
 
@@ -504,3 +533,157 @@ def get_field_detail(
     user: User = Depends(require_role("admin")),
 ):
     return _detail(_get_field_or_404(field_id, db))
+
+
+@router.post("/{field_id}/plant-beds", response_model=PlantBedOut, status_code=status.HTTP_201_CREATED)
+def create_plant_bed(
+    field_id: int,
+    col1: int = Form(...),
+    row1: int = Form(...),
+    col2: int = Form(...),
+    row2: int = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    c1, r1, c2, r2 = _normalize_rect(col1, row1, col2, row2)
+    if c1 < 0 or r1 < 0 or c2 >= f.cols or r2 >= f.rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Прямоугольник выходит за пределы поля")
+
+    for pb in f.plant_beds:
+        if not (c2 < pb.col1 or c1 > pb.col2 or r2 < pb.row1 or r1 > pb.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пересекается с существующей грядкой")
+
+    for t in f.tents:
+        if not (c2 < t.col1 or c1 > t.col2 or r2 < t.row1 or r1 > t.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Пересекается с шатром «{t.name}»")
+
+    for pz in f.pet_zones:
+        if not (c2 < pz.col1 or c1 > pz.col2 or r2 < pz.row1 or r1 > pz.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пересекается с зоной питомца")
+
+    pb = PlantBed(field_id=f.id, col1=c1, row1=r1, col2=c2, row2=r2, plant_category=f.plant_category)
+    db.add(pb)
+    db.flush()
+
+    for r in range(r1, r2 + 1):
+        for c in range(c1, c2 + 1):
+            cell = db.query(FieldCell).filter(
+                FieldCell.field_id == f.id, FieldCell.col == c, FieldCell.row == r
+            ).first()
+            if cell is None:
+                cell = FieldCell(field_id=f.id, col=c, row=r)
+                db.add(cell)
+            cell.kind = "bed"
+            cell.tent_id = None
+            cell.plant_id = None
+            cell.occupant_user_id = None
+
+    db.commit()
+    db.refresh(pb)
+    return PlantBedOut(id=pb.id, field_id=pb.field_id, col1=pb.col1, row1=pb.row1, col2=pb.col2, row2=pb.row2, plant_category=pb.plant_category)
+
+
+@router.delete("/{field_id}/plant-beds/{bed_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_plant_bed(
+    field_id: int,
+    bed_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    pb = db.query(PlantBed).filter(PlantBed.id == bed_id, PlantBed.field_id == f.id).first()
+    if pb is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Грядка не найдена")
+
+    for r in range(pb.row1, pb.row2 + 1):
+        for c in range(pb.col1, pb.col2 + 1):
+            cell = db.query(FieldCell).filter(
+                FieldCell.field_id == f.id, FieldCell.col == c, FieldCell.row == r
+            ).first()
+            if cell is not None:
+                cell.kind = "empty"
+                cell.plant_id = None
+                cell.occupant_user_id = None
+                cell.tent_id = None
+
+    db.delete(pb)
+    db.commit()
+    return None
+
+
+@router.post("/{field_id}/pet-zones", response_model=PetZoneOut, status_code=status.HTTP_201_CREATED)
+def create_pet_zone(
+    field_id: int,
+    col1: int = Form(...),
+    row1: int = Form(...),
+    col2: int = Form(...),
+    row2: int = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    c1, r1, c2, r2 = _normalize_rect(col1, row1, col2, row2)
+    if c1 < 0 or r1 < 0 or c2 >= f.cols or r2 >= f.rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Прямоугольник выходит за пределы поля")
+
+    for pz in f.pet_zones:
+        if not (c2 < pz.col1 or c1 > pz.col2 or r2 < pz.row1 or r1 > pz.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пересекается с существующей зоной питомца")
+
+    for t in f.tents:
+        if not (c2 < t.col1 or c1 > t.col2 or r2 < t.row1 or r1 > t.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Пересекается с шатром «{t.name}»")
+
+    for pb in f.plant_beds:
+        if not (c2 < pb.col1 or c1 > pb.col2 or r2 < pb.row1 or r1 > pb.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пересекается с грядкой")
+
+    pz = PetZone(field_id=f.id, col1=c1, row1=r1, col2=c2, row2=r2)
+    db.add(pz)
+    db.flush()
+
+    for r in range(r1, r2 + 1):
+        for c in range(c1, c2 + 1):
+            cell = db.query(FieldCell).filter(
+                FieldCell.field_id == f.id, FieldCell.col == c, FieldCell.row == r
+            ).first()
+            if cell is None:
+                cell = FieldCell(field_id=f.id, col=c, row=r)
+                db.add(cell)
+            cell.kind = "pet"
+            cell.tent_id = None
+            cell.plant_id = None
+            cell.occupant_user_id = None
+
+    db.commit()
+    db.refresh(pz)
+    return PetZoneOut(id=pz.id, field_id=pz.field_id, col1=pz.col1, row1=pz.row1, col2=pz.col2, row2=pz.row2)
+
+
+@router.delete("/{field_id}/pet-zones/{zone_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_pet_zone(
+    field_id: int,
+    zone_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    pz = db.query(PetZone).filter(PetZone.id == zone_id, PetZone.field_id == f.id).first()
+    if pz is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Зона питомца не найдена")
+
+    for r in range(pz.row1, pz.row2 + 1):
+        for c in range(pz.col1, pz.col2 + 1):
+            cell = db.query(FieldCell).filter(
+                FieldCell.field_id == f.id, FieldCell.col == c, FieldCell.row == r
+            ).first()
+            if cell is not None:
+                cell.kind = "empty"
+                cell.plant_id = None
+                cell.occupant_user_id = None
+                cell.tent_id = None
+
+    db.delete(pz)
+    db.commit()
+    return None

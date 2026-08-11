@@ -36,7 +36,10 @@ def test_list_pens_empty(admin_client):
     with make_user_client(123, "player") as c:
         r = c.get("/api/animals/pens")
         assert r.status_code == 200
-        assert r.json() == []
+        data = r.json()
+        assert len(data) == 8
+        for pen in data:
+            assert pen["status"] == "empty"
 
 
 def test_install_animal(admin_client):
@@ -156,8 +159,11 @@ def test_list_pens_shows_data(admin_client):
         _credit(c, 50000)
         c.post(f"/api/animals/pens/{sid}/install", json={"animal_id": 1})
         r = c.get("/api/animals/pens")
-        assert len(r.json()) == 1
-        assert r.json()[0]["animal_name"] == "Ватная овечка"
+        data = r.json()
+        assert len(data) == 8
+        filled = [p for p in data if p["animal_id"] is not None]
+        assert len(filled) == 1
+        assert filled[0]["animal_name"] == "Ватная овечка"
 
 
 def test_other_user_pen_forbidden(admin_client):

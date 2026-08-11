@@ -2,14 +2,16 @@ import re
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_role
-from models import Animal, Pet, Plant, Product, ProductionTemplate, User
+from models import Animal, CrystalCard, Pet, Plant, Product, ProductionTemplate, User
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/admin/catalog", tags=["admin-catalog"])
+public_router = APIRouter(prefix="/api/crystal-cards", tags=["crystal-cards"])
 
 _TRANSLIT = {
     "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo",
@@ -443,12 +445,20 @@ def create_product(
     if not req.name.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название обязательно")
     code = _unique_code(_auto_code(req.name, "product"), Product, db)
+    if req.plant_id is not None:
+        existing = db.query(Product).filter(Product.plant_id == req.plant_id).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"У растения уже есть товар «{existing.name}»")
     p = Product(
         code=code, name=req.name.strip(), emoji=req.emoji,
         plant_id=req.plant_id, stars=req.stars, production_kind=req.production_kind,
     )
     db.add(p)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="У этого растения уже есть товар")
     db.refresh(p)
     return _product_out(p)
 
@@ -470,6 +480,9 @@ def update_product(
     if req.emoji is not None:
         p.emoji = req.emoji
     if req.plant_id is not None:
+        existing = db.query(Product).filter(Product.plant_id == req.plant_id, Product.id != product_id).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"У растения уже есть товар «{existing.name}»")
         p.plant_id = req.plant_id
     if req.stars is not None:
         p.stars = req.stars
@@ -760,3 +773,47 @@ def upload_product_image(
     db.commit()
     db.refresh(p)
     return _product_out(p)
+
+
+class CrystalCardOut(BaseModel):
+    id: int
+    color: str
+    value: int
+    is_treasure: bool
+    image_url: str | None
+
+
+def _card_out(c: CrystalCard) -> CrystalCardOut:
+    return CrystalCardOut(id=c.id, color=c.color, value=c.value, is_treasure=c.is_treasure, image_url=c.image_url)
+
+
+@router.get("/crystal-cards", response_model=list[CrystalCardOut])
+def list_crystal_cards(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    return [_card_out(c) for c in db.query(CrystalCard).order_by(CrystalCard.id.asc()).all()]
+
+
+@router.put("/crystal-cards/{card_id}/image", response_model=CrystalCardOut)
+def upload_crystal_card_image(
+    card_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    card = db.query(CrystalCard).filter(CrystalCard.id == card_id).first()
+    if card is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Карта не найдена")
+    remove_upload(card.image_url)
+    card.image_url = save_upload(image, f"crystal_card_{card_id}", max_size=400)
+    db.commit()
+    db.refresh(card)
+    return _card_out(card)
+
+
+@public_router.get("", response_model=list[CrystalCardOut])
+def list_public_crystal_cards(
+    db: Session = Depends(get_db),
+):
+    return [_card_out(c) for c in db.query(CrystalCard).order_by(CrystalCard.id.asc()).all()]

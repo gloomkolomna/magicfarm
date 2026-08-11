@@ -102,6 +102,7 @@ function MiniAppShell({ children }: Props) {
             background: 'rgba(10,14,8,0.88)',
             backdropFilter: 'blur(4px)',
             WebkitBackdropFilter: 'blur(4px)',
+            overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -122,7 +123,7 @@ function MiniAppShell({ children }: Props) {
               flexDirection: 'column',
               gap: 10,
               width: '100%',
-              maxWidth: 460,
+              maxWidth: 'calc(var(--shell-max-width) * 0.767)',
               marginTop: 16,
             }}
           >
@@ -140,7 +141,16 @@ function MiniAppShell({ children }: Props) {
         </div>
       )}
 
-      {children}
+      <div
+        style={{
+          zoom: 'var(--app-scale)',
+          width: 'calc(100% / var(--app-scale))',
+          margin: '0 auto',
+          paddingTop: 'calc(50px + var(--vk-inset-top, 0px))',
+        }}
+      >
+        {children}
+      </div>
     </>
   );
 }

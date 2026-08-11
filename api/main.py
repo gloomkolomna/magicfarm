@@ -16,7 +16,7 @@ from routes.plants import router as plants_router
 from routes.farm import router as farm_router
 from routes.orders import router as orders_router, admin_router as admin_orders_router, template_router as order_templates_router
 from routes.admin_fields import router as admin_fields_router
-from routes.admin_catalog import router as admin_catalog_router
+from routes.admin_catalog import router as admin_catalog_router, public_router as crystal_cards_public_router
 from routes.admin_players import router as admin_players_router
 from routes.fields import router as fields_router
 from routes.crystal_norms import router as crystal_norms_router
@@ -26,6 +26,7 @@ from routes.barnyard import router as barnyard_router
 from routes.pets import router as pets_router
 from routes.potions import router as potions_router, admin_router as admin_potions_router
 from routes.achievements import router as achievements_router, admin_router as admin_achievements_router
+from routes.game_media import router as game_media_admin_router, public_router as game_media_public_router
 
 init_db()
 
@@ -73,6 +74,9 @@ app.include_router(potions_router)
 app.include_router(admin_potions_router)
 app.include_router(achievements_router)
 app.include_router(admin_achievements_router)
+app.include_router(game_media_admin_router)
+app.include_router(game_media_public_router)
+app.include_router(crystal_cards_public_router)
 
 
 @app.get("/api/")

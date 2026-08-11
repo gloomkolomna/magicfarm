@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { api, type FieldCellDetail, type FieldDetail, type Product, type Tent } from '../api/endpoints';
+import { api, type CrystalCard, type FieldCellDetail, type FieldDetail, type Product, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import plotUrl from '../assets/plot.png';
 
 const COLOR_LABEL: Record<string, string> = { green: '🟢', blue: '🔵', violet: '🟣' };
+const CARD_IMAGE: Record<string, string> = { green: '🟢', blue: '🔵', violet: '🟣', treasure_green: '💎', treasure_blue: '💎', treasure_violet: '💎' };
 
 export default function FieldPage() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +27,7 @@ export default function FieldPage() {
   const [careCell, setCareCell] = useState<FieldCellDetail | null>(null);
   const [investAmount, setInvestAmount] = useState('');
   const [stitchAmount, setStitchAmount] = useState('');
+  const [stitchPhotoBefore, setStitchPhotoBefore] = useState<File | null>(null);
   const [stitchPhoto, setStitchPhoto] = useState<File | null>(null);
   const [stitchNote, setStitchNote] = useState('');
 
@@ -38,7 +40,12 @@ export default function FieldPage() {
   const [craftAmount, setCraftAmount] = useState('');
   const [craftQty, setCraftQty] = useState('1');
 
-  const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string } | null>(null);
+  const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string; norm?: number; qty?: number } | null>(null);
+  const [showVideo, setShowVideo] = useState(false);
+  const [cardVideoUrl, setCardVideoUrl] = useState<string | null>(null);
+  const [crystalCards, setCrystalCards] = useState<CrystalCard[]>([]);
+  const [zoomedImg, setZoomedImg] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const [imgNaturalW, setImgNaturalW] = useState<number | null>(null);
 
@@ -57,6 +64,34 @@ export default function FieldPage() {
       setLoading(false);
     }
   }, [fieldId]);
+
+  const loadVideo = useCallback(async () => {
+    try {
+      const [gm, cards] = await Promise.all([
+        api.gameMediaByCode('card_shuffle').catch(() => null),
+        api.crystalCards().catch(() => [] as CrystalCard[]),
+      ]);
+      if (gm?.url) setCardVideoUrl(mediaUrl(gm.url));
+      setCrystalCards(cards || []);
+    } catch {}
+  }, []);
+
+  useEffect(() => { loadVideo(); }, [loadVideo]);
+
+  useEffect(() => {
+    if (careCell?.plot?.norm_revealed && careCell?.plot?.drawn_cards_json && !cardResult) {
+      let cards: { color: string; value: number; is_treasure: boolean }[] = [];
+      try { cards = JSON.parse(careCell.plot.drawn_cards_json); } catch {}
+      if (cards.length > 0) {
+        setCardResult({
+          cards,
+          title: `📖 Норма для ${careCell.plant_name || 'растения'}`,
+          norm: careCell.plot.required ?? 0,
+          qty: careCell.plot.qty ?? 0,
+        });
+      }
+    }
+  }, [careCell, cardResult]);
 
   useEffect(() => { if (!sessionLoading) load(); }, [load, sessionLoading]);
 
@@ -77,17 +112,8 @@ export default function FieldPage() {
     if (!plantCell || plantSel == null) return;
     setBusy(true); setMsg(null);
     try {
-      const res = await api.plantOnCell(fieldId, plantCell.col, plantCell.row, plantSel, Number(plantQty) || 1);
-      const plant = field?.plants.find(p => p.id === plantSel);
-      let cards: { color: string; value: number; is_treasure: boolean }[] = [];
-      if (res.plot?.drawn_cards_json) {
-        try { cards = JSON.parse(res.plot.drawn_cards_json); } catch {}
-      }
-      if (cards.length > 0) {
-        setCardResult({ cards, title: `🌱 ${plant?.name || 'Растение'} — карты` });
-      } else {
-        setMsg('✓ Посажено!');
-      }
+      await api.plantOnCell(fieldId, plantCell.col, plantCell.row, plantSel, Number(plantQty) || 1);
+      setMsg('✓ Посажено! Нажмите на грядку чтобы узнать норму.');
       setPlantCell(null); setPlantSel(null); setPlantQty('1');
       await load(); await refresh();
     } catch (e: any) {
@@ -111,13 +137,17 @@ export default function FieldPage() {
   }
 
   async function doStitchReport() {
-    if (!stitchAmount || !stitchPhoto) return;
+    if (!stitchAmount || !stitchPhoto || !stitchPhotoBefore) return;
     setBusy(true); setMsg(null);
     try {
-      await api.createStitchReport(Number(stitchAmount), stitchPhoto, stitchNote || undefined);
+      await api.createStitchReport(
+        Number(stitchAmount), stitchPhotoBefore, stitchPhoto, stitchNote || undefined,
+        'plant_grow', careCell?.plot?.id,
+      );
       setMsg('✓ Зачтено! Крестики начислены.');
-      setStitchAmount(''); setStitchPhoto(null); setStitchNote('');
-      await refresh();
+      setStitchAmount(''); setStitchPhotoBefore(null); setStitchPhoto(null); setStitchNote('');
+      setCareCell(null);
+      await load(); await refresh();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally { setBusy(false); }
@@ -180,8 +210,8 @@ export default function FieldPage() {
     } finally { setBusy(false); }
   }
 
-  if (loading) return <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}><div className="fm-card">Загрузка поля…</div></div>;
-  if (!field) return <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}><div className="fm-card">Поле не найдено.</div></div>;
+  if (loading) return <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}><div className="fm-card">Загрузка поля…</div></div>;
+  if (!field) return <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}><div className="fm-card">Поле не найдено.</div></div>;
 
   function openTent(t: Tent) {
     setTentModal(t);
@@ -200,7 +230,7 @@ export default function FieldPage() {
     <>
       <div
         style={{
-          position: 'fixed', inset: 0, zIndex: 0, overflow: 'auto',
+          position: 'fixed', inset: 0, top: 'calc(54px + var(--vk-inset-top, 0px))', zIndex: 0, overflow: 'auto',
           WebkitOverflowScrolling: 'touch', backgroundColor: '#1a2414',
         }}
       >
@@ -234,14 +264,22 @@ export default function FieldPage() {
                   return (
                     <div
                       key={`cell-${c}-${r}`}
-                      onClick={() => {
+                      onClick={async () => {
                         if (!isBed) return;
                         if (cell.occupant_user_id == null) {
                           setPlantCell({ col: c, row: r });
                           setPlantSel(field.plants[0]?.id ?? null);
                         } else {
-                          setCareCell(cell);
-                          setInvestAmount(cell.plot ? String(cell.plot.required - cell.plot.accumulated) : '');
+                          setShowVideo(false);
+                          setCardResult(null);
+                          const [fd, prs] = await Promise.all([api.fieldDetail(fieldId), api.products()]);
+                          const freshCell = fd.cells.find((x: FieldCellDetail) => x.col === c && x.row === r);
+                          setField(fd);
+                          setProducts(prs);
+                          if (freshCell) {
+                            setCareCell(freshCell);
+                            setInvestAmount(freshCell.plot ? String(freshCell.plot.required - freshCell.plot.accumulated) : '');
+                          }
                         }
                       }}
                       style={{
@@ -278,7 +316,7 @@ export default function FieldPage() {
                             </div>
                           )}
                           {cell.plot && (
-                            <div style={{ position: 'absolute', bottom: 2, left: 3, fontSize: 12, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none', fontWeight: 700 }}>
+                            <div style={{ position: 'absolute', bottom: 10, left: 3, fontSize: 12, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none', fontWeight: 700 }}>
                               ×{cell.plot.qty}
                             </div>
                           )}
@@ -389,13 +427,18 @@ export default function FieldPage() {
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
             Клетка ({plantCell.col}, {plantCell.row}). Выберите растение из списка локации:
           </p>
-          {field.plants.length === 0 ? (
-            <div className="fm-card" style={{ color: 'var(--text-muted)' }}>В этой локации нет разрешённых растений. Обратитесь к админу.</div>
-          ) : (
-            <select className="fm-input" value={plantSel ?? ''} onChange={(e) => setPlantSel(Number(e.target.value))}>
-              {field.plants.map((p) => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
-            </select>
-          )}
+          {(() => {
+            const plantedIds = new Set(field.cells.filter((c) => c.plant_id != null && c.occupant_user_id != null).map((c) => c.plant_id!));
+            const available = field.plants.filter((p) => !plantedIds.has(p.id));
+            if (available.length === 0) {
+              return <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Все доступные растения уже посажены.</div>;
+            }
+            return (
+              <select className="fm-input" value={plantSel ?? ''} onChange={(e) => setPlantSel(Number(e.target.value))}>
+                {available.map((p) => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+              </select>
+            );
+          })()}
           <div style={{ marginTop: 8 }}>
             <label style={{ fontSize: 13 }}>Количество (1–20):</label>
             <input className="fm-input" type="number" min={1} max={20} value={plantQty} onChange={(e) => setPlantQty(e.target.value)} />
@@ -404,9 +447,13 @@ export default function FieldPage() {
         </Modal>
       )}
 
-      {/* Модалка ухода за грядкой (invest + отчёт о вышивке) */}
+      {/* Модалка ухода за грядкой (норма + отчёт) */}
       {careCell && careCell.plot && (
-        <Modal title={`${careCell.plant_emoji} ${careCell.plant_name}`} onClose={() => setCareCell(null)}>
+        <Modal
+          title={`${careCell.plant_emoji || ''} ${careCell.plant_name || ''}`.trim() || 'Грядка'}
+          onClose={() => { setCareCell(null); }}
+          wide={showVideo || (careCell.plot.norm_revealed && !showVideo)}
+        >
           {careCell.plot.status === 'grown' ? (
             <>
               <p style={{ fontSize: 14, color: 'var(--success)' }}>✓ Растение выросло!</p>
@@ -414,33 +461,119 @@ export default function FieldPage() {
                 🧺 Собрать урожай
               </button>
             </>
+          ) : !careCell.plot.norm_revealed && careCell.plot.accumulated === 0 && careCell.plot.required > 0 && careCell.plot.drawn_cards_json ? (
+            <>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                🌱 Молодое растение — норма ещё не объявлена
+              </p>
+              <button
+                className="fm-btn"
+                style={{ width: '100%', marginTop: 8 }}
+                disabled={busy}
+                onClick={async () => {
+                  let cards: { color: string; value: number; is_treasure: boolean }[] = [];
+                  if (careCell.plot?.drawn_cards_json) {
+                    try { cards = JSON.parse(careCell.plot.drawn_cards_json); } catch {}
+                  }
+                  if (cards.length > 0 && careCell.plot) {
+                    setCardResult({
+                      cards,
+                      title: `📖 Норма для ${careCell.plant_name || 'растения'}`,
+                      norm: careCell.plot.required ?? 0,
+                      qty: careCell.plot.qty ?? 0,
+                    });
+                    setShowVideo(!!cardVideoUrl);
+                    try {
+                      const updated = await api.revealNorm(careCell.plot.id);
+                      setCareCell({ ...careCell, plot: { ...careCell.plot, ...updated } });
+                    } catch {}
+                  }
+                }}
+              >
+                🔮 Узнать норму
+              </button>
+            </>
           ) : (
             <>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                {COLOR_LABEL[careCell.plot.crystal_color || 'green']} ×{careCell.plot.crystal_count} · осталось {Math.max(0, careCell.plot.required - careCell.plot.accumulated)} крестиков
-              </div>
-              <div className="fm-progress" style={{ marginBottom: 10 }}>
-                <div className="fm-progress-fill" style={{ width: `${careCell.plot.required > 0 ? Math.min(100, Math.round((careCell.plot.accumulated / careCell.plot.required) * 100)) : 0}%` }} />
-              </div>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Вложить крестиков</label>
-              <input className="fm-input" type="number" min={1} value={investAmount} onChange={(e) => setInvestAmount(e.target.value)} />
-              <button className="fm-btn" style={{ width: '100%', marginTop: 10 }} disabled={busy || !investAmount} onClick={doInvest}>Полить крестиками</button>
+              {careCell.plot.norm_revealed && (
+                <>
+                  {showVideo && cardVideoUrl ? (
+                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                      <video
+                        ref={videoRef}
+                        src={cardVideoUrl}
+                        autoPlay
+                        muted
+                        playsInline
+                        style={{ width: '100%', maxHeight: '50vh', borderRadius: 8 }}
+                        onEnded={() => setShowVideo(false)}
+                        onError={() => setShowVideo(false)}
+                      />
+                      <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ marginTop: 6 }} onClick={() => setShowVideo(false)}>
+                        Пропустить видео
+                      </button>
+                    </div>
+                  ) : cardResult && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                        {cardResult.cards.map((c, i) => {
+                          const cardImg = crystalCards.find(
+                            cc => cc.color === c.color && cc.value === c.value && cc.is_treasure === c.is_treasure
+                          )?.image_url;
+                          return (
+                            <div key={i} style={{ textAlign: 'center', padding: 6, borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border)', minWidth: 100 }}>
+                              {cardImg ? (
+                                <img
+                                  src={mediaUrl(cardImg)}
+                                  alt=""
+                                  style={{ width: '30vw', maxWidth: 160, height: 'auto', objectFit: 'contain', marginBottom: 4, cursor: 'pointer' }}
+                                  onClick={(e) => { e.stopPropagation(); setZoomedImg(mediaUrl(cardImg)); }}
+                                />
+                              ) : (
+                                <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 4 }}>
+                                  {c.is_treasure ? '💎' : c.color === 'green' ? '🟢' : c.color === 'blue' ? '🔵' : '🟣'}
+                                </div>
+                              )}
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                {c.is_treasure ? 'Сокровище' : `${c.value}`}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {(cardResult.norm != null) && (
+                        <p style={{ fontSize: 16, fontWeight: 700, textAlign: 'center', margin: '8px 0', color: 'var(--text-accent)' }}>
+                          Итоговая норма: {cardResult.norm} ✝️
+                          {cardResult.qty && cardResult.qty > 1 ? <> (×{cardResult.qty} растений)</> : ''}
+                        </p>
+                      )}
+                      <div style={{ borderTop: '1px solid var(--border)', margin: '10px 0' }} />
+                    </>
+                  )}
+                </>
+              )}
 
-              <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0', paddingTop: 4 }}>
-                <strong style={{ fontSize: 14 }}>📷 Отчитаться о вышивке</strong>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>
-                  Фото вышивки начислит крестики на баланс — потом полейте грядку.
-                </p>
-                <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Сколько крестиков вышито</label>
-                <input className="fm-input" type="number" min={1} value={stitchAmount} onChange={(e) => setStitchAmount(e.target.value)} placeholder="например, 150" />
-                <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Фото</label>
-                <input type="file" accept="image/*" capture="environment" onChange={(e) => setStitchPhoto(e.target.files?.[0] || null)} />
-                <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Заметка (необязательно)</label>
-                <input className="fm-input" value={stitchNote} onChange={(e) => setStitchNote(e.target.value)} placeholder="что вышили" />
-                <button className="fm-btn fm-btn-outline" style={{ width: '100%', marginTop: 12 }} disabled={busy || !stitchAmount || !stitchPhoto} onClick={doStitchReport}>
-                  Отправить отчёт
-                </button>
-              </div>
+              {!showVideo && (
+                <div style={{ borderTop: careCell.plot.norm_revealed ? 'none' : '1px solid var(--border)', paddingTop: careCell.plot.norm_revealed ? 0 : 4 }}>
+                  <strong style={{ fontSize: 14 }}>📷 Отчитаться о вышивке</strong>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>
+                    Вышейте норму {careCell.plot.required ?? '?'} крестиков, сделайте фото и отправьте отчёт.
+                  </p>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Сколько крестиков вышито</label>
+                  <input className="fm-input" type="number" min={1} value={stitchAmount} onChange={(e) => setStitchAmount(e.target.value)} placeholder="например, 150" />
+                  <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Фото ДО вышивки</label>
+                  <input type="file" accept="image/*" capture="environment" onChange={(e) => setStitchPhotoBefore(e.target.files?.[0] || null)} />
+                  {stitchPhotoBefore && <div style={{ fontSize: 11, color: '#5f8', marginTop: 2 }}>✓ {stitchPhotoBefore.name}</div>}
+                  <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Фото ПОСЛЕ вышивки</label>
+                  <input type="file" accept="image/*" capture="environment" onChange={(e) => setStitchPhoto(e.target.files?.[0] || null)} />
+                  {stitchPhoto && <div style={{ fontSize: 11, color: '#5f8', marginTop: 2 }}>✓ {stitchPhoto.name}</div>}
+                  <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Заметка (необязательно)</label>
+                  <input className="fm-input" value={stitchNote} onChange={(e) => setStitchNote(e.target.value)} placeholder="что вышили" />
+                  <button className="fm-btn fm-btn-outline" style={{ width: '100%', marginTop: 12 }} disabled={busy || !stitchAmount || !stitchPhotoBefore || !stitchPhoto} onClick={doStitchReport}>
+                    Отправить отчёт
+                  </button>
+                </div>
+              )}
             </>
           )}
         </Modal>
@@ -501,32 +634,26 @@ export default function FieldPage() {
         </Modal>
       )}
 
-      {/* Модалка карт кристаллов */}
-      {cardResult && (
-        <Modal title={cardResult.title} onClose={() => setCardResult(null)}>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-            {cardResult.cards.map((c, i) => (
-              <div key={i} style={{ textAlign: 'center', padding: '8px 12px', borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>
-                  {c.color === 'green' ? '🟢' : c.color === 'blue' ? '🔵' : '🟣'} {c.is_treasure ? '✨' : ''}
-                </div>
-                <div style={{ fontSize: 24, fontWeight: 700 }}>{c.is_treasure ? '★' : c.value}</div>
-              </div>
-            ))}
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-            Вложите крестики по норме каждого кристалла — и растение вырастет.
-          </p>
-        </Modal>
+      {zoomedImg && (
+        <div onClick={() => setZoomedImg(null)} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <button
+            onClick={() => setZoomedImg(null)}
+            style={{ position: 'absolute', top: 16, right: 16, zIndex: 1, fontSize: 24, background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: '8px 12px' }}
+          >
+            ✕
+          </button>
+          <img src={zoomedImg} alt="" style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }} onClick={(e) => e.stopPropagation()} />
+        </div>
       )}
+
     </>
   );
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, maxHeight: '85vh', overflowY: 'auto' }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: wide ? 8 : 16 }}>
+      <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: wide ? '95vw' : 'calc(var(--shell-max-width) * 0.7)', maxHeight: wide ? '95vh' : '85vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <h2 style={{ margin: 0 }}>{title}</h2>
           <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={onClose}>✕</button>

@@ -17,9 +17,13 @@ def _get_s3():
     return _S3
 
 
-def _read_with_limit(upload: UploadFile) -> bytes:
+def _read_with_limit(upload: UploadFile, allow_video: bool = False) -> tuple[bytes, bool]:
     ctype = (upload.content_type or "").lower()
-    if not ctype.startswith("image/"):
+    is_video = ctype.startswith("video/")
+    if is_video:
+        if not allow_video:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Видео не поддерживается")
+    elif not ctype.startswith("image/"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Файл должен быть изображением")
 
     buf = bytearray()
@@ -33,7 +37,7 @@ def _read_with_limit(upload: UploadFile) -> bytes:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Файл слишком большой (макс. {config.UPLOAD_MAX_BYTES // 1024} КБ)",
             )
-    return bytes(buf)
+    return bytes(buf), is_video
 
 
 def _process(buf: bytes, max_size: int | None) -> tuple[bytes, bool]:
@@ -64,8 +68,16 @@ def _process(buf: bytes, max_size: int | None) -> tuple[bytes, bool]:
         return out.getvalue(), False
 
 
-def save_upload(upload: UploadFile, prefix: str, max_size: int | None = None) -> str:
-    buf = _read_with_limit(upload)
+def save_upload(upload: UploadFile, prefix: str, max_size: int | None = None, allow_video: bool = False) -> str:
+    buf, is_video = _read_with_limit(upload, allow_video=allow_video)
+    if is_video:
+        ext = os.path.splitext(upload.filename or "")[1].lower().lstrip(".") or "mp4"
+        name = f"{prefix}_{int(time.time())}_{os.urandom(3).hex()}.{ext}"
+        path = os.path.join(config.UPLOADS_DIR, name)
+        with open(path, "wb") as fh:
+            fh.write(buf)
+        return f"/api/uploads/{name}"
+
     processed, is_png = _process(buf, max_size)
     if max_size is not None:
         ext = "png" if is_png else "jpg"

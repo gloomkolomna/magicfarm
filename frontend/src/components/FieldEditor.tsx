@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, type FieldCell, type FieldDetail, type Plant, type ProductionTemplate, type Tent } from '../api/endpoints';
+import { api, type FieldCell, type FieldDetail, type Plant, type PlantBed, type PetZone, type ProductionTemplate, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 
 type Brush = 'bed' | 'pet' | 'tent' | 'barnyard';
@@ -31,14 +31,14 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const [msg, setMsg] = useState<string | null>(null);
 
   const [brush, setBrush] = useState<Brush>('bed');
-  const [tentDraft, setTentDraft] = useState<Set<string>>(new Set());
+  const [multiDraft, setMultiDraft] = useState<Set<string>>(new Set());
 
   const [cols, setCols] = useState('');
   const [rows, setRows] = useState('');
   const [lockRatio, setLockRatio] = useState(false);
   const [name, setName] = useState('');
 
-  const [tentModal, setTentModal] = useState<{ c1: number; r1: number; c2: number; r2: number } | null>(null);
+  const [multiModal, setMultiModal] = useState<{ c1: number; r1: number; c2: number; r2: number } | null>(null);
   const [tentName, setTentName] = useState('');
   const [tentKind, setTentKind] = useState('alchemy');
   const [tentImage, setTentImage] = useState<File | null>(null);
@@ -51,7 +51,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       setField(fd);
       setAllPlants(pl);
       setProdTemplates(pts);
-      setTentDraft(new Set());
+      setMultiDraft(new Set());
       setCols(String(fd.cols));
       setRows(String(fd.rows));
       setName(fd.name);
@@ -93,8 +93,8 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     const key = `${c},${r}`;
     const cell = cellIndex.get(key);
     if (cell?.kind === 'tent') return;
-    if (brush === 'tent') {
-      setTentDraft((prev) => {
+    if (brush === 'tent' || (brush === 'bed' && field?.plant_category) || (brush === 'pet' && field?.field_kind === 'lawn')) {
+      setMultiDraft((prev) => {
         const next = new Set(prev);
         if (next.has(key)) next.delete(key); else next.add(key);
         return next;
@@ -128,7 +128,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     try {
       const fd = await api.adminUpdateField(fieldId, { name: newName, cols: newCols, rows: newRows });
       setField(fd);
-      setTentDraft(new Set());
+      setMultiDraft(new Set());
       setMsg('✓ Поле обновлено (сетка пересоздана)');
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -137,11 +137,11 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     }
   }
 
-  // ── Drag прямоугольника под шатёр ──
-  function openTentModal() {
-    if (tentDraft.size === 0) { setMsg('✗ Выберите клетки для шатра'); return; }
+  // ── Мульти-клеточное размещение (шатёр / грядка / питомец) ──
+  function openMultiModal() {
+    if (multiDraft.size === 0) { setMsg('✗ Выберите клетки'); return; }
     let c1 = Infinity, r1 = Infinity, c2 = -Infinity, r2 = -Infinity;
-    for (const k of tentDraft) {
+    for (const k of multiDraft) {
       const [c, r] = k.split(',').map(Number);
       c1 = Math.min(c1, c); c2 = Math.max(c2, c);
       r1 = Math.min(r1, r); r2 = Math.max(r2, r);
@@ -152,25 +152,45 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         return;
       }
     }
+    for (const pb of field?.plant_beds ?? []) {
+      if (!(c2 < pb.col1 || c1 > pb.col2 || r2 < pb.row1 || r1 > pb.row2)) {
+        setMsg('✗ Пересекается с грядкой');
+        return;
+      }
+    }
+    for (const pz of field?.pet_zones ?? []) {
+      if (!(c2 < pz.col1 || c1 > pz.col2 || r2 < pz.row1 || r1 > pz.row2)) {
+        setMsg('✗ Пересекается с зоной питомца');
+        return;
+      }
+    }
     setTentName('');
     setTentKind(prodTemplates[0]?.code || 'alchemy');
     setTentImage(null);
-    setTentModal({ c1, r1, c2, r2 });
+    setMultiModal({ c1, r1, c2, r2 });
   }
 
-  async function saveTent() {
-    if (!tentModal) return;
+  async function saveMulti() {
+    if (!multiModal) return;
     setBusy(true);
     setMsg(null);
     try {
-      await api.adminCreateTent(
-        fieldId,
-        { name: tentName, kind: tentKind, col1: tentModal.c1, row1: tentModal.r1, col2: tentModal.c2, row2: tentModal.r2 },
-        tentImage || undefined,
-      );
-      setTentModal(null);
-      setTentDraft(new Set());
-      setMsg('✓ Шатёр размещён');
+      if (brush === 'bed') {
+        await api.adminCreatePlantBed(fieldId, multiModal.c1, multiModal.r1, multiModal.c2, multiModal.r2);
+        setMsg('✓ Грядка размещена');
+      } else if (brush === 'pet') {
+        await api.adminCreatePetZone(fieldId, multiModal.c1, multiModal.r1, multiModal.c2, multiModal.r2);
+        setMsg('✓ Зона питомца размещена');
+      } else {
+        await api.adminCreateTent(
+          fieldId,
+          { name: tentName, kind: tentKind, col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2 },
+          tentImage || undefined,
+        );
+        setMsg('✓ Шатёр размещён');
+      }
+      setMultiModal(null);
+      setMultiDraft(new Set());
       await load();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -293,15 +313,53 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       </div>
 
       {/* Кисти */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-        <BrushBtn active={brush === 'bed'} onClick={() => setBrush('bed')}>🟩 Грядка</BrushBtn>
-        <BrushBtn active={brush === 'pet'} onClick={() => setBrush('pet')}>🐾 Питомец</BrushBtn>
-        <BrushBtn active={brush === 'barnyard'} onClick={() => setBrush('barnyard')}>🐄 Скотный двор</BrushBtn>
-        <BrushBtn active={brush === 'tent'} onClick={() => setBrush('tent')}>⛺ Шатёр</BrushBtn>
-      </div>
+      {(() => {
+        const isPlant = !!(field?.plant_category);
+        const kind = field?.field_kind || '';
+        if (isPlant) {
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              <BrushBtn active={brush === 'bed'} onClick={() => setBrush('bed')}>🟩 Грядка</BrushBtn>
+            </div>
+          );
+        }
+        if (kind === 'house') {
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              <BrushBtn active={brush === 'tent'} onClick={() => setBrush('tent')}>⛺ Производство</BrushBtn>
+            </div>
+          );
+        }
+        if (kind === 'lawn') {
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              <BrushBtn active={brush === 'pet'} onClick={() => setBrush('pet')}>🐾 Питомец</BrushBtn>
+            </div>
+          );
+        }
+        if (kind === 'barnyard') {
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              <BrushBtn active={brush === 'barnyard'} onClick={() => setBrush('barnyard')}>🐄 Скотный двор</BrushBtn>
+            </div>
+          );
+        }
+        return (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            <BrushBtn active={brush === 'bed'} onClick={() => setBrush('bed')}>🟩 Грядка</BrushBtn>
+            <BrushBtn active={brush === 'pet'} onClick={() => setBrush('pet')}>🐾 Питомец</BrushBtn>
+            <BrushBtn active={brush === 'barnyard'} onClick={() => setBrush('barnyard')}>🐄 Скотный двор</BrushBtn>
+            <BrushBtn active={brush === 'tent'} onClick={() => setBrush('tent')}>⛺ Производство</BrushBtn>
+          </div>
+        );
+      })()}
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
         {brush === 'tent'
           ? 'Тапайте по клеткам для шатра, затем «Разместить шатёр».'
+          : brush === 'bed' && field?.plant_category
+          ? 'Тапайте по клеткам для грядки, затем «Разместить грядку».'
+          : brush === 'pet' && field?.field_kind === 'lawn'
+          ? 'Тапайте по клеткам для питомца, затем «Разместить зону».'
           : 'Тапайте по клеткам — тип меняется сразу (повторный тап убирает).'}
       </p>
 
@@ -322,8 +380,8 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             if (c.kind === 'tent') {
               fill = KIND_FILL.tent;
             } else {
-              const isTentDraft = brush === 'tent' && tentDraft.has(key);
-              if (isTentDraft) fill = KIND_FILL.tent;
+              const isMultiCell = (brush === 'tent' || (brush === 'bed' && field?.plant_category) || (brush === 'pet' && field?.field_kind === 'lawn')) && multiDraft.has(key);
+              if (isMultiCell) fill = KIND_FILL.tent;
               else fill = KIND_FILL[c.kind] ?? 'transparent';
             }
             return (
@@ -383,6 +441,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 x={c.col * sz + sz / 2}
                 y={c.row * sz + sz / 2 + sz * 0.18}
                 fontSize={sz * 0.6}
+                fill="#fff"
                 textAnchor="middle"
                 style={{ pointerEvents: 'none' }}
               >
@@ -400,7 +459,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 width={sz}
                 height={sz}
                 fill="transparent"
-                style={{ cursor: brush === 'tent' ? 'crosshair' : 'pointer' }}
+                style={{ cursor: (brush === 'tent' || (brush === 'bed' && field?.plant_category) || (brush === 'pet' && field?.field_kind === 'lawn')) ? 'crosshair' : 'pointer' }}
                 onClick={() => onCellClick(c, r)}
               />
             )),
@@ -408,9 +467,9 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         </svg>
       </div>
 
-      {brush === 'tent' && (
-        <button className="fm-btn" style={{ width: '100%', marginBottom: 14 }} disabled={busy || tentDraft.size === 0} onClick={openTentModal}>
-          ⛺ Разместить шатёр ({tentDraft.size})
+      {(brush === 'tent' || (brush === 'bed' && field?.plant_category) || (brush === 'pet' && field?.field_kind === 'lawn')) && (
+        <button className="fm-btn" style={{ width: '100%', marginBottom: 14 }} disabled={busy || multiDraft.size === 0} onClick={openMultiModal}>
+          {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'bed' ? '🟩 Разместить грядку' : '🐾 Разместить зону'} ({multiDraft.size})
         </button>
       )}
 
@@ -441,39 +500,51 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         Отметьте растения, доступные для посадки игроками в этой локации.
       </p>
       <div className="fm-grid">
-        {allPlants.map((p) => (
-          <label key={p.id} className="fm-card" style={{ cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={allowedPlantIds.has(p.id)}
-              disabled={busy}
-              onChange={() => togglePlant(p.id)}
-              style={{ marginRight: 8 }}
-            />
-            {p.emoji} {p.name}
-          </label>
-        ))}
+        {allPlants
+          .filter((p) => !field?.plant_category || p.category === field.plant_category)
+          .map((p) => (
+            <label key={p.id} className="fm-card" style={{ cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={allowedPlantIds.has(p.id)}
+                disabled={busy}
+                onChange={() => togglePlant(p.id)}
+                style={{ marginRight: 8 }}
+              />
+              {p.emoji} {p.name}
+            </label>
+          ))}
       </div>
 
-      {/* Модалка создания шатра */}
-      {tentModal && (
-        <div onClick={() => setTentModal(null)} style={modalOverlay}>
-          <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
-            <h3 style={{ marginTop: 0 }}>⛺ Разместить шатёр</h3>
+      {/* Модалка создания мульти-зоны */}
+      {multiModal && (
+        <div onClick={() => setMultiModal(null)} style={modalOverlay}>
+          <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'calc(var(--shell-max-width) * 0.7)' }}>
+            <h3 style={{ marginTop: 0 }}>
+              {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'bed' ? '🟩 Разместить грядку' : '🐾 Разместить зону питомца'}
+            </h3>
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              Область: {tentModal.c2 - tentModal.c1 + 1}×{tentModal.r2 - tentModal.r1 + 1} клеток
+              Область: {multiModal.c2 - multiModal.c1 + 1}×{multiModal.r2 - multiModal.r1 + 1} клеток
             </p>
-            <label style={lbl}>Название</label>
-            <input className="fm-input" value={tentName} onChange={(e) => setTentName(e.target.value)} placeholder="Стол зельеварения" />
-            <label style={lbl}>Тип</label>
-            <select className="fm-input" value={tentKind} onChange={(e) => setTentKind(e.target.value)}>
-              {prodTemplates.map((pt) => (
-                <option key={pt.code} value={pt.code}>{pt.emoji} {pt.name} ({pt.required} ✝️/цикл)</option>
-              ))}
-            </select>
-            <label style={lbl}>Картинка шатра (необязательно)</label>
-            <input type="file" accept="image/*" onChange={(e) => setTentImage(e.target.files?.[0] || null)} />
-            <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || !tentName.trim()} onClick={saveTent}>
+            {brush === 'tent' ? (
+              <>
+                <label style={lbl}>Название</label>
+                <input className="fm-input" value={tentName} onChange={(e) => setTentName(e.target.value)} placeholder="Стол зельеварения" />
+                <label style={lbl}>Тип</label>
+                <select className="fm-input" value={tentKind} onChange={(e) => setTentKind(e.target.value)}>
+                  {prodTemplates.map((pt) => (
+                    <option key={pt.code} value={pt.code}>{pt.emoji} {pt.name} ({pt.required} ✝️/цикл)</option>
+                  ))}
+                </select>
+                <label style={lbl}>Картинка шатра (необязательно)</label>
+                <input type="file" accept="image/*" onChange={(e) => setTentImage(e.target.files?.[0] || null)} />
+              </>
+            ) : (
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                {brush === 'bed' ? 'Мульти-клеточная грядка. Игрок сажает растение на всю область.' : 'Мульти-клеточная зона для питомца.'}
+              </p>
+            )}
+            <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || (brush === 'tent' && !tentName.trim())} onClick={saveMulti}>
               Разместить
             </button>
           </div>
@@ -517,3 +588,6 @@ function Overlay({ onClose, wide, children }: { onClose: () => void; wide?: bool
     </div>
   );
 }
+
+
+

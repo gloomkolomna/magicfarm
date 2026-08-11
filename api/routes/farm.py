@@ -41,6 +41,7 @@ class PlotOut(BaseModel):
     crystal_color: str | None
     crystal_count: int | None
     drawn_cards_json: str | None
+    norm_revealed: bool
     cell_id: int | None
     created_at: datetime.datetime | None
     completed_at: datetime.datetime | None
@@ -52,6 +53,7 @@ def _plot_to_out(p: Plot) -> PlotOut:
         qty=p.qty, status=p.status, accumulated=p.accumulated, required=p.required,
         crystal_color=p.crystal_color, crystal_count=p.crystal_count,
         drawn_cards_json=p.drawn_cards_json,
+        norm_revealed=bool(p.norm_revealed),
         cell_id=p.cell_id,
         created_at=p.created_at, completed_at=p.completed_at,
     )
@@ -119,6 +121,21 @@ def _inv_to_out(inv: Inventory) -> InventoryOut:
 
 class InvestRequest(BaseModel):
     amount: int
+
+
+@router.post("/plots/{plot_id}/reveal-norm", response_model=PlotOut)
+def reveal_norm(
+    plot_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    plot = db.query(Plot).filter(Plot.id == plot_id, Plot.user_id == user.vk_id).first()
+    if plot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Грядка не найдена")
+    plot.norm_revealed = True
+    db.commit()
+    db.refresh(plot)
+    return _plot_to_out(plot)
 
 
 @router.post("/plots/{plot_id}/invest", response_model=PlotOut)

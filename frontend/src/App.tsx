@@ -18,25 +18,31 @@ const PetsPage = lazy(() => import('./pages/PetsPage'));
 const PotionsPage = lazy(() => import('./pages/PotionsPage'));
 const Onboarding = lazy(() => import('./pages/Onboarding'));
 
+const zoomed = { zoom: 'var(--app-scale)', width: 'calc(100% / var(--app-scale))', margin: '0 auto' } as const;
+
 function Skeleton() {
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <div className="fm-card" style={{ height: 120, opacity: 0.5 }}>Загрузка…</div>
+    <div style={zoomed}>
+      <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
+        <div className="fm-card" style={{ height: 120, opacity: 0.5 }}>Загрузка…</div>
+      </div>
     </div>
   );
 }
 
 function BetaDenied() {
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: 'var(--shell-pad)', textAlign: 'center' }}>
-      <div className="fm-card fm-rise">
-        <h1>🌾 Ферма</h1>
-        <p style={{ color: 'var(--text-secondary)' }}>
-          Игра пока на закрытом тестировании. Доступ открывается постепенно.
-        </p>
-        <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
-          Скоро здесь расцветёт ваша волшебная ферма ✨
-        </p>
+    <div style={zoomed}>
+      <div style={{ maxWidth: 'calc(var(--shell-max-width) * 0.8)', margin: '0 auto', padding: 'var(--shell-pad)', textAlign: 'center' }}>
+        <div className="fm-card fm-rise">
+          <h1>🌾 Ферма</h1>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            Игра пока на закрытом тестировании. Доступ открывается постепенно.
+          </p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
+            Скоро здесь расцветёт ваша волшебная ферма ✨
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -53,7 +59,9 @@ function App() {
     return (
       <>
         <Background />
-        <Suspense fallback={<Skeleton />}><Onboarding /></Suspense>
+        <div style={zoomed}>
+          <Suspense fallback={<Skeleton />}><Onboarding /></Suspense>
+        </div>
       </>
     );
   }

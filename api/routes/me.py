@@ -16,6 +16,10 @@ class MeResponse(BaseModel):
     coins: int
     round: int
     level: int
+    unlocked_barnyard: int
+    unlocked_pets: int
+    unlocked_plot_level: int
+    unlocked_garden_level: int
     onboarding_done: bool
 
 
@@ -30,5 +34,9 @@ def get_me(user: User = Depends(get_current_user)):
         coins=user.coins,
         round=user.round,
         level=user.level or 0,
+        unlocked_barnyard=user.unlocked_barnyard or 0,
+        unlocked_pets=user.unlocked_pets or 0,
+        unlocked_plot_level=user.unlocked_plot_level or 1,
+        unlocked_garden_level=user.unlocked_garden_level or 0,
         onboarding_done=bool(user.onboarding_done),
     )

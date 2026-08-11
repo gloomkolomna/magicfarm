@@ -75,9 +75,7 @@ export default function LibraryPage() {
   }, {});
 
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <h1 style={{ textAlign: 'center' }}>📚 Библиотека рецептов</h1>
-
+    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       {!loading && (
         <div className="fm-card fm-rise" style={{ textAlign: 'center', marginBottom: 14 }}>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
@@ -206,7 +204,7 @@ export default function LibraryPage() {
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, maxHeight: '85vh', overflowY: 'auto' }}>
+      <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 'calc(var(--shell-max-width) * 0.7)', maxHeight: '85vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <h2 style={{ margin: 0 }}>{title}</h2>
           <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={onClose}>✕</button>

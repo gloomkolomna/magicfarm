@@ -102,13 +102,10 @@ def seed_farm():
                 f"('{color}', 0, 1)"
             ))
         conn.execute(text(
-            "INSERT INTO level_gates (variant, level, coins_required, plots_required) VALUES "
-            "(1, 1, 800, 2), "
-            "(1, 2, 1600, 4), "
-            "(1, 3, 2500, 6), "
-            "(2, 1, 800, 2), "
-            "(2, 2, 1600, 4), "
-            "(2, 3, 2500, 6)"
+            "INSERT INTO level_gates (level, coins_required, plots_required) VALUES "
+            "(1, 800, 2), "
+            "(2, 1600, 4), "
+            "(3, 2500, 6)"
         ))
         conn.commit()
 
@@ -163,7 +160,7 @@ def _make_user_override(vk_id: int, role: str):
         try:
             user = db.query(User).filter(User.vk_id == vk_id).first()
             if user is None:
-                user = User(vk_id=vk_id, role=role)
+                user = User(vk_id=vk_id, role=role, unlocked_pets=5, unlocked_barnyard=8)
                 db.add(user)
                 db.commit()
                 db.refresh(user)

@@ -96,8 +96,7 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
   const allFilled = COLORS.every((c) => COUNTS.filter((cnt) => cnt > 0).every((cnt) => Number(norms[c.color][cnt]) >= 1));
 
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <h1 style={{ textAlign: 'center' }}>🧵 Нормы вышивки</h1>
+    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16 }}>
         Каждое растение и товар требует норму вышивки, измеряемую в крестиках.
         Норма считается по картам кристаллов: 3 цвета (🟢🔵🟣) и количество кристаллов (1–5).

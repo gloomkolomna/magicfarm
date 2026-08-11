@@ -50,7 +50,10 @@ class User(Base):
     coins = Column(Integer, nullable=False, default=0, server_default="0")
     round = Column(Integer, nullable=False, default=1, server_default="1")
     level = Column(Integer, nullable=False, default=0, server_default="0")
-    route_variant = Column(Integer, nullable=True)
+    unlocked_barnyard = Column(Integer, nullable=False, default=0, server_default="0")
+    unlocked_pets = Column(Integer, nullable=False, default=0, server_default="0")
+    unlocked_plot_level = Column(Integer, nullable=False, default=1, server_default="1")
+    unlocked_garden_level = Column(Integer, nullable=False, default=0, server_default="0")
     onboarding_done = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
@@ -150,6 +153,7 @@ class Plot(Base):
     crystal_color = Column(String, nullable=True)
     crystal_count = Column(Integer, nullable=True)
     drawn_cards_json = Column(Text, nullable=True)
+    norm_revealed = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
     cell_id = Column(Integer, ForeignKey("field_cells.id", ondelete="SET NULL"), nullable=True)
@@ -185,7 +189,7 @@ class Product(Base):
     code = Column(String, nullable=False, unique=True)
     name = Column(String, nullable=False)
     emoji = Column(String, nullable=True)
-    plant_id = Column(Integer, ForeignKey("plants.id", ondelete="SET NULL"), nullable=True)
+    plant_id = Column(Integer, ForeignKey("plants.id", ondelete="SET NULL"), nullable=True, unique=True)
     stars = Column(Integer, nullable=False, default=1, server_default="1")
     production_kind = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
@@ -260,6 +264,8 @@ class Field(Base):
     cells = relationship("FieldCell", back_populates="field", cascade="all, delete-orphan")
     tents = relationship("Tent", back_populates="field", cascade="all, delete-orphan")
     plants = relationship("FieldPlant", back_populates="field", cascade="all, delete-orphan")
+    plant_beds = relationship("PlantBed", back_populates="field", cascade="all, delete-orphan")
+    pet_zones = relationship("PetZone", back_populates="field", cascade="all, delete-orphan")
 
 
 class FieldPlant(Base):
@@ -318,6 +324,35 @@ class Tent(Base):
     field = relationship("Field", back_populates="tents")
 
 
+class PlantBed(Base):
+    __tablename__ = "plant_beds"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False)
+    col1 = Column(Integer, nullable=False)
+    row1 = Column(Integer, nullable=False)
+    col2 = Column(Integer, nullable=False)
+    row2 = Column(Integer, nullable=False)
+    plant_category = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    field = relationship("Field", back_populates="plant_beds")
+
+
+class PetZone(Base):
+    __tablename__ = "pet_zones"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False)
+    col1 = Column(Integer, nullable=False)
+    row1 = Column(Integer, nullable=False)
+    col2 = Column(Integer, nullable=False)
+    row2 = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    field = relationship("Field", back_populates="pet_zones")
+
+
 class Animal(Base):
     __tablename__ = "animals"
 
@@ -369,6 +404,10 @@ class Recipe(Base):
     plant = relationship("Plant")
     product = relationship("Product")
 
+    __table_args__ = (
+        UniqueConstraint("plant_id", name="uq_recipe_plant"),
+    )
+
 
 class UserRecipe(Base):
     __tablename__ = "user_recipes"
@@ -400,15 +439,11 @@ class LevelGate(Base):
     __tablename__ = "level_gates"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    variant = Column(Integer, nullable=False)
-    level = Column(Integer, nullable=False)
+    level = Column(Integer, nullable=False, unique=True)
     coins_required = Column(Integer, nullable=False, default=0, server_default="0")
     plots_required = Column(Integer, nullable=False, default=0, server_default="0")
-    rewards_json = Column(Text, nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint("variant", "level", name="uq_levelgate_variant_level"),
-    )
+    unlock_type = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
 
 
 class OrderTemplate(Base):

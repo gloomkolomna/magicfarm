@@ -45,7 +45,15 @@ def list_pens(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    slots = db.query(BarnyardSlot).filter(BarnyardSlot.user_id == user.vk_id).all()
+    slots = db.query(BarnyardSlot).filter(BarnyardSlot.user_id == user.vk_id).order_by(BarnyardSlot.id.asc()).all()
+    current_count = len(slots)
+    target = user.unlocked_barnyard or 0
+    if current_count < target:
+        for _ in range(target - current_count):
+            s = BarnyardSlot(user_id=user.vk_id, status="empty")
+            db.add(s)
+        db.commit()
+        slots = db.query(BarnyardSlot).filter(BarnyardSlot.user_id == user.vk_id).order_by(BarnyardSlot.id.asc()).all()
     return [_slot_out(s) for s in slots]
 
 

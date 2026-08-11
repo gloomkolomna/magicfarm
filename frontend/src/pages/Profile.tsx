@@ -33,9 +33,7 @@ export default function ProfilePage() {
   if (!user) return null;
 
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <h1 style={{ textAlign: 'center' }}>👤 Профиль</h1>
-
+    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <div className="fm-card fm-rise" style={{ marginBottom: 14, textAlign: 'center' }}>
         <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>Вышивальщица</div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>
@@ -83,7 +81,7 @@ export default function ProfilePage() {
           }}
         >
           <div onClick={(e) => e.stopPropagation()}>
-            <div style={{ maxWidth: 600, margin: '0 auto', padding: '8px 12px 0', textAlign: 'right' }}>
+            <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: '8px 12px 0', textAlign: 'right' }}>
               <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setShowNorms(false)}>✕ Закрыть</button>
             </div>
             <Onboarding onSaved={() => setShowNorms(false)} />
