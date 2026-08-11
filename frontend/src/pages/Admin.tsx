@@ -120,7 +120,7 @@ export default function AdminPage() {
         api.adminPlayers().catch(() => [] as Player[]),
         Promise.all(
           SETTING_FIELDS.map((f) => api.getSetting(f.key).then((s) => [s.key, s.value] as [string, string])),
-        ),
+        ).catch(() => [] as [string, string][]),
         api.adminFields().catch(() => [] as FieldInfo[]),
         api.plants().catch(() => [] as Plant[]),
         api.adminAnimals().catch(() => [] as Animal[]),

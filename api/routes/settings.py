@@ -323,13 +323,13 @@ class BackgroundUpdate(BaseModel):
     url: str
 
 
-@router.get("/background")
+@router.get("/settings/background")
 def get_background(db: Session = Depends(get_db)):
     s = db.query(Setting).filter(Setting.key == DEFAULT_BG_KEY).first()
     return {"url": s.value if s else ""}
 
 
-@router.put("/background")
+@router.put("/settings/background")
 def set_background(
     req: BackgroundUpdate,
     db: Session = Depends(get_db),
@@ -381,6 +381,22 @@ def get_setting(key: str, db: Session = Depends(get_db), user: User = Depends(ge
         return SettingOut(key=key, value=str(get_production_required(db)))
     if key == ORDER_REWARD_KEY:
         return SettingOut(key=key, value=str(get_order_reward(db)))
+    if key == PRODUCTION_NORM_L1_KEY:
+        return SettingOut(key=key, value=str(get_production_norm(db, 1)))
+    if key == PRODUCTION_NORM_L2_KEY:
+        return SettingOut(key=key, value=str(get_production_norm(db, 2)))
+    if key == PRODUCTION_NORM_L3_KEY:
+        return SettingOut(key=key, value=str(get_production_norm(db, 3)))
+    if key == STUDY_NORM_L1_KEY:
+        return SettingOut(key=key, value=str(get_study_norm(db, 1)))
+    if key == STUDY_NORM_L2_KEY:
+        return SettingOut(key=key, value=str(get_study_norm(db, 2)))
+    if key == STUDY_NORM_L3_KEY:
+        return SettingOut(key=key, value=str(get_study_norm(db, 3)))
+    if key == ANIMAL_PRODUCTION_NORM_KEY:
+        return SettingOut(key=key, value=str(get_animal_production_norm(db)))
+    if key == SALE_PRICE_RATIO_KEY:
+        return SettingOut(key=key, value=str(get_sale_price_ratio(db)))
     s = _get_setting_or_404(key, db)
     return SettingOut(key=s.key, value=s.value)
 
