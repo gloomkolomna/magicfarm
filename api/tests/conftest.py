@@ -49,6 +49,12 @@ def seed_farm():
             "(SELECT id FROM plants WHERE code='poison_mush'), 1, 'alchemy')"
         ))
         conn.execute(text(
+            "INSERT INTO production_templates (code, name, emoji, required, cards_to_draw, surcharge) VALUES "
+            "('alchemy', 'Стол зельеварения', '🔮', 500, 5, 40), "
+            "('sewing', 'Шатёр портнихи', '🧵', 500, 3, 30), "
+            "('workshop', 'Мастерская', '🔨', 500, 4, 35)"
+        ))
+        conn.execute(text(
             "INSERT INTO settings (key, value) VALUES "
             "('crystal_rate_variant', '1'), "
             "('auto_credit', '1'), "
@@ -71,9 +77,9 @@ def seed_farm():
             "('easter_bunny', 'Пасхальный кролик', '🐰', 'Сладкое яйцо', 2)"
         ))
         conn.execute(text(
-            "INSERT INTO pets (code, name, emoji, bonus_description) VALUES "
-            "('dragon', 'Дракон Эфир', '🐉', '+5 монет к заказу'), "
-            "('fox', 'Лис Сильварис', '🦊', '+1 к урожаю сада')"
+            "INSERT INTO pets (code, name, emoji, bonus_kind, bonus_description) VALUES "
+            "('dragon', 'Дракон Эфир', '🐉', 'order_coins', '+5 монет к заказу'), "
+            "('fox', 'Лис Сильварис', '🦊', 'harvest_orchard', '+1 к урожаю сада')"
         ))
         conn.execute(text(
             "INSERT INTO potion_recipes (code, name, level, ingredient_slots, bonus_code, reward_coins) VALUES "
@@ -83,12 +89,6 @@ def seed_farm():
             "INSERT INTO recipes (plant_id, product_id, level) VALUES "
             "((SELECT id FROM plants WHERE code='khlebozlak'), "
             "(SELECT id FROM products WHERE code='poison'), 1)"
-        ))
-        conn.execute(text(
-            "INSERT INTO production_templates (code, name, emoji, required) VALUES "
-            "('alchemy', 'Стол зельеварения', '🧪', 500), "
-            "('sewing', 'Шатёр портнихи', '🧵', 500), "
-            "('workshop', 'Мастерская', '🔨', 500)"
         ))
         for color in ("green", "blue", "violet"):
             for value in range(1, 6):

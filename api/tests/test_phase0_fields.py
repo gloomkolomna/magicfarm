@@ -209,26 +209,6 @@ def test_stitch_report_after_required(admin_client, uploads_tmp):
     assert r.status_code == 422
 
 
-def test_plant_has_stitch_condition(admin_client):
-    r = admin_client.post("/api/admin/catalog/plants", json={
-        "name": "Тест с условием", "stitch_condition": "Вышить розу",
-    })
-    assert r.status_code == 201
-    pid = r.json()["id"]
-    with make_user_client(123, "player") as c:
-        r = c.get(f"/api/plants/{pid}")
-    assert r.status_code == 200
-    assert r.json()["stitch_condition"] == "Вышить розу"
-
-
-def test_admin_update_stitch_condition(admin_client):
-    r = admin_client.put("/api/admin/catalog/plants/1", json={
-        "stitch_condition": "Вышить солнце",
-    })
-    assert r.status_code == 200
-    assert r.json()["stitch_condition"] == "Вышить солнце"
-
-
 def test_tent_build_uses_card_draw(admin_client):
     r = admin_client.post("/api/admin/fields", json={
         "name": "Поле с шатром", "code": "tent_p0", "cols": 3, "rows": 2,

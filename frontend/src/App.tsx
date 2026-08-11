@@ -1,20 +1,22 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useVkBridge } from './context/VkBridgeContext';
 import { useSession } from './context/SessionContext';
 import Background from './components/Background';
 import MiniAppShell from './components/MiniAppShell';
-import OrdersPage from './pages/Orders';
-import ProfilePage from './pages/Profile';
-import AdminPage from './pages/Admin';
-import FieldsPage from './pages/Fields';
-import FieldPage from './pages/Field';
-import InventoryPage from './pages/Inventory';
-import LibraryPage from './pages/Library';
-import BarnyardPage from './pages/Barnyard';
-import PetsPage from './pages/PetsPage';
-import PotionsPage from './pages/PotionsPage';
-import Onboarding from './pages/Onboarding';
 import { hasBetaList, isBetaAllowed } from './auth/betaGate';
+
+const OrdersPage = lazy(() => import('./pages/Orders'));
+const ProfilePage = lazy(() => import('./pages/Profile'));
+const AdminPage = lazy(() => import('./pages/Admin'));
+const FieldsPage = lazy(() => import('./pages/Fields'));
+const FieldPage = lazy(() => import('./pages/Field'));
+const InventoryPage = lazy(() => import('./pages/Inventory'));
+const LibraryPage = lazy(() => import('./pages/Library'));
+const BarnyardPage = lazy(() => import('./pages/Barnyard'));
+const PetsPage = lazy(() => import('./pages/PetsPage'));
+const PotionsPage = lazy(() => import('./pages/PotionsPage'));
+const Onboarding = lazy(() => import('./pages/Onboarding'));
 
 function Skeleton() {
   return (
@@ -51,7 +53,7 @@ function App() {
     return (
       <>
         <Background />
-        <Onboarding />
+        <Suspense fallback={<Skeleton />}><Onboarding /></Suspense>
       </>
     );
   }
@@ -59,20 +61,22 @@ function App() {
   return (
     <>
       <Background />
-      <Routes>
-        <Route path="/" element={<MiniAppShell><FieldsPage /></MiniAppShell>} />
-        <Route path="/fields" element={<MiniAppShell><FieldsPage /></MiniAppShell>} />
-        <Route path="/field/:id" element={<FieldPage />} />
-        <Route path="/inventory" element={<MiniAppShell><InventoryPage /></MiniAppShell>} />
-        <Route path="/library" element={<MiniAppShell><LibraryPage /></MiniAppShell>} />
-        <Route path="/barnyard" element={<MiniAppShell><BarnyardPage /></MiniAppShell>} />
-        <Route path="/pets" element={<MiniAppShell><PetsPage /></MiniAppShell>} />
-        <Route path="/potions" element={<MiniAppShell><PotionsPage /></MiniAppShell>} />
-        <Route path="/orders" element={<MiniAppShell><OrdersPage /></MiniAppShell>} />
-        <Route path="/profile" element={<MiniAppShell><ProfilePage /></MiniAppShell>} />
-        <Route path="/admin" element={<MiniAppShell><AdminPage /></MiniAppShell>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={<Skeleton />}>
+        <Routes>
+          <Route path="/" element={<MiniAppShell><FieldsPage /></MiniAppShell>} />
+          <Route path="/fields" element={<MiniAppShell><FieldsPage /></MiniAppShell>} />
+          <Route path="/field/:id" element={<FieldPage />} />
+          <Route path="/inventory" element={<MiniAppShell><InventoryPage /></MiniAppShell>} />
+          <Route path="/library" element={<MiniAppShell><LibraryPage /></MiniAppShell>} />
+          <Route path="/barnyard" element={<MiniAppShell><BarnyardPage /></MiniAppShell>} />
+          <Route path="/pets" element={<MiniAppShell><PetsPage /></MiniAppShell>} />
+          <Route path="/potions" element={<MiniAppShell><PotionsPage /></MiniAppShell>} />
+          <Route path="/orders" element={<MiniAppShell><OrdersPage /></MiniAppShell>} />
+          <Route path="/profile" element={<MiniAppShell><ProfilePage /></MiniAppShell>} />
+          <Route path="/admin" element={<MiniAppShell><AdminPage /></MiniAppShell>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </>
   );
 }

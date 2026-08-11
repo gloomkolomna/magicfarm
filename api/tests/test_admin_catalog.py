@@ -123,22 +123,26 @@ def test_list_pets_empty(admin_client):
 
 def test_create_pet(admin_client):
     res = admin_client.post("/api/admin/catalog/pets", json={
-        "name": "Лис", "emoji": "🦊", "bonus_description": "+1 дерево",
+        "name": "Лис", "emoji": "🦊", "bonus_kind": "harvest_orchard", "bonus_description": "+1 дерево",
     })
     assert res.status_code == 201
     d = res.json()
     assert d["code"] and d["code"][0].isalpha()
+    assert d["bonus_kind"] == "harvest_orchard"
     assert d["bonus_description"] == "+1 дерево"
 
 
 def test_update_pet(admin_client):
     r = admin_client.post("/api/admin/catalog/pets", json={"name": "Кот"})
     pid = r.json()["id"]
-    res = admin_client.put(f"/api/admin/catalog/pets/{pid}", json={"emoji": "🐱", "bonus_description": "+1 грядка"})
+    res = admin_client.put(f"/api/admin/catalog/pets/{pid}", json={
+        "emoji": "🐱", "bonus_kind": "animal_product", "bonus_description": "+1 продукция",
+    })
     assert res.status_code == 200
     d = res.json()
     assert d["emoji"] == "🐱"
-    assert d["bonus_description"] == "+1 грядка"
+    assert d["bonus_kind"] == "animal_product"
+    assert d["bonus_description"] == "+1 продукция"
 
 
 def test_delete_pet(admin_client):

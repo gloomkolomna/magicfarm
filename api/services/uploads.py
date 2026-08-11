@@ -36,21 +36,18 @@ def _read_with_limit(upload: UploadFile) -> bytes:
     return bytes(buf)
 
 
-def _process(buf: bytes, max_size: int | None) -> bytes:
+def _process(buf: bytes, max_size: int | None) -> tuple[bytes, bool]:
     if max_size is None:
-        return buf
+        return buf, True
     from PIL import Image
 
     img = Image.open(io.BytesIO(buf))
-    if img.mode in ("RGBA", "LA", "P"):
-        if img.mode == "P":
-            img = img.convert("RGBA")
-        if img.mode == "LA":
-            img = img.convert("RGBA")
-        background = Image.new("RGBA", img.size, (255, 255, 255, 255))
-        img = Image.alpha_composite(background, img).convert("RGB")
-    elif img.mode != "RGB":
-        img = img.convert("RGB")
+    has_alpha = img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info)
+
+    if img.mode == "P":
+        img = img.convert("RGBA")
+    elif img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGBA" if has_alpha else "RGB")
 
     w, h = img.size
     longest = max(w, h)
@@ -59,15 +56,21 @@ def _process(buf: bytes, max_size: int | None) -> bytes:
         img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.LANCZOS)
 
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=85, optimize=True)
-    return out.getvalue()
+    if has_alpha:
+        img.save(out, format="PNG", optimize=True)
+        return out.getvalue(), True
+    else:
+        img.save(out, format="JPEG", quality=85, optimize=True)
+        return out.getvalue(), False
 
 
 def save_upload(upload: UploadFile, prefix: str, max_size: int | None = None) -> str:
     buf = _read_with_limit(upload)
-    processed = _process(buf, max_size)
-
-    ext = "jpg" if max_size is not None else (os.path.splitext(upload.filename or "")[1].lower().lstrip(".") or "png")
+    processed, is_png = _process(buf, max_size)
+    if max_size is not None:
+        ext = "png" if is_png else "jpg"
+    else:
+        ext = os.path.splitext(upload.filename or "")[1].lower().lstrip(".") or "png"
     name = f"{prefix}_{int(time.time())}_{os.urandom(3).hex()}.{ext}"
 
     s3 = _get_s3()
@@ -75,7 +78,8 @@ def save_upload(upload: UploadFile, prefix: str, max_size: int | None = None) ->
         vk_id = prefix.split("_", 1)[1]
         upload_fn, _ = s3
         key = f"{vk_id}/{name}"
-        return upload_fn(key, processed, "image/jpeg" if max_size is not None else "image/png")
+        content_type = "image/png" if is_png else "image/jpeg"
+        return upload_fn(key, processed, content_type)
 
     path = os.path.join(config.UPLOADS_DIR, name)
     with open(path, "wb") as fh:

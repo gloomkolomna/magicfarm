@@ -56,16 +56,26 @@ if (-not (Test-Path $venvPython)) {
 }
 
 # ─── Миграции ───
-Write-Step "Applying migrations (alembic upgrade head)"
+Write-Step "Initializing database"
 Push-Location $apiDir
-& $venvPython -m alembic upgrade head 2>&1 | ForEach-Object { Write-Host "  $($_.ToString())" }
+$initScript = @"
+from models import Base; from db import engine; Base.metadata.create_all(bind=engine)
+"@
+& $venvPython -c $initScript 2>&1 | ForEach-Object { Write-Host "  $($_.ToString())" }
+$initExit = $LASTEXITCODE
+if ($initExit -ne 0) {
+    Pop-Location
+    Write-Err "DB init failed"
+    exit 1
+}
+& $venvPython -m alembic stamp head 2>&1 | ForEach-Object { Write-Host "  $($_.ToString())" }
 $alembicExit = $LASTEXITCODE
 Pop-Location
 if ($alembicExit -ne 0) {
-    Write-Err "Migration failed"
+    Write-Err "Alembic stamp failed"
     exit 1
 }
-Write-OK "Migrations applied"
+Write-OK "Database ready"
 
 function cleanup {
     if ($procs.Count -gt 0) {

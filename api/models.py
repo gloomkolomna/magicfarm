@@ -34,6 +34,9 @@ class ProductionTemplate(Base):
     name = Column(String, nullable=False)
     emoji = Column(String, nullable=True)
     required = Column(Integer, nullable=False, default=500, server_default="500")
+    cards_to_draw = Column(Integer, nullable=False, default=3, server_default="3")
+    surcharge = Column(Integer, nullable=False, default=30, server_default="30")
+    image_url = Column(String, nullable=True)
 
 
 class User(Base):
@@ -185,6 +188,7 @@ class Product(Base):
     plant_id = Column(Integer, ForeignKey("plants.id", ondelete="SET NULL"), nullable=True)
     stars = Column(Integer, nullable=False, default=1, server_default="1")
     production_kind = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
 
     plant = relationship("Plant", back_populates="products")
 
@@ -250,6 +254,7 @@ class Field(Base):
     grid_color = Column(String, nullable=False, default="#2a1a0e", server_default="#2a1a0e")
     plant_category = Column(String, nullable=True)
     min_level = Column(Integer, nullable=False, default=0, server_default="0")
+    field_kind = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     cells = relationship("FieldCell", back_populates="field", cascade="all, delete-orphan")
@@ -334,6 +339,7 @@ class Pet(Base):
     code = Column(String, nullable=False, unique=True)
     name = Column(String, nullable=False)
     emoji = Column(String, nullable=True)
+    bonus_kind = Column(String, nullable=True)
     bonus_description = Column(Text, nullable=True)
     image_url = Column(String, nullable=True)
 

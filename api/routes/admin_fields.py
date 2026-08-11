@@ -80,6 +80,7 @@ class FieldCreate(BaseModel):
     rows: int = 4
     plant_category: str | None = None
     min_level: int = 0
+    field_kind: str | None = None
 
 
 class FieldUpdate(BaseModel):
@@ -89,6 +90,7 @@ class FieldUpdate(BaseModel):
     grid_color: str | None = None
     plant_category: str | None = None
     min_level: int | None = None
+    field_kind: str | None = None
     cols: int | None = None
     rows: int | None = None
     grid_color: str | None = None
@@ -139,6 +141,7 @@ class FieldOut(BaseModel):
     grid_color: str
     plant_category: str | None
     min_level: int = 0
+    field_kind: str | None
     created_at: datetime.datetime | None
 
 
@@ -153,6 +156,7 @@ def _field_to_out(f: Field) -> FieldOut:
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
         plant_category=f.plant_category, min_level=f.min_level,
+        field_kind=f.field_kind,
         created_at=f.created_at,
     )
 
@@ -201,7 +205,8 @@ def create_field(
     rows = _validate_dim(req.rows, "Высота")
     code = _make_code(name, db)
     f = Field(code=code, name=name, cols=cols, rows=rows,
-              plant_category=req.plant_category, min_level=req.min_level)
+              plant_category=req.plant_category, min_level=req.min_level,
+              field_kind=req.field_kind)
     db.add(f)
     db.commit()
     db.refresh(f)
@@ -236,6 +241,8 @@ def update_field(
         f.plant_category = req.plant_category
     if req.min_level is not None:
         f.min_level = req.min_level
+    if req.field_kind is not None:
+        f.field_kind = req.field_kind
     if req.cols is not None or req.rows is not None:
         _ensure_grid(f, db)
     db.commit()
@@ -482,6 +489,7 @@ def _detail(f: Field) -> FieldDetailOut:
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
         plant_category=f.plant_category, min_level=f.min_level,
+        field_kind=f.field_kind,
         created_at=f.created_at,
         cells=[_cell_to_out(c) for c in f.cells],
         tents=[_tent_to_out(t) for t in f.tents],

@@ -8,8 +8,6 @@ export interface Plant {
   category: string;
   level: number;
   norm_per_crystal: number;
-  bonus_text: string | null;
-  bonus_kind: string | null;
   description: string | null;
   image_url: string | null;
   image_young_url: string | null;
@@ -119,6 +117,8 @@ export interface Animal {
   product_name: string | null;
   sort_order: number;
   image_url: string | null;
+  image_empty_pen_url: string | null;
+  image_pen_url: string | null;
 }
 
 export interface Pet {
@@ -126,6 +126,7 @@ export interface Pet {
   code: string;
   name: string;
   emoji: string | null;
+  bonus_kind: string | null;
   bonus_description: string | null;
   image_url: string | null;
 }
@@ -185,6 +186,9 @@ export interface ProductionTemplate {
   name: string;
   emoji: string | null;
   required: number;
+  cards_to_draw: number;
+  surcharge: number;
+  image_url: string | null;
 }
 
 export interface Product {
@@ -194,6 +198,7 @@ export interface Product {
   emoji: string | null;
   stars: number;
   production_kind: string | null;
+  image_url: string | null;
 }
 
 export interface PlayerDetail extends Player {
@@ -266,6 +271,7 @@ export interface FieldInfo {
   grid_color: string;
   plant_category: string | null;
   min_level: number;
+  field_kind: string | null;
   created_at: string | null;
 }
 
@@ -431,8 +437,8 @@ export const api = {
 
   // ── Карты-локации: админка ──
   adminFields: () => client.get<FieldInfo[]>('/admin/fields').then((r) => r.data),
-  adminCreateField: (name: string, cols = 6, rows = 4) =>
-    client.post<FieldInfo>('/admin/fields', { name, cols, rows }).then((r) => r.data),
+  adminCreateField: (name: string, cols = 6, rows = 4, plant_category?: string | null, min_level?: number, field_kind?: string | null) =>
+    client.post<FieldInfo>('/admin/fields', { name, cols, rows, plant_category, min_level, field_kind }).then((r) => r.data),
   adminGetField: (id: number) =>
     client.get<FieldDetail>(`/admin/fields/${id}`).then((r) => r.data),
   adminUpdateField: (id: number, data: { name?: string; cols?: number; rows?: number; grid_color?: string }) =>
@@ -534,10 +540,30 @@ export const api = {
     form.append('image', file);
     return client.put<Animal>(`/admin/catalog/animals/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
+  adminUploadAnimalEmptyPenImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Animal>(`/admin/catalog/animals/${id}/image-empty-pen`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadAnimalPenImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Animal>(`/admin/catalog/animals/${id}/image-pen`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
   adminUploadPetImage: (id: number, file: File) => {
     const form = new FormData();
     form.append('image', file);
     return client.put<Pet>(`/admin/catalog/pets/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadProductionTemplateImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<ProductionTemplate>(`/admin/catalog/production-templates/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadProductImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Product>(`/admin/catalog/products/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
 
   // ── Админ: игроки ──

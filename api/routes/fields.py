@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_onboarding
-from models import Field, FieldCell, FieldPlant, Plot, Production, PRODUCTION_NAMES, Tent, User, MAX_PLOT_QTY, CARD_DRAW_RULES
+from models import Field, FieldCell, FieldPlant, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, User, MAX_PLOT_QTY, CARD_DRAW_RULES
 from routes.admin_fields import (
     CellOut, FieldOut, PlantOut, TentOut,
     _cell_to_out, _field_to_out, _get_field_or_404, _plant_to_out, _tent_to_out,
@@ -99,6 +99,7 @@ def get_field(
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
         plant_category=f.plant_category, min_level=f.min_level,
+        field_kind=f.field_kind,
         created_at=f.created_at,
         cells=cells, plants=plants, tents=tents,
     )
@@ -302,8 +303,9 @@ def start_tent_build(
         )
 
     kind_key = f"tent_{t.kind}"
-    num_cards, allow_treasure = CARD_DRAW_RULES.get(kind_key, (1, False))
-    cards = draw_cards(db, num_cards, allow_treasure)
+    tmpl = db.query(ProductionTemplate).filter(ProductionTemplate.code == t.kind).first()
+    num_cards = tmpl.cards_to_draw if tmpl else 3
+    cards = draw_cards(db, num_cards, True)
     required = calculate_norm(db, user, cards)
 
     t.builder_user_id = user.vk_id

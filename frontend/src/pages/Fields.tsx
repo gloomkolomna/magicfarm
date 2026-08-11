@@ -3,10 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { api, type FieldInfo } from '../api/endpoints';
 
+const FIELD_KIND_LABEL: Record<string, string> = {
+  garden_beds: '🌱 Грядки',
+  orchard: '🍎 Сады',
+  barnyard: '🐄 Скотный двор',
+  house: '🏠 Дом',
+  brewery: '🧪 Зельеварня',
+  library: '📖 Библиотека',
+  default: '🗺️ Поля',
+};
+
 function groupByCategory(fields: FieldInfo[]): { category: string; items: FieldInfo[] }[] {
   const map = new Map<string, FieldInfo[]>();
   for (const f of fields) {
-    const cat = f.plant_category || 'default';
+    const cat = f.field_kind || f.plant_category || 'default';
     if (!map.has(cat)) map.set(cat, []);
     map.get(cat)!.push(f);
   }
@@ -136,7 +146,7 @@ export default function FieldsPage() {
                 ◀
               </button>
               <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>
-                {current.category === 'default' ? 'Основное' : current.category}
+                {FIELD_KIND_LABEL[current.category] || current.category}
               </span>
               <button
                 className="fm-card"

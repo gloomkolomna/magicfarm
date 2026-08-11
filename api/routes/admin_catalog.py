@@ -46,11 +46,7 @@ class PlantCreate(BaseModel):
     emoji: str | None = None
     category: str = "garden"
     level: int = 1
-    norm_per_crystal: int = 100
-    bonus_text: str | None = None
-    bonus_kind: str | None = None
     description: str | None = None
-    stitch_condition: str | None = None
 
 
 class PlantUpdate(BaseModel):
@@ -58,11 +54,7 @@ class PlantUpdate(BaseModel):
     emoji: str | None = None
     category: str | None = None
     level: int | None = None
-    norm_per_crystal: int | None = None
-    bonus_text: str | None = None
-    bonus_kind: str | None = None
     description: str | None = None
-    stitch_condition: str | None = None
 
 
 class PlantOut(BaseModel):
@@ -73,10 +65,7 @@ class PlantOut(BaseModel):
     category: str
     level: int
     norm_per_crystal: int
-    bonus_text: str | None
-    bonus_kind: str | None
     description: str | None
-    stitch_condition: str | None
     image_url: str | None
     image_young_url: str | None
     image_grown_url: str | None
@@ -104,17 +93,30 @@ class AnimalOut(BaseModel):
     product_name: str | None
     sort_order: int
     image_url: str | None
+    image_empty_pen_url: str | None
+    image_pen_url: str | None
+
+
+BONUS_KINDS: dict[str, str] = {
+    "harvest_orchard": "+1 к урожаю сада",
+    "harvest_plot": "+1 к урожаю грядки",
+    "order_coins": "+5 монет к заказу",
+    "craft_bonus": "+1 товар при крафте",
+    "animal_product": "+1 продукция животного",
+}
 
 
 class PetCreate(BaseModel):
     name: str
     emoji: str | None = None
+    bonus_kind: str | None = None
     bonus_description: str | None = None
 
 
 class PetUpdate(BaseModel):
     name: str | None = None
     emoji: str | None = None
+    bonus_kind: str | None = None
     bonus_description: str | None = None
 
 
@@ -123,6 +125,7 @@ class PetOut(BaseModel):
     code: str
     name: str
     emoji: str | None
+    bonus_kind: str | None
     bonus_description: str | None
     image_url: str | None
 
@@ -133,8 +136,7 @@ def _plant_out(p: Plant) -> PlantOut:
     return PlantOut(
         id=p.id, code=p.code, name=p.name, emoji=p.emoji,
         category=p.category, level=p.level, norm_per_crystal=p.norm_per_crystal,
-        bonus_text=p.bonus_text, bonus_kind=p.bonus_kind, description=p.description,
-        stitch_condition=p.stitch_condition,
+        description=p.description,
         image_url=p.image_url, image_young_url=p.image_young_url, image_grown_url=p.image_grown_url,
     )
 
@@ -144,12 +146,15 @@ def _animal_out(a: Animal) -> AnimalOut:
         id=a.id, code=a.code, name=a.name, emoji=a.emoji,
         product_name=a.product_name, sort_order=a.sort_order,
         image_url=a.image_url,
+        image_empty_pen_url=a.image_empty_pen_url,
+        image_pen_url=a.image_pen_url,
     )
 
 
 def _pet_out(p: Pet) -> PetOut:
     return PetOut(
         id=p.id, code=p.code, name=p.name, emoji=p.emoji,
+        bonus_kind=p.bonus_kind,
         bonus_description=p.bonus_description,
         image_url=p.image_url,
     )
@@ -198,9 +203,8 @@ def create_plant(
     code = _unique_code(_auto_code(req.name, "plant"), Plant, db)
     p = Plant(
         code=code, name=req.name.strip(), emoji=req.emoji, category=req.category,
-        level=req.level, norm_per_crystal=req.norm_per_crystal,
-        bonus_text=req.bonus_text, bonus_kind=req.bonus_kind, description=req.description,
-        stitch_condition=req.stitch_condition,
+        level=req.level, norm_per_crystal=100,
+        description=req.description,
     )
     db.add(p)
     db.commit()
@@ -228,16 +232,8 @@ def update_plant(
         p.category = req.category
     if req.level is not None:
         p.level = req.level
-    if req.norm_per_crystal is not None:
-        p.norm_per_crystal = req.norm_per_crystal
-    if req.bonus_text is not None:
-        p.bonus_text = req.bonus_text
-    if req.bonus_kind is not None:
-        p.bonus_kind = req.bonus_kind
     if req.description is not None:
         p.description = req.description
-    if req.stitch_condition is not None:
-        p.stitch_condition = req.stitch_condition
     db.commit()
     db.refresh(p)
     return _plant_out(p)
@@ -340,8 +336,11 @@ def create_pet(
 ):
     if not req.name.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название обязательно")
+    bonus_kind = req.bonus_kind.strip() if req.bonus_kind else None
+    if bonus_kind is not None and bonus_kind not in BONUS_KINDS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Недопустимый вид бонуса: {bonus_kind}")
     code = _unique_code(_auto_code(req.name, "pet"), Pet, db)
-    p = Pet(code=code, name=req.name.strip(), emoji=req.emoji, bonus_description=req.bonus_description)
+    p = Pet(code=code, name=req.name.strip(), emoji=req.emoji, bonus_kind=bonus_kind, bonus_description=req.bonus_description)
     db.add(p)
     db.commit()
     db.refresh(p)
@@ -364,6 +363,11 @@ def update_pet(
         p.name = req.name.strip()
     if req.emoji is not None:
         p.emoji = req.emoji
+    if req.bonus_kind is not None:
+        bonus_kind = req.bonus_kind.strip() if req.bonus_kind else None
+        if bonus_kind is not None and bonus_kind not in BONUS_KINDS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Недопустимый вид бонуса: {bonus_kind}")
+        p.bonus_kind = bonus_kind
     if req.bonus_description is not None:
         p.bonus_description = req.bonus_description
     db.commit()
@@ -411,12 +415,14 @@ class ProductOut(BaseModel):
     plant_id: int | None
     stars: int
     production_kind: str | None
+    image_url: str | None
 
 
 def _product_out(p: Product) -> ProductOut:
     return ProductOut(
         id=p.id, code=p.code, name=p.name, emoji=p.emoji,
         plant_id=p.plant_id, stars=p.stars, production_kind=p.production_kind,
+        image_url=p.image_url,
     )
 
 
@@ -495,12 +501,16 @@ class ProductionTemplateCreate(BaseModel):
     name: str
     emoji: str | None = None
     required: int = 500
+    cards_to_draw: int = 3
+    surcharge: int = 30
 
 
 class ProductionTemplateUpdate(BaseModel):
     name: str | None = None
     emoji: str | None = None
     required: int | None = None
+    cards_to_draw: int | None = None
+    surcharge: int | None = None
 
 
 class ProductionTemplateOut(BaseModel):
@@ -509,12 +519,18 @@ class ProductionTemplateOut(BaseModel):
     name: str
     emoji: str | None
     required: int
+    cards_to_draw: int
+    surcharge: int
+    image_url: str | None
 
 
 def _pt_out(pt: ProductionTemplate) -> ProductionTemplateOut:
     return ProductionTemplateOut(
         id=pt.id, code=pt.code, name=pt.name, emoji=pt.emoji,
         required=pt.required,
+        cards_to_draw=pt.cards_to_draw,
+        surcharge=pt.surcharge,
+        image_url=pt.image_url,
     )
 
 
@@ -540,7 +556,10 @@ def create_production_template(
         code = _unique_code(_auto_code(req.name, "prod"), ProductionTemplate, db)
     if not req.name.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название обязательно")
-    pt = ProductionTemplate(code=code, name=req.name.strip(), emoji=req.emoji, required=req.required)
+    pt = ProductionTemplate(
+        code=code, name=req.name.strip(), emoji=req.emoji,
+        required=req.required, cards_to_draw=req.cards_to_draw, surcharge=req.surcharge,
+    )
     db.add(pt)
     db.commit()
     db.refresh(pt)
@@ -565,6 +584,10 @@ def update_production_template(
         pt.emoji = req.emoji
     if req.required is not None:
         pt.required = req.required
+    if req.cards_to_draw is not None:
+        pt.cards_to_draw = req.cards_to_draw
+    if req.surcharge is not None:
+        pt.surcharge = req.surcharge
     db.commit()
     db.refresh(pt)
     return _pt_out(pt)
@@ -654,6 +677,40 @@ def upload_animal_image(
     return _animal_out(a)
 
 
+@router.put("/animals/{animal_id}/image-empty-pen", response_model=AnimalOut)
+def upload_animal_empty_pen_image(
+    animal_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    a = db.query(Animal).filter(Animal.id == animal_id).first()
+    if a is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Животное не найдено")
+    remove_upload(a.image_empty_pen_url)
+    a.image_empty_pen_url = save_upload(image, f"animal_pen_empty_{animal_id}", max_size=400)
+    db.commit()
+    db.refresh(a)
+    return _animal_out(a)
+
+
+@router.put("/animals/{animal_id}/image-pen", response_model=AnimalOut)
+def upload_animal_pen_image(
+    animal_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    a = db.query(Animal).filter(Animal.id == animal_id).first()
+    if a is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Животное не найдено")
+    remove_upload(a.image_pen_url)
+    a.image_pen_url = save_upload(image, f"animal_pen_{animal_id}", max_size=400)
+    db.commit()
+    db.refresh(a)
+    return _animal_out(a)
+
+
 @router.put("/pets/{pet_id}/image", response_model=PetOut)
 def upload_pet_image(
     pet_id: int,
@@ -669,3 +726,37 @@ def upload_pet_image(
     db.commit()
     db.refresh(p)
     return _pet_out(p)
+
+
+@router.put("/production-templates/{pt_id}/image", response_model=ProductionTemplateOut)
+def upload_production_template_image(
+    pt_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    pt = db.query(ProductionTemplate).filter(ProductionTemplate.id == pt_id).first()
+    if pt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Производство не найдено")
+    remove_upload(pt.image_url)
+    pt.image_url = save_upload(image, f"prod_{pt_id}", max_size=400)
+    db.commit()
+    db.refresh(pt)
+    return _pt_out(pt)
+
+
+@router.put("/products/{product_id}/image", response_model=ProductOut)
+def upload_product_image(
+    product_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    p = db.query(Product).filter(Product.id == product_id).first()
+    if p is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+    remove_upload(p.image_url)
+    p.image_url = save_upload(image, f"product_{product_id}", max_size=400)
+    db.commit()
+    db.refresh(p)
+    return _product_out(p)

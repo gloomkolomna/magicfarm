@@ -1,9 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
 import { api, type AdminOrder, type Animal, type FieldDetail, type FieldInfo, type LevelGate, type LevelGateCreate, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
-import { mediaUrl } from '../api/media';
+import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import CrystalStandardEditor from '../components/CrystalStandardEditor';
+
+const BONUS_KIND_OPTIONS = [
+  { value: 'harvest_orchard', label: '🍎 +1 к урожаю сада' },
+  { value: 'harvest_plot', label: '🌱 +1 к урожаю грядки' },
+  { value: 'order_coins', label: '💰 +5 монет к заказу' },
+  { value: 'craft_bonus', label: '🏭 +1 товар при крафте' },
+  { value: 'animal_product', label: '🐄 +1 продукция животного' },
+];
+
+const CARDS_DRAW_OPTIONS = [
+  { value: '3', label: '3 карты' },
+  { value: '4', label: '4 карты' },
+  { value: '5', label: '5 карт' },
+];
+
+const SURCHARGE_OPTIONS = [
+  { value: '30', label: '30 монет' },
+  { value: '35', label: '35 монет' },
+  { value: '40', label: '40 монет' },
+];
 
 const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: 'auto_credit', label: 'Авто-зачёт вышивки (0/1)', hint: '1 — крестики начисляются сразу без модерации' },
@@ -75,6 +95,9 @@ export default function AdminPage() {
   const [newCols, setNewCols] = useState('6');
   const [newRows, setNewRows] = useState('4');
   const [lockRatio, setLockRatio] = useState(false);
+  const [newFieldKind, setNewFieldKind] = useState('');
+  const [newPlantCategory, setNewPlantCategory] = useState('');
+  const [newMinLevel, setNewMinLevel] = useState('0');
 
   // ── Каталог ──
   const [plants, setPlants] = useState<Plant[]>([]);
@@ -87,6 +110,28 @@ export default function AdminPage() {
   const [catForm, setCatForm] = useState<Record<string, string>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+
+  useEffect(() => {
+    setFormOpen(false);
+    setEditingId(null);
+    setCatForm({});
+  }, [tab]);
+
+  useEffect(() => {
+    const r = loadedRef.current;
+    if (tab === 'plants' && !r.has('plants')) { r.add('plants'); api.plants().then(setPlants).catch(() => {}); }
+    if (tab === 'animals' && !r.has('animals')) { r.add('animals'); api.adminAnimals().then(setAnimals).catch(() => {}); }
+    if (tab === 'pets' && !r.has('pets')) { r.add('pets'); api.adminPets().then(setPets).catch(() => {}); }
+    if (tab === 'products' && !r.has('products')) { r.add('products'); api.adminProducts().then(setCatalogProducts).catch(() => {}); }
+    if (tab === 'productions' && !r.has('productions')) { r.add('productions'); api.adminProductionTemplates().then(setProdTemplates).catch(() => {}); }
+    if ((tab === 'orders' || tab === 'order-templates') && !r.has('orders')) {
+      r.add('orders');
+      Promise.all([
+        api.adminOrders().catch(() => [] as AdminOrder[]),
+        api.products().catch(() => [] as Product[]),
+      ]).then(([ords, prods]) => { setAdminOrders(ords); setProducts(prods); });
+    }
+  }, [tab]);
 
   // ── Шаблоны заказов ──
   const [orderTemplates, setOrderTemplates] = useState<OrderTemplate[]>([]);
@@ -112,6 +157,29 @@ export default function AdminPage() {
   const [orderFormOpen, setOrderFormOpen] = useState(false);
   const [orderEditingId, setOrderEditingId] = useState<number | null>(null);
   const [orderForm, setOrderForm] = useState<Record<string, string>>({});
+
+  const loadedRef = useRef<Set<string>>(new Set());
+
+  const loadCore = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [plys, setMap, flds, pls] = await Promise.all([
+        api.adminPlayers().catch(() => [] as Player[]),
+        Promise.all(
+          SETTING_FIELDS.map((f) => api.getSetting(f.key).then((s) => [s.key, s.value] as [string, string])),
+        ).catch(() => [] as [string, string][]),
+        api.adminFields().catch(() => [] as FieldInfo[]),
+        api.plants().catch(() => [] as Plant[]),
+      ]);
+      setPlayers(plys);
+      setAllPlayers(plys);
+      setSettings(Object.fromEntries(setMap));
+      setFields(flds);
+      setAllPlants(pls);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -149,7 +217,7 @@ export default function AdminPage() {
     }
   }, []);
 
-  useEffect(() => { if (!sessionLoading) load(); }, [load, sessionLoading]);
+  useEffect(() => { if (!sessionLoading) loadCore(); }, [loadCore, sessionLoading]);
 
   async function selectPlayer(p: Player) {
     setSelectedPlayer(p);
@@ -226,9 +294,9 @@ export default function AdminPage() {
     if (!name) return;
     setBusy(true); setMsg(null);
     try {
-      await api.adminCreateField(name, Number(newCols) || 6, Number(newRows) || 4);
+      await api.adminCreateField(name, Number(newCols) || 6, Number(newRows) || 4, newPlantCategory || null, Number(newMinLevel) || 0, newFieldKind || null);
       setMsg('✓ Локация создана');
-      setShowCreate(false); setNewName('');
+      setShowCreate(false); setNewName(''); setNewFieldKind(''); setNewPlantCategory(''); setNewMinLevel('0');
       await load();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -259,18 +327,26 @@ export default function AdminPage() {
   }
 
   // ── Каталог: CRUD ──
-  function startCreate() { setCatForm({}); setEditingId(null); setFormOpen(true); }
+  function startCreate() { setCatForm({ name: '' }); setEditingId(null); setFormOpen(true); }
   function startEdit(item: Record<string, any>) { setCatForm({ ...item }); setEditingId(item.id); setFormOpen(true); }
-  function cancelForm() { setEditingId(null); setCatForm({}); setFormOpen(false); }
+  async function cancelForm() {
+    if (!catForm.name?.trim() && editingId) {
+      if (tab === 'plants') try { await api.adminDeletePlant(editingId); } catch {}
+      else if (tab === 'animals') try { await api.adminDeleteAnimal(editingId); } catch {}
+      else if (tab === 'pets') try { await api.adminDeletePet(editingId); } catch {}
+      else if (tab === 'products') try { await api.adminDeleteProduct(editingId); } catch {}
+      else if (tab === 'productions') try { await api.adminDeleteProductionTemplate(editingId); } catch {}
+    }
+    setEditingId(null); setCatForm({}); setFormOpen(false);
+  }
 
   async function savePlant() {
     if (!catForm.name?.trim()) return;
     setBusy(true); setMsg(null);
     try {
-      if (editingId) await api.adminUpdatePlant(editingId, catForm);
-      else await api.adminCreatePlant(catForm as any);
+      if (editingId) { await api.adminUpdatePlant(editingId, catForm); }
+      else { const created = await api.adminCreatePlant(catForm as any); setEditingId(created.id); }
       setMsg('✓ Сохранено');
-      cancelForm();
       await load();
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
@@ -289,9 +365,8 @@ export default function AdminPage() {
     setBusy(true); setMsg(null);
     try {
       if (editingId) await api.adminUpdateAnimal(editingId, catForm);
-      else await api.adminCreateAnimal(catForm as any);
+      else { const created = await api.adminCreateAnimal(catForm as any); setEditingId(created.id); }
       setMsg('✓ Сохранено');
-      cancelForm();
       await load();
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
@@ -309,10 +384,14 @@ export default function AdminPage() {
     if (!catForm.name?.trim()) return;
     setBusy(true); setMsg(null);
     try {
-      if (editingId) await api.adminUpdatePet(editingId, catForm);
-      else await api.adminCreatePet(catForm as any);
+      const data = { ...catForm };
+      if (data.bonus_kind) {
+        const opt = BONUS_KIND_OPTIONS.find(o => o.value === data.bonus_kind);
+        if (opt) data.bonus_description = opt.label;
+      }
+      if (editingId) await api.adminUpdatePet(editingId, data);
+      else { const created = await api.adminCreatePet(data as any); setEditingId(created.id); }
       setMsg('✓ Сохранено');
-      cancelForm();
       await load();
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
@@ -394,9 +473,8 @@ export default function AdminPage() {
     setBusy(true); setMsg(null);
     try {
       if (editingId) await api.adminUpdateProduct(editingId, catForm);
-      else await api.adminCreateProduct(catForm as any);
+      else { const created = await api.adminCreateProduct(catForm as any); setEditingId(created.id); }
       setMsg('✓ Сохранено');
-      cancelForm();
       await load();
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
@@ -415,9 +493,8 @@ export default function AdminPage() {
     setBusy(true); setMsg(null);
     try {
       if (editingId) await api.adminUpdateProductionTemplate(editingId, catForm);
-      else await api.adminCreateProductionTemplate(catForm as any);
+      else { const created = await api.adminCreateProductionTemplate(catForm as any); setEditingId(created.id); }
       setMsg('✓ Сохранено');
-      cancelForm();
       await load();
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
@@ -691,9 +768,35 @@ export default function AdminPage() {
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
+  async function uploadAnimalEmptyPenImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadAnimalEmptyPenImage(id, file); await load(); setMsg('✓ Загон загружен'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function uploadAnimalPenImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadAnimalPenImage(id, file); await load(); setMsg('✓ Загон с животным загружен'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
   async function uploadPetImage(id: number, file: File) {
     setBusy(true); setMsg(null);
     try { await api.adminUploadPetImage(id, file); await load(); setMsg('✓ Изображение загружено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  async function uploadProductionImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadProductionTemplateImage(id, file); await load(); setMsg('✓ Изображение загружено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  async function uploadProductImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadProductImage(id, file); await load(); setMsg('✓ Изображение загружено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
@@ -989,6 +1092,30 @@ export default function AdminPage() {
                           <input type="checkbox" checked={lockRatio} onChange={(e) => setLockRatio(e.target.checked)} />
                           Сохранить пропорции 4:3
                         </label>
+                        <div style={{ marginTop: 8 }}>
+                          <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Тип локации</label>
+                          <select className="fm-input" value={newFieldKind} onChange={(e) => setNewFieldKind(e.target.value)}>
+                            <option value="">— без типа —</option>
+                            <option value="garden_beds">🌱 Грядки</option>
+                            <option value="orchard">🍎 Сады</option>
+                            <option value="barnyard">🐄 Скотный двор</option>
+                            <option value="house">🏠 Дом</option>
+                            <option value="brewery">🧪 Зельеварня</option>
+                            <option value="library">📖 Библиотека</option>
+                          </select>
+                        </div>
+                        <div style={{ marginTop: 8 }}>
+                          <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Категория растений</label>
+                          <select className="fm-input" value={newPlantCategory} onChange={(e) => setNewPlantCategory(e.target.value)}>
+                            <option value="">— любая —</option>
+                            <option value="garden">🌱 Грядка</option>
+                            <option value="orchard">🍎 Сад</option>
+                          </select>
+                        </div>
+                        <div style={{ marginTop: 8 }}>
+                          <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Мин. уровень для открытия</label>
+                          <input className="fm-input" type="number" min={0} max={16} value={newMinLevel} onChange={(e) => setNewMinLevel(e.target.value)} />
+                        </div>
                         <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || !newName.trim()} onClick={createField}>Создать</button>
                       </div>
                     </div>
@@ -1000,31 +1127,36 @@ export default function AdminPage() {
 
           {tab === 'plants' && (
             <CatalogTab title="🌱 Растения" items={plants} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePlant} onDelete={deletePlant} onUploadImage={uploadPlantImage} onUploadImageYoung={uploadPlantImageYoung} onUploadImageGrown={uploadPlantImageGrown}
-              fields={[{ key: 'name', label: 'Название', ph: 'Джекобоб' }, { key: 'level', label: 'Уровень', ph: '1', type: 'number' }, { key: 'norm_per_crystal', label: 'Норма/кристалл', ph: '100', type: 'number' }, { key: 'bonus_text', label: 'Бонус (текст)', ph: 'Гриб' }, { key: 'bonus_kind', label: 'Тип бонуса', ph: 'image' }, { key: 'description', label: 'Описание', ph: 'Грибы' }]}
+              fields={[{ key: 'name', label: 'Название', ph: 'Джекобоб' }, { key: 'level', label: 'Уровень', ph: '1', type: 'number' }, { key: 'category', label: 'Категория', options: [{ value: 'garden', label: '🌱 Грядка' }, { value: 'orchard', label: '🍎 Сад' }] }, { key: 'description', label: 'Описание', ph: 'Грибы' }]}
             />
           )}
 
           {tab === 'animals' && (
-            <CatalogTab title="🐄 Животные" items={animals} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveAnimal} onDelete={deleteAnimal} onUploadImage={uploadAnimalImage}
-              fields={[{ key: 'name', label: 'Название', ph: 'Единорог' }, { key: 'product_name', label: 'Продукция', ph: 'Рог единорога' }, { key: 'sort_order', label: 'Порядок', ph: '0', type: 'number' }]}
+            <CatalogTab title="🐄 Животные" items={animals} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveAnimal} onDelete={deleteAnimal} onUploadImage={uploadAnimalImage} onUploadImageEmptyPen={uploadAnimalEmptyPenImage} onUploadImagePen={uploadAnimalPenImage}
+              fields={[{ key: 'name', label: 'Название', ph: 'Единорог' }, { key: 'product_name', label: 'Продукция', ph: 'Рог единорога' }]}
             />
           )}
 
           {tab === 'pets' && (
             <CatalogTab title="🐾 Питомцы" items={pets} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePet} onDelete={deletePet} onUploadImage={uploadPetImage}
-              fields={[{ key: 'name', label: 'Название', ph: 'Лис Сильварис' }, { key: 'bonus_description', label: 'Бонус', ph: 'Собирает +1 с каждого вида дерева' }]}
+              fields={[{ key: 'name', label: 'Название', ph: 'Лис Сильварис' }, { key: 'bonus_kind', label: 'Бонус', options: BONUS_KIND_OPTIONS }]}
+              imageLabel="питомца"
             />
           )}
 
           {tab === 'products' && (
-            <CatalogTab title="📦 Товары" items={catalogProducts} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveProduct} onDelete={deleteProduct} onUploadImage={async () => {}}
+            <CatalogTab title="📦 Товары" items={catalogProducts} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveProduct} onDelete={deleteProduct} onUploadImage={uploadProductImage}
               fields={[{ key: 'name', label: 'Название', ph: 'Яд' }, { key: 'stars', label: 'Звёзды', ph: '1', type: 'number' }, { key: 'production_kind', label: 'Производство', ph: '', options: prodTemplates.map((pt) => ({ value: pt.code, label: `${pt.emoji || ''} ${pt.name}` })) }]}
             />
           )}
 
           {tab === 'productions' && (
-            <CatalogTab title="🏭 Производства" items={prodTemplates} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveProduction} onDelete={deleteProduction} onUploadImage={async () => {}}
-              fields={[{ key: 'name', label: 'Название', ph: 'Стол зельеварения' }, { key: 'required', label: 'Крестиков на цикл', ph: '500', type: 'number' }]}
+            <CatalogTab title="🏭 Производства" items={prodTemplates} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveProduction} onDelete={deleteProduction} onUploadImage={uploadProductionImage}
+              fields={[
+                { key: 'name', label: 'Название', ph: 'Стол зельеварения' },
+                { key: 'cards_to_draw', label: 'Карт для нормы', options: CARDS_DRAW_OPTIONS },
+                { key: 'surcharge', label: 'Добавочная стоимость', options: SURCHARGE_OPTIONS },
+              ]}
             />
           )}
 
@@ -1178,10 +1310,10 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
   );
 }
 
-interface CatField { key: string; label: string; ph: string; type?: string; options?: { value: string; label: string }[] }
+interface CatField { key: string; label: string; ph?: string; type?: string; options?: { value: string; label: string }[] }
 
 function CatalogTab({
-  title, items, busy, form, formOpen, editingId, onFormChange, onCreate, onEdit, onCancel, onSave, onDelete, onUploadImage, onUploadImageYoung, onUploadImageGrown, fields,
+  title, items, busy, form, formOpen, editingId, onFormChange, onCreate, onEdit, onCancel, onSave, onDelete, onUploadImage, onUploadImageYoung, onUploadImageGrown, onUploadImageEmptyPen, onUploadImagePen, fields, imageLabel = 'Изображение',
 }: {
   title: string;
   items: any[];
@@ -1198,8 +1330,32 @@ function CatalogTab({
   onUploadImage: (id: number, file: File) => Promise<void>;
   onUploadImageYoung?: (id: number, file: File) => Promise<void>;
   onUploadImageGrown?: (id: number, file: File) => Promise<void>;
+  onUploadImageEmptyPen?: (id: number, file: File) => Promise<void>;
+  onUploadImagePen?: (id: number, file: File) => Promise<void>;
   fields: CatField[];
+  imageLabel?: string;
 }) {
+  const [pendingUpload, setPendingUpload] = useState<{ file: File; cb: (id: number, f: File) => Promise<void> } | null>(null);
+
+  useEffect(() => {
+    if (pendingUpload && editingId) {
+      pendingUpload.cb(editingId, pendingUpload.file).catch(() => {});
+      setPendingUpload(null);
+    }
+  }, [editingId, pendingUpload]);
+
+  async function handleFile(f: File | undefined, cb: (id: number, f: File) => Promise<void>) {
+    if (!f) return;
+    const compressed = await compressImage(f);
+    if (!editingId) {
+      if (!form.name?.trim()) onFormChange({ ...form, name: 'Новое' });
+      setPendingUpload({ file: compressed, cb });
+      onSave();
+    } else {
+      await cb(editingId, compressed);
+    }
+  }
+
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -1237,6 +1393,36 @@ function CatalogTab({
             <button className="fm-btn" disabled={busy} onClick={onSave}>💾 Сохранить</button>
             <button className="fm-btn fm-btn-outline" disabled={busy} onClick={onCancel}>Отмена</button>
           </div>
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
+              🖼️ {imageLabel}
+              <input type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0], onUploadImage)} />
+            </label>
+            {onUploadImageYoung && (
+              <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
+                🌱 Молодое
+                <input type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0], onUploadImageYoung!)} />
+              </label>
+            )}
+            {onUploadImageGrown && (
+              <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
+                🌳 Созревшее
+                <input type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0], onUploadImageGrown!)} />
+              </label>
+            )}
+            {onUploadImageEmptyPen && (
+              <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
+                🏚️ Пустой загон
+                <input type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0], onUploadImageEmptyPen!)} />
+              </label>
+            )}
+            {onUploadImagePen && (
+              <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
+                🐄 Загон с животным
+                <input type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0], onUploadImagePen!)} />
+              </label>
+            )}
+          </div>
         </div>
       )}
 
@@ -1245,14 +1431,16 @@ function CatalogTab({
       ) : (
         <div className="fm-grid">
           {items.map((item) => {
-            const hasStageImgs = onUploadImageYoung && (item.image_young_url || item.image_grown_url);
             return (
               <div key={item.id} className="fm-card fm-rise">
                 <div style={{ marginBottom: 4 }}>
                   <strong style={{ wordBreak: 'break-word' }}>{item.emoji} {item.name}</strong>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', wordBreak: 'break-all' }}>{item.code}</div>
                 </div>
-                {hasStageImgs ? (
+                {item.image_url && (
+                  <img src={mediaUrl(item.image_url)} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: 6 }} />
+                )}
+                {(item.image_young_url || item.image_grown_url) && (
                   <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
                     <div style={{ textAlign: 'center' }}>
                       {item.image_young_url && (
@@ -1267,9 +1455,23 @@ function CatalogTab({
                       <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>созревшее</div>
                     </div>
                   </div>
-                ) : item.image_url ? (
-                  <img src={mediaUrl(item.image_url)} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: 6 }} />
-                ) : null}
+                )}
+                {(item.image_empty_pen_url || item.image_pen_url) && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                    {item.image_empty_pen_url && (
+                      <div style={{ textAlign: 'center' }}>
+                        <img src={mediaUrl(item.image_empty_pen_url)} alt="пустой загон" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 'var(--radius-sm)' }} />
+                        <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>загон</div>
+                      </div>
+                    )}
+                    {item.image_pen_url && (
+                      <div style={{ textAlign: 'center' }}>
+                        <img src={mediaUrl(item.image_pen_url)} alt="загон с животным" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 'var(--radius-sm)' }} />
+                        <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>с животным</div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {onUploadImageYoung ? (
                   <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
                     <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => onEdit(item)}>✎</button>

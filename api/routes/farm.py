@@ -343,7 +343,7 @@ def sell_surplus(
         plant = db.query(PlantModel).filter(PlantModel.id == prod.plant_id).first() if prod.plant_id else None
         plant_level = plant.level if plant else 1
         prod_kind = prod.production_kind or "alchemy"
-        full_price = calculate_product_price(plant_level, prod_kind, qty)
+        full_price = calculate_product_price(plant_level, prod_kind, qty, db)
 
     reward = int(full_price * ratio)
 
