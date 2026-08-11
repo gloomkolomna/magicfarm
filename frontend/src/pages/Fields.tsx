@@ -25,11 +25,32 @@ export default function FieldsPage() {
   const [routeVariant, setRouteVariant] = useState<number | null>(null);
 
   useEffect(() => {
-    Promise.all([api.fields(), api.getBackground().catch(() => ({ url: '' }))])
-      .then(([flds, bg]) => { setFields(flds); setBgUrl(bg.url); })
+    Promise.all([
+      api.fields(),
+      api.getBackground().catch(() => ({ url: '' })),
+      api.userPotions().catch(() => [] as any[]),
+      api.levels().catch(() => [] as any[]),
+    ])
+      .then(([flds, bg, pots, lvls]) => {
+        setFields(flds);
+        setBgUrl(bg.url);
+        setPotions(pots);
+        setRouteVariant(lvls.length > 0 ? lvls[0].variant : null);
+      })
       .catch((e) => setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleSetVariant(v: number) {
+    try {
+      await api.setRouteVariant(v);
+      setRouteVariant(v);
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    }
+  }
+
+  const unactivated = potions.filter((p: any) => p.activated === false);
 
   const categories = useMemo(() => groupByCategory(fields), [fields]);
   const totalPages = categories.length;
@@ -54,6 +75,40 @@ export default function FieldsPage() {
             <span>🪙 {user.coins ?? 0}</span>
             <span>🧵 {user.crosses_total ?? 0}</span>
           </div>
+          {unactivated.length > 0 && (
+            <div style={{ marginTop: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
+              ⚗️ Зелий для активации: {unactivated.length}
+              <span style={{ color: 'var(--text-muted)' }}>
+                {' '}({unactivated.map((p: any) => p.bonus_code || p.potion_name).filter(Boolean).join(', ')})
+              </span>
+            </div>
+          )}
+          {routeVariant === null && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 13, marginBottom: 4, color: 'var(--text-secondary)' }}>
+                Выберите вариант маршрута:
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
+                {[1, 2, 3, 4].map((v) => (
+                  <button
+                    key={v}
+                    className="fm-btn fm-btn--primary"
+                    style={{ fontSize: 14, padding: '4px 16px' }}
+                    onClick={() => handleSetVariant(v)}
+                  >
+                    Вариант {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button
+            className="fm-btn fm-btn--secondary"
+            style={{ marginTop: 10 }}
+            onClick={() => nav('/onboarding')}
+          >
+            ⚙️ Настроить игру
+          </button>
         </div>
       )}
       <h1 style={{ textAlign: 'center' }}>🗺️ Поля фермы</h1>

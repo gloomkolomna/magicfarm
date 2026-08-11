@@ -38,6 +38,8 @@ export default function FieldPage() {
   const [craftAmount, setCraftAmount] = useState('');
   const [craftQty, setCraftQty] = useState('1');
 
+  const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string } | null>(null);
+
   const [imgNaturalW, setImgNaturalW] = useState<number | null>(null);
 
   const fieldId = Number(id);
@@ -75,8 +77,17 @@ export default function FieldPage() {
     if (!plantCell || plantSel == null) return;
     setBusy(true); setMsg(null);
     try {
-      await api.plantOnCell(fieldId, plantCell.col, plantCell.row, plantSel, Number(plantQty) || 1);
-      setMsg('✓ Посажено!');
+      const res = await api.plantOnCell(fieldId, plantCell.col, plantCell.row, plantSel, Number(plantQty) || 1);
+      const plant = field?.plants.find(p => p.id === plantSel);
+      let cards: { color: string; value: number; is_treasure: boolean }[] = [];
+      if (res.plot?.drawn_cards_json) {
+        try { cards = JSON.parse(res.plot.drawn_cards_json); } catch {}
+      }
+      if (cards.length > 0) {
+        setCardResult({ cards, title: `🌱 ${plant?.name || 'Растение'} — карты` });
+      } else {
+        setMsg('✓ Посажено!');
+      }
       setPlantCell(null); setPlantSel(null); setPlantQty('1');
       await load(); await refresh();
     } catch (e: any) {
@@ -487,6 +498,25 @@ export default function FieldPage() {
               </button>
             </>
           )}
+        </Modal>
+      )}
+
+      {/* Модалка карт кристаллов */}
+      {cardResult && (
+        <Modal title={cardResult.title} onClose={() => setCardResult(null)}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+            {cardResult.cards.map((c, i) => (
+              <div key={i} style={{ textAlign: 'center', padding: '8px 12px', borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>
+                  {c.color === 'green' ? '🟢' : c.color === 'blue' ? '🔵' : '🟣'} {c.is_treasure ? '✨' : ''}
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 700 }}>{c.is_treasure ? '★' : c.value}</div>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+            Вложите крестики по норме каждого кристалла — и растение вырастет.
+          </p>
         </Modal>
       )}
     </>

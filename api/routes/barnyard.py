@@ -8,6 +8,7 @@ from db import get_db
 from deps import get_current_user
 from models import Animal, BarnyardSlot, Inventory, User
 from services.achievements import check_and_award
+from services.card_draw import calculate_norm, cards_to_json, draw_cards
 
 router = APIRouter(prefix="/api/animals", tags=["animals"])
 
@@ -23,6 +24,7 @@ class BarnyardOut(BaseModel):
     accumulated: int
     required: int
     last_die: int | None
+    drawn_cards_json: str | None
     opening_order: int | None
 
 
@@ -33,6 +35,7 @@ def _slot_out(s: BarnyardSlot) -> BarnyardOut:
         animal_emoji=s.animal.emoji if s.animal else None,
         status=s.status, accumulated=s.accumulated,
         required=s.required, last_die=s.last_die,
+        drawn_cards_json=s.drawn_cards_json,
         opening_order=s.opening_order,
     )
 
@@ -75,7 +78,6 @@ def install_animal(
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Это животное уже заселено")
 
-    from services.card_draw import calculate_norm, cards_to_json, draw_cards
     cards = draw_cards(db, 5, True)
     required = calculate_norm(db, user, cards)
 
@@ -83,6 +85,7 @@ def install_animal(
     slot.status = "building"
     slot.required = required
     slot.accumulated = 0
+    slot.drawn_cards_json = cards_to_json(cards)
     slot.opening_order = db.query(BarnyardSlot).filter(
         BarnyardSlot.user_id == user.vk_id,
         BarnyardSlot.animal_id.isnot(None),

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
 import { api, type Animal, type BarnyardPen, type BarnyardProduceResult } from '../api/endpoints';
 
+const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
 export default function BarnyardPage() {
   const { refresh, loading: sessionLoading } = useSession();
   const [pens, setPens] = useState<BarnyardPen[]>([]);
@@ -17,6 +19,8 @@ export default function BarnyardPage() {
   const [investAmount, setInvestAmount] = useState('');
 
   const [produceResult, setProduceResult] = useState<BarnyardProduceResult | null>(null);
+
+  const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,8 +41,17 @@ export default function BarnyardPage() {
     if (!installPen || installAnimalId == null) return;
     setBusy(true); setMsg(null);
     try {
-      await api.barnyardInstall(installPen.id, installAnimalId);
-      setMsg('✓ Животное установлено!');
+      const res = await api.barnyardInstall(installPen.id, installAnimalId);
+      const animal = animals.find(a => a.id === installAnimalId);
+      let cards: { color: string; value: number; is_treasure: boolean }[] = [];
+      if (res.drawn_cards_json) {
+        try { cards = JSON.parse(res.drawn_cards_json); } catch {}
+      }
+      if (cards.length > 0) {
+        setCardResult({ cards, title: `🐾 ${animal?.name || 'Животное'} — карты` });
+      } else {
+        setMsg('✓ Животное установлено!');
+      }
       setInstallPen(null); setInstallAnimalId(null);
       await load(); await refresh();
     } catch (e: any) {
@@ -231,7 +244,7 @@ export default function BarnyardPage() {
         <Modal title="🎲 Результат броска" onClose={() => setProduceResult(null)}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 10 }}>
-              {produceResult.die}
+              {DICE_FACES[produceResult.die] || produceResult.die}
             </div>
             <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>
               {produceResult.animal_name}
@@ -246,6 +259,25 @@ export default function BarnyardPage() {
               Вышейте норму, отчитайтесь о вышивке — и продукция станет доступна.
             </p>
           </div>
+        </Modal>
+      )}
+
+      {/* Модалка карт кристаллов */}
+      {cardResult && (
+        <Modal title={cardResult.title} onClose={() => setCardResult(null)}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+            {cardResult.cards.map((c, i) => (
+              <div key={i} style={{ textAlign: 'center', padding: '8px 12px', borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>
+                  {c.color === 'green' ? '🟢' : c.color === 'blue' ? '🔵' : '🟣'} {c.is_treasure ? '✨' : ''}
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 700 }}>{c.is_treasure ? '★' : c.value}</div>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+            Вложите крестики по норме каждого кристалла — и загон будет готов.
+          </p>
         </Modal>
       )}
     </>

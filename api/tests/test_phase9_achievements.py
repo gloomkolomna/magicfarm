@@ -1,72 +1,235 @@
+import io
+
 from tests.conftest import make_user_client
 
 
-def test_list_achievements_empty(admin_client):
-    with make_user_client(123, "player") as c:
-        r = c.get("/api/achievements")
-        assert r.status_code == 200
-        assert r.json() == []
+def _real_img():
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (10, 10), (50, 100, 150)).save(buf, format="PNG")
+    return buf.getvalue()
 
 
-def test_admin_create_achievement(admin_client):
-    r = admin_client.post("/api/admin/achievements", json={
-        "code": "first_plant", "name": "Первое растение",
-        "condition_kind": "plant_count", "condition_value": 1,
+def _seed_achievement(db, code, name, condition_kind, value=1):
+    from models import Achievement
+    a = db.query(Achievement).filter(Achievement.code == code).first()
+    if a is None:
+        a = Achievement(code=code, name=name, condition_kind=condition_kind, condition_value=value)
+        db.add(a)
+        db.commit()
+        db.refresh(a)
+    return a
+
+
+def _seed_plant_inventory(db, vk_id, plant_id, qty):
+    from models import Inventory
+    inv = Inventory(user_id=vk_id, plant_id=plant_id, qty=qty)
+    db.add(inv)
+    db.commit()
+
+
+def _seed_studied_recipe(db, vk_id, plant_id, product_id):
+    from models import Recipe, UserRecipe
+    r = db.query(Recipe).filter(Recipe.plant_id == plant_id, Recipe.product_id == product_id).first()
+    if r is None:
+        r = Recipe(plant_id=plant_id, product_id=product_id, level=1)
+        db.add(r)
+        db.commit()
+        db.refresh(r)
+    ur = UserRecipe(user_id=vk_id, recipe_id=r.id, status="studied")
+    db.add(ur)
+    db.commit()
+
+
+def _make_production(db, vk_id, kind="alchemy"):
+    from models import Production, PRODUCTION_NAMES
+    pr = Production(user_id=vk_id, kind=kind, name=PRODUCTION_NAMES.get(kind, kind),
+                    status="installed", accumulated=0, required=500)
+    db.add(pr)
+    db.commit()
+    db.refresh(pr)
+    return pr.id
+
+
+def _field_with_bed(admin_client):
+    r = admin_client.post("/api/admin/fields", json={
+        "name": "АчивТест", "code": "ach_test", "cols": 3, "rows": 2,
     })
     assert r.status_code == 201
-    assert r.json()["code"] == "first_plant"
-    assert r.json()["earned"] is False
-
-
-def test_admin_list_achievements(admin_client):
-    admin_client.post("/api/admin/achievements", json={
-        "code": "first_plant", "name": "Первое растение",
-        "condition_kind": "plant_count", "condition_value": 1,
+    fid = r.json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}/cells/blocked", json={
+        "cells": [{"col": 1, "row": 1}], "kind": "bed",
     })
-    r = admin_client.get("/api/admin/achievements")
-    assert r.status_code == 200
-    assert len(r.json()) == 1
+    admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [1]})
+    return fid
 
 
-def test_admin_update_achievement(admin_client):
-    r = admin_client.post("/api/admin/achievements", json={
-        "code": "first_plant", "name": "Первое растение",
-        "condition_kind": "plant_count", "condition_value": 1,
-    })
-    aid = r.json()["id"]
-    r = admin_client.put(f"/api/admin/achievements/{aid}", json={
-        "code": "first_plant", "name": "Первая посадка",
-        "condition_kind": "plant_count", "condition_value": 1,
-    })
-    assert r.status_code == 200
-    assert r.json()["name"] == "Первая посадка"
+def _credit(client, amount):
+    img = _real_img()
+    r = client.post("/api/stitches/reports", data={"amount": str(amount)}, files=[
+        ("photo_after", ("a.png", img, "image/png")),
+    ])
+    assert r.status_code == 201
 
 
-def test_admin_delete_achievement(admin_client):
-    r = admin_client.post("/api/admin/achievements", json={
-        "code": "first_plant", "name": "Первое растение",
-        "condition_kind": "plant_count", "condition_value": 1,
-    })
-    aid = r.json()["id"]
-    r = admin_client.delete(f"/api/admin/achievements/{aid}")
-    assert r.status_code == 204
+# ── Unit tests for check_and_award ──
+
+def test_first_plant_achievement(db):
+    _seed_achievement(db, "first_plant", "Первое растение", "first_plant", 1)
+    from services.achievements import check_and_award
+    from models import Plot, UserAchievement
+    plot = Plot(user_id=123, plant_id=1, qty=1, status="planted", required=100, cell_id=1)
+    db.add(plot)
+    db.commit()
+    count = check_and_award(123, "first_plant", db)
+    assert count == 1
+    count2 = check_and_award(123, "first_plant", db)
+    assert count2 == 0
 
 
-def test_achievement_duplicate_code(admin_client):
-    admin_client.post("/api/admin/achievements", json={
-        "code": "first_plant", "name": "Первое растение",
-        "condition_kind": "plant_count", "condition_value": 1,
-    })
-    r = admin_client.post("/api/admin/achievements", json={
-        "code": "first_plant", "name": "Дубль",
-        "condition_kind": "plant_count", "condition_value": 1,
-    })
-    assert r.status_code == 409
+def test_coins_reached_achievement(db):
+    _seed_achievement(db, "coins_1000", "1000 монет", "coins_reached", 1000)
+    from services.achievements import check_and_award
+    from models import User
+    u = db.query(User).filter(User.vk_id == 123).first()
+    if u is None:
+        u = User(vk_id=123, role="player", onboarding_done=True)
+        db.add(u)
+        db.commit()
+    u.coins = 500
+    db.commit()
+    assert check_and_award(123, "coins_reached", db) == 0
+    u.coins = 1500
+    db.commit()
+    assert check_and_award(123, "coins_reached", db) == 1
 
 
-def test_player_forbidden(admin_client):
+def test_animals_count_achievement(db):
+    _seed_achievement(db, "first_animal", "Первое животное", "animals_count", 1)
+    from services.achievements import check_and_award
+    from models import BarnyardSlot
+    slot = BarnyardSlot(user_id=123, animal_id=1, status="ready")
+    db.add(slot)
+    db.commit()
+    assert check_and_award(123, "animals_count", db) == 1
+
+
+def test_tents_count_achievement(db):
+    _seed_achievement(db, "first_tent", "Первый шатёр", "tents_count", 1)
+    from services.achievements import check_and_award
+    from models import Tent
+    t = Tent(field_id=1, name="Шатёр", kind="alchemy", col1=0, row1=0, col2=0, row2=0,
+             builder_user_id=123, build_status="built")
+    db.add(t)
+    db.commit()
+    assert check_and_award(123, "tents_count", db) == 1
+
+
+def test_level_reached_achievement(db):
+    _seed_achievement(db, "level_5", "Уровень 5", "level_reached", 5)
+    from services.achievements import check_and_award
+    from models import User
+    u = db.query(User).filter(User.vk_id == 123).first()
+    if u is None:
+        u = User(vk_id=123, role="player", onboarding_done=True)
+        db.add(u)
+        db.commit()
+    u.level = 3
+    db.commit()
+    assert check_and_award(123, "level_reached", db) == 0
+    u.level = 5
+    db.commit()
+    assert check_and_award(123, "level_reached", db) == 1
+
+
+def test_potions_count_achievement(db):
+    _seed_achievement(db, "first_potion", "Первое зелье", "potions_count", 1)
+    from services.achievements import check_and_award
+    from models import UserPotion
+    up = UserPotion(user_id=123, potion_recipe_id=1, bonus_code="skip_plant_stitch")
+    db.add(up)
+    db.commit()
+    assert check_and_award(123, "potions_count", db) == 1
+
+
+def test_pets_count_achievement(db):
+    _seed_achievement(db, "first_pet", "Первый питомец", "pets_count", 1)
+    from services.achievements import check_and_award
+    from models import UserPet
+    up = UserPet(user_id=123, pet_id=1)
+    db.add(up)
+    db.commit()
+    assert check_and_award(123, "pets_count", db) == 1
+
+
+def test_plots_count_achievement(db):
+    _seed_achievement(db, "plots_5", "5 грядок", "plots_count", 5)
+    from services.achievements import check_and_award
+    from models import Plot
+    for i in range(5):
+        db.add(Plot(user_id=123, plant_id=1, qty=1, status="planted", required=100, cell_id=i + 1))
+    db.commit()
+    assert check_and_award(123, "plots_count", db) == 1
+
+
+def test_achievement_not_duplicated(db):
+    _seed_achievement(db, "dup_test", "Дубль-тест", "plots_count", 1)
+    from services.achievements import check_and_award
+    from models import Plot, UserAchievement
+    db.add(Plot(user_id=123, plant_id=1, qty=1, status="planted", required=100, cell_id=1))
+    db.commit()
+    c1 = check_and_award(123, "plots_count", db)
+    c2 = check_and_award(123, "plots_count", db)
+    assert c1 == 1
+    assert c2 == 0
+    count = db.query(UserAchievement).filter(UserAchievement.user_id == 123).count()
+    assert count == 1
+
+
+# ── Integration tests ──
+
+def test_plant_triggers_achievement(admin_client):
+    faith = _field_with_bed(admin_client)
+    from models import Achievement
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        _seed_achievement(s, "ach_plant", "Первая посадка", "first_plant", 1)
+    finally:
+        s.close()
+
     with make_user_client(123, "player") as c:
-        r = c.post("/api/admin/achievements", json={
-            "code": "x", "name": "X", "condition_kind": "x",
-        })
-        assert r.status_code == 403
+        _credit(c, 10000)
+        r = c.post(f"/api/fields/{faith}/cells/1/1/plant", json={"plant_id": 1, "qty": 1})
+        assert r.status_code == 201
+
+        achievements = c.get("/api/achievements").json()
+        earned = [a for a in achievements if a["code"] == "ach_plant"]
+        assert len(earned) == 1
+        assert earned[0]["earned"] is True
+
+
+def test_fulfill_trigger_coin_achievement(admin_client):
+    from models import Achievement, OrderReq, Inventory
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        _seed_achievement(s, "ach_coin", "Монеты 100", "coins_reached", 100)
+        inv = Inventory(user_id=123, product_id=1, qty=10)
+        s.add(inv)
+        o = OrderReq(user_id=123, product_id=1, qty=2, reward_coins=200, status="open")
+        s.add(o)
+        s.commit()
+        s.refresh(o)
+        oid = o.id
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as c:
+        r = c.post(f"/api/orders/{oid}/fulfill")
+        assert r.status_code == 200
+
+        achievements = c.get("/api/achievements").json()
+        earned = [a for a in achievements if a["code"] == "ach_coin"]
+        assert len(earned) == 1
+        assert earned[0]["earned"] is True

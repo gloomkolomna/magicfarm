@@ -141,6 +141,7 @@ export interface Plot {
   required: number;
   crystal_color: string | null;
   crystal_count: number | null;
+  drawn_cards_json: string | null;
   created_at: string | null;
   completed_at: string | null;
 }
@@ -326,7 +327,8 @@ export interface BarnyardPen {
   status: 'empty' | 'building' | 'ready';
   accumulated: number;
   required: number;
-  last_die: string | null;
+  last_die: number | null;
+  drawn_cards_json: string | null;
   opening_order: number;
 }
 
@@ -624,7 +626,7 @@ export const api = {
   // ── Скотный двор ──
   barnyardPens: () => client.get<BarnyardPen[]>('/animals/pens').then((r) => r.data),
   barnyardInstall: (slotId: number, animalId: number) =>
-    client.post(`/animals/pens/${slotId}/install`, { animal_id: animalId }).then((r) => r.data),
+    client.post<BarnyardPen>(`/animals/pens/${slotId}/install`, { animal_id: animalId }).then((r) => r.data),
   barnyardInvest: (slotId: number, amount: number) =>
     client.post(`/animals/pens/${slotId}/invest`, { amount }).then((r) => r.data),
   barnyardProduce: (slotId: number) =>

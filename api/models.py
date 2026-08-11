@@ -431,6 +431,7 @@ class BarnyardSlot(Base):
     accumulated = Column(Integer, nullable=False, default=0, server_default="0")
     required = Column(Integer, nullable=False, default=0, server_default="0")
     last_die = Column(Integer, nullable=True)
+    drawn_cards_json = Column(Text, nullable=True)
     opening_order = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
