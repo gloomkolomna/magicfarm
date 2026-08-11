@@ -1,0 +1,62 @@
+graphify-out/
+
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ===== Node / фронтенд =====
+node_modules/
+dist/
+*.tsbuildinfo
+*.local
+.vite/
+
+# ===== База данных (SQLite) =====
+*.db
+*.db-wal
+*.db-shm
+*.db.bak.*
+api/backups/
+
+# ===== Загруженные файлы (фото вышивки) =====
+# Вне git-отслеживания: переживает git reset --hard при откате деплоя,
+# попадает в полный tar-бэкап проекта (deploy.sh).
+api/uploads/
+
+# ===== Секреты / окружение =====
+.env
+.env.*
+!.env.example
+
+# ===== Логи =====
+*.log
+api/deploy.log
+
+# ===== IDE / редакторы =====
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== ZCode / агент-инструментарий =====
+/.zcode
+/.kilo
+/.playwright-mcp
+/.pptx_work
+
+# ===== Документация (исходники) =====
+# docs/Правила фермы.pptx — слишком большой (90 МБ), хранится отдельно.
+docs/*.pptx

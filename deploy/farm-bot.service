@@ -1,0 +1,17 @@
+[Unit]
+Description=Farm VK Bot (заготовка)
+After=network.target farm-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/farm
+Environment=PATH=/opt/farm/api/venv/bin
+Environment=PYTHONPATH=/opt/farm/api
+# TODO: активировать когда бот будет реализован.
+# ExecStart=/opt/farm/api/venv/bin/python -m bot
+ExecStart=/bin/true
+RemainAfterExit=yes
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

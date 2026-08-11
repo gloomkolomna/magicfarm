@@ -1,0 +1,31 @@
+def resolve_vk_names(vk_ids: list[int]) -> dict[int, dict]:
+    import config
+    if not config.VK_SERVICE_TOKEN or not vk_ids:
+        return {}
+    try:
+        import vk_api
+    except ImportError:
+        return {}
+    ids_to_request = [int(x) for x in vk_ids[:1000]]
+    vk = vk_api.VkApi(token=config.VK_SERVICE_TOKEN, api_version="5.199").get_api()
+    resolved: dict[int, dict] = {}
+    for start in range(0, len(ids_to_request), 100):
+        chunk = ids_to_request[start:start + 100]
+        ids_str = ",".join(str(x) for x in chunk)
+        users = None
+        for attempt in (1, 2):
+            try:
+                users = vk.users.get(user_ids=ids_str, fields="first_name,last_name")
+                break
+            except Exception:
+                if attempt == 1:
+                    import time
+                    time.sleep(0.4)
+        if users is None:
+            continue
+        for u in users:
+            resolved[u["id"]] = {
+                "first_name": u.get("first_name", ""),
+                "last_name": u.get("last_name", ""),
+            }
+    return resolved

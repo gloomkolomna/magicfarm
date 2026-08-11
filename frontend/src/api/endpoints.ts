@@ -1,0 +1,647 @@
+import client from './client';
+
+export interface Plant {
+  id: number;
+  code: string;
+  name: string;
+  emoji: string | null;
+  category: string;
+  level: number;
+  norm_per_crystal: number;
+  bonus_text: string | null;
+  bonus_kind: string | null;
+  description: string | null;
+  image_url: string | null;
+  image_young_url: string | null;
+  image_grown_url: string | null;
+}
+
+export interface OrderTemplate {
+  id: number;
+  source_kind: string;
+  source_id: number;
+  product_id: number;
+  qty: number;
+  reward_coins: number;
+  customer: string | null;
+  name: string | null;
+  image_url: string | null;
+}
+
+export interface OrderTemplateCreate {
+  source_kind: string;
+  source_id: number;
+  product_id: number;
+  qty: number;
+  reward_coins?: number;
+  customer?: string | null;
+  name?: string | null;
+}
+
+export interface LevelGate {
+  variant: number;
+  level: number;
+  coins_required: number;
+  plots_required: number;
+  rewards: Record<string, unknown> | null;
+}
+
+export interface LevelGateCreate {
+  variant: number;
+  level: number;
+  coins_required: number;
+  plots_required: number;
+  rewards?: Record<string, unknown> | null;
+}
+
+export interface PotionRecipe {
+  id: number;
+  code: string;
+  name: string;
+  level: string;
+  ingredient_slots: string[];
+  bonus_code: string | null;
+  reward_coins: number;
+  image_url: string | null;
+}
+
+export interface PotionRecipeCreate {
+  name: string;
+  level: string;
+  ingredient_slots: string[];
+  bonus_code?: string | null;
+  reward_coins?: number;
+}
+
+export interface CauldronSlot {
+  slot_index: number;
+  item_type: string;
+  item_id: number;
+}
+
+export interface Cauldron {
+  id: number;
+  recipe_id: number;
+  recipe_name: string;
+  material: string | null;
+  capacity: number;
+  status: string;
+  slots: CauldronSlot[];
+}
+
+export interface UserPotion {
+  id: number;
+  potion_recipe_id: number;
+  potion_name: string;
+  bonus_code: string | null;
+  activated: boolean;
+}
+
+export type CrystalColor = 'green' | 'blue' | 'violet';
+
+export type CrystalNorms = Record<CrystalColor, Record<number, number>>;
+
+export interface CrystalPreset {
+  variant: number;
+  norms: Record<CrystalColor, Record<string, number>>;
+}
+
+export interface CrystalNormsMine {
+  onboarding_done: boolean;
+  norms: CrystalNorms;
+}
+
+export interface Animal {
+  id: number;
+  code: string;
+  name: string;
+  emoji: string | null;
+  product_name: string | null;
+  sort_order: number;
+  image_url: string | null;
+}
+
+export interface Pet {
+  id: number;
+  code: string;
+  name: string;
+  emoji: string | null;
+  bonus_description: string | null;
+  image_url: string | null;
+}
+
+export interface Plot {
+  id: number;
+  plant_id: number;
+  plant_name: string;
+  plant_emoji: string | null;
+  qty: number;
+  status: string;
+  accumulated: number;
+  required: number;
+  crystal_color: string | null;
+  crystal_count: number | null;
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+export interface Production {
+  id: number;
+  kind: string;
+  name: string;
+  status: string;
+  accumulated: number;
+  required: number;
+  created_at: string | null;
+}
+
+export interface LibraryRecipe {
+  id: number;
+  plant_id: number;
+  plant_name: string;
+  plant_emoji: string | null;
+  product_id: number;
+  product_name: string;
+  product_emoji: string | null;
+  level: number;
+  status: string;
+}
+
+export interface InventoryItem {
+  item_kind: string;
+  item_id: number;
+  item_code: string;
+  item_name: string;
+  item_emoji: string | null;
+  qty: number;
+  ingredient_type: string | null;
+  ingredient_icon: string | null;
+}
+
+export interface ProductionTemplate {
+  id: number;
+  code: string;
+  name: string;
+  emoji: string | null;
+  required: number;
+}
+
+export interface Product {
+  id: number;
+  code: string;
+  name: string;
+  emoji: string | null;
+  stars: number;
+  production_kind: string | null;
+}
+
+export interface PlayerDetail extends Player {
+  plots: Plot[];
+  productions: Production[];
+  inventory: InventoryItem[];
+}
+
+export interface Player {
+  vk_id: number;
+  first_name: string;
+  last_name: string;
+  role: string;
+  crosses_balance: number;
+  crosses_total: number;
+  coins: number;
+  round: number;
+  reports_total: number;
+  created_at: string | null;
+}
+
+export interface StitchReport {
+  id: number;
+  user_id: number;
+  amount: number;
+  photo_before_url: string | null;
+  photo_after_url: string;
+  note: string | null;
+  context_type: string | null;
+  context_id: number | null;
+  status: string;
+  reviewer_id: number | null;
+  reviewed_at: string | null;
+  created_at: string | null;
+}
+
+export interface Order {
+  id: number;
+  product_id: number;
+  product_code: string;
+  product_name: string;
+  product_emoji: string | null;
+  qty: number;
+  reward_coins: number;
+  customer: string | null;
+  status: string;
+  name: string | null;
+  image_url: string | null;
+  created_at: string | null;
+  fulfilled_at: string | null;
+}
+
+export interface AdminOrder extends Order {
+  user_id: number | null;
+}
+
+export interface Setting {
+  key: string;
+  value: string;
+}
+
+// ── Карты-локации ──
+export interface FieldInfo {
+  id: number;
+  code: string;
+  name: string;
+  map_url: string | null;
+  cols: number;
+  rows: number;
+  grid_color: string;
+  plant_category: string | null;
+  min_level: number;
+  created_at: string | null;
+}
+
+export interface FieldCell {
+  id: number;
+  col: number;
+  row: number;
+  kind: string;
+  plant_id: number | null;
+  occupant_user_id: number | null;
+  tent_id: number | null;
+}
+
+export interface FieldCellDetail extends FieldCell {
+  plant_name: string | null;
+  plant_emoji: string | null;
+  plant_image_young: string | null;
+  plant_image_grown: string | null;
+  plot: Plot | null;
+  tent_name: string | null;
+  tent_image: string | null;
+  occupant_name: string | null;
+}
+
+export interface Tent {
+  id: number;
+  name: string;
+  image_url: string | null;
+  kind: string;
+  col1: number;
+  row1: number;
+  col2: number;
+  row2: number;
+  builder_user_id: number | null;
+  build_status: string;
+  accumulated: number;
+  required: number;
+  crystal_color: string | null;
+  crystal_count: number | null;
+}
+
+export interface FieldDetail extends FieldInfo {
+  cells: FieldCellDetail[];
+  plants: Plant[];
+  tents?: Tent[];
+}
+
+export interface NormImage {
+  color: string;
+  count: number;
+  image_url: string | null;
+}
+
+export interface BarnyardPen {
+  id: number;
+  animal_id: number | null;
+  animal_name: string | null;
+  animal_emoji: string | null;
+  status: 'empty' | 'building' | 'ready';
+  accumulated: number;
+  required: number;
+  last_die: string | null;
+  opening_order: number;
+}
+
+export interface BarnyardProduceResult {
+  slot_id: number;
+  die: number;
+  required: number;
+  animal_name: string;
+  product_coins: number;
+}
+
+export const api = {
+  // ── Производства / склад ──
+  investPlot: (plot_id: number, amount: number) =>
+    client.post<Plot>(`/farm/plots/${plot_id}/invest`, { amount }).then((r) => r.data),
+  craftProduct: (production_id: number, amount: number, product_id: number, qty = 1) =>
+    client
+      .post<Production>(`/farm/productions/${production_id}/craft`, { amount, product_id, qty })
+      .then((r) => r.data),
+  productions: () => client.get<Production[]>('/farm/productions').then((r) => r.data),
+  inventory: (itemKind?: string) =>
+    client.get<InventoryItem[]>('/farm/inventory', { params: itemKind ? { item_kind: itemKind } : {} }).then((r) => r.data),
+  products: () => client.get<Product[]>('/farm/products').then((r) => r.data),
+
+  // ── Каталог растений ──
+  plants: (category?: string) =>
+    client
+      .get<Plant[]>('/plants', { params: category ? { category } : {} })
+      .then((r) => r.data),
+
+  // ── Фото-отчёты по вышивке ──
+  createStitchReport: (amount: number, photo: File, note?: string) => {
+    const form = new FormData();
+    form.append('amount', String(amount));
+    if (note) form.append('note', note);
+    form.append('photo', photo);
+    return client
+      .post<StitchReport>('/stitches/reports', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data);
+  },
+  stitchReports: (status?: string, mine = true) =>
+    client
+      .get<StitchReport[]>('/stitches/reports', { params: { status, mine } })
+      .then((r) => r.data),
+  reviewReport: (id: number, action: 'accept' | 'reject') =>
+    client.post<StitchReport>(`/stitches/reports/${id}/${action}`).then((r) => r.data),
+  deleteReport: (id: number) =>
+    client.delete(`/stitches/reports/${id}`).then((r) => r.data),
+
+  // ── Заказы ──
+  orders: (status_filter?: string) =>
+    client
+      .get<Order[]>('/orders', { params: status_filter ? { status_filter } : {} })
+      .then((r) => r.data),
+  generateOrder: (product_id: number, qty?: number) =>
+    client.post<Order>('/orders/generate', { product_id, qty }).then((r) => r.data),
+  fulfillOrder: (id: number) => client.post<Order>(`/orders/${id}/fulfill`).then((r) => r.data),
+  cancelOrder: (id: number) => client.post<Order>(`/orders/${id}/cancel`).then((r) => r.data),
+
+  // ── Библиотека рецептов ──
+  library: () =>
+    client.get<LibraryRecipe[]>('/library').then((r) => r.data),
+  studyRecipe: (id: number) =>
+    client.post<LibraryRecipe>(`/library/${id}/study`).then((r) => r.data),
+
+  // ── Настройки ──
+  getSetting: (key: string) =>
+    client.get<Setting>(`/settings/${key}`).then((r) => r.data),
+  updateSetting: (key: string, value: string) =>
+    client.put<Setting>(`/admin/settings/${key}`, { value }).then((r) => r.data),
+
+  // ── Нормы кристаллов ──
+  crystalPresets: () =>
+    client.get<CrystalPreset[]>('/crystal-norms/presets').then((r) => r.data),
+  crystalStandard: () =>
+    client.get<{ norms: CrystalNorms }>('/crystal-norms/standard').then((r) => r.data.norms),
+  setCrystalStandard: (norms: CrystalNorms) =>
+    client.put<{ norms: CrystalNorms }>('/crystal-norms/admin/standard', { norms }).then((r) => r.data.norms),
+  setCrystalStandardPreset: (preset: number) =>
+    client.put<{ norms: CrystalNorms }>('/crystal-norms/admin/standard', { preset }).then((r) => r.data.norms),
+  normImages: () =>
+    client.get<NormImage[]>('/crystal-norms/admin/images').then((r) => r.data),
+  uploadNormImage: (color: string, count: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<NormImage>(`/crystal-norms/admin/images/${color}/${count}`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  myCrystalNorms: () =>
+    client.get<CrystalNormsMine>('/crystal-norms/mine').then((r) => r.data),
+  setMyCrystalNorms: (norms: CrystalNorms) =>
+    client.put<CrystalNormsMine>('/crystal-norms/mine', { norms }).then((r) => r.data),
+  applyMyCrystalPreset: (n: number) =>
+    client.post<CrystalNormsMine>(`/crystal-norms/mine/preset/${n}`).then((r) => r.data),
+
+  // ── Питомцы ──
+  userPets: () => client.get<any[]>('/pets').then(r => r.data),
+  settlePet: (petId: number) => client.post('/pets/settle', {pet_id: petId}).then(r => r.data),
+
+  // ── Карты-локации: админка ──
+  adminFields: () => client.get<FieldInfo[]>('/admin/fields').then((r) => r.data),
+  adminCreateField: (name: string, cols = 6, rows = 4) =>
+    client.post<FieldInfo>('/admin/fields', { name, cols, rows }).then((r) => r.data),
+  adminGetField: (id: number) =>
+    client.get<FieldDetail>(`/admin/fields/${id}`).then((r) => r.data),
+  adminUpdateField: (id: number, data: { name?: string; cols?: number; rows?: number; grid_color?: string }) =>
+    client.put<FieldDetail>(`/admin/fields/${id}`, data).then((r) => r.data),
+  adminUploadFieldMap: (id: number, mapImage: File) => {
+    const form = new FormData();
+    form.append('map_image', mapImage);
+    return client
+      .put<FieldInfo>(`/admin/fields/${id}/map`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => r.data);
+  },
+  adminDeleteField: (id: number) =>
+    client.delete(`/admin/fields/${id}`).then((r) => r.data),
+  adminSetBlocked: (id: number, cells: { col: number; row: number }[], kind: string = 'bed') =>
+    client.put<FieldDetail>(`/admin/fields/${id}/cells/blocked`, { cells, kind }).then((r) => r.data),
+  adminSetCellKind: (fieldId: number, col: number, row: number, kind: string) =>
+    client.put<FieldCell>(`/admin/fields/${fieldId}/cell/${col}/${row}`, { kind }).then((r) => r.data),
+  adminSetFieldPlants: (id: number, plantIds: number[]) =>
+    client.put<Plant[]>(`/admin/fields/${id}/plants`, { plant_ids: plantIds }).then((r) => r.data),
+  adminCreateTent: (
+    id: number,
+    data: { name: string; kind: string; col1: number; row1: number; col2: number; row2: number },
+    image?: File,
+  ) => {
+    const form = new FormData();
+    form.append('name', data.name);
+    form.append('kind', data.kind);
+    form.append('col1', String(data.col1));
+    form.append('row1', String(data.row1));
+    form.append('col2', String(data.col2));
+    form.append('row2', String(data.row2));
+    if (image) form.append('image', image);
+    return client
+      .post<Tent>(`/admin/fields/${id}/tents`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => r.data);
+  },
+  adminDeleteTent: (fieldId: number, tentId: number) =>
+    client.delete(`/admin/fields/${fieldId}/tents/${tentId}`).then((r) => r.data),
+
+  // ── Каталог: растения, животные, питомцы ──
+  adminPlants: () => client.get<Plant[]>('/admin/catalog/plants').then((r) => r.data),
+  adminCreatePlant: (data: Partial<Plant> & { code: string; name: string }) =>
+    client.post<Plant>('/admin/catalog/plants', data).then((r) => r.data),
+  adminUpdatePlant: (id: number, data: Partial<Plant>) =>
+    client.put<Plant>(`/admin/catalog/plants/${id}`, data).then((r) => r.data),
+  adminDeletePlant: (id: number) =>
+    client.delete(`/admin/catalog/plants/${id}`).then((r) => r.data),
+
+  adminAnimals: () => client.get<Animal[]>('/admin/catalog/animals').then((r) => r.data),
+  adminCreateAnimal: (data: Partial<Animal> & { code: string; name: string }) =>
+    client.post<Animal>('/admin/catalog/animals', data).then((r) => r.data),
+  adminUpdateAnimal: (id: number, data: Partial<Animal>) =>
+    client.put<Animal>(`/admin/catalog/animals/${id}`, data).then((r) => r.data),
+  adminDeleteAnimal: (id: number) =>
+    client.delete(`/admin/catalog/animals/${id}`).then((r) => r.data),
+
+  adminPets: () => client.get<Pet[]>('/admin/catalog/pets').then((r) => r.data),
+  adminCreatePet: (data: Partial<Pet> & { code: string; name: string }) =>
+    client.post<Pet>('/admin/catalog/pets', data).then((r) => r.data),
+  adminUpdatePet: (id: number, data: Partial<Pet>) =>
+    client.put<Pet>(`/admin/catalog/pets/${id}`, data).then((r) => r.data),
+  adminDeletePet: (id: number) =>
+    client.delete(`/admin/catalog/pets/${id}`).then((r) => r.data),
+
+  adminProducts: () => client.get<Product[]>('/admin/catalog/products').then((r) => r.data),
+  adminCreateProduct: (data: Partial<Product> & { code: string; name: string }) =>
+    client.post<Product>('/admin/catalog/products', data).then((r) => r.data),
+  adminUpdateProduct: (id: number, data: Partial<Product>) =>
+    client.put<Product>(`/admin/catalog/products/${id}`, data).then((r) => r.data),
+  adminDeleteProduct: (id: number) =>
+    client.delete(`/admin/catalog/products/${id}`).then((r) => r.data),
+
+  adminProductionTemplates: () =>
+    client.get<ProductionTemplate[]>('/admin/catalog/production-templates').then((r) => r.data),
+  adminCreateProductionTemplate: (data: Partial<ProductionTemplate> & { name: string }) =>
+    client.post<ProductionTemplate>('/admin/catalog/production-templates', data).then((r) => r.data),
+  adminUpdateProductionTemplate: (id: number, data: Partial<ProductionTemplate>) =>
+    client.put<ProductionTemplate>(`/admin/catalog/production-templates/${id}`, data).then((r) => r.data),
+  adminDeleteProductionTemplate: (id: number) =>
+    client.delete(`/admin/catalog/production-templates/${id}`).then((r) => r.data),
+
+  adminUploadPlantImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Plant>(`/admin/catalog/plants/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadPlantImageYoung: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Plant>(`/admin/catalog/plants/${id}/image-young`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadPlantImageGrown: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Plant>(`/admin/catalog/plants/${id}/image-grown`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadAnimalImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Animal>(`/admin/catalog/animals/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadPetImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Pet>(`/admin/catalog/pets/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+
+  // ── Админ: игроки ──
+  adminPlayers: () =>
+    client.get<Player[]>('/admin/players').then((r) => r.data),
+  adminPlayerDetail: (vkId: number) =>
+    client.get<PlayerDetail>(`/admin/players/${vkId}`).then((r) => r.data),
+  adminPlayerReports: (vkId: number) =>
+    client.get<StitchReport[]>(`/admin/players/${vkId}/reports`).then((r) => r.data),
+  adminPlayerField: (vkId: number, fieldId: number) =>
+    client.get<FieldDetail>(`/admin/players/${vkId}/fields/${fieldId}`).then((r) => r.data),
+
+  // ── Админ: заказы ──
+  adminOrders: (userId?: number) =>
+    client.get<AdminOrder[]>('/admin/orders', { params: userId !== undefined ? { user_id: userId } : {} }).then((r) => r.data),
+  adminGenerateOrder: (productId: number, qty?: number) =>
+    client.post<AdminOrder>('/admin/orders/generate', { product_id: productId, qty }).then((r) => r.data),
+  adminUpdateOrder: (orderId: number, data: Partial<Pick<AdminOrder, 'product_id' | 'qty' | 'reward_coins' | 'customer' | 'status' | 'name'>>) =>
+    client.put<AdminOrder>(`/admin/orders/${orderId}`, data).then((r) => r.data),
+  adminCancelOrder: (orderId: number) =>
+    client.post<AdminOrder>(`/admin/orders/${orderId}/cancel`).then((r) => r.data),
+  adminDeleteOrder: (orderId: number) =>
+    client.delete(`/admin/orders/${orderId}`).then((r) => r.data),
+  adminUploadOrderImage: (orderId: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<AdminOrder>(`/admin/orders/${orderId}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+
+  // ── Админ: шаблоны заказов ──
+  adminOrderTemplates: (sourceKind?: string, sourceId?: number) =>
+    client.get<OrderTemplate[]>('/admin/order-templates', { params: { source_kind: sourceKind, source_id: sourceId } }).then((r) => r.data),
+  adminCreateOrderTemplate: (data: OrderTemplateCreate) =>
+    client.post<OrderTemplate>('/admin/order-templates', data).then((r) => r.data),
+  adminUpdateOrderTemplate: (id: number, data: OrderTemplateCreate) =>
+    client.put<OrderTemplate>(`/admin/order-templates/${id}`, data).then((r) => r.data),
+  adminDeleteOrderTemplate: (id: number) =>
+    client.delete(`/admin/order-templates/${id}`).then((r) => r.data),
+
+  // ── Админ: уровни ──
+  adminLevels: (variant?: number) =>
+    client.get<LevelGate[]>('/admin/levels', { params: { variant } }).then((r) => r.data),
+  adminSetLevel: (data: LevelGateCreate) =>
+    client.put<LevelGate>('/admin/levels', data).then((r) => r.data),
+  adminDeleteLevel: (variant: number, level: number) =>
+    client.delete(`/admin/levels/${variant}/${level}`).then((r) => r.data),
+
+  // ── Админ: рецепты зелий ──
+  adminPotionRecipes: () =>
+    client.get<PotionRecipe[]>('/admin/potion-recipes').then((r) => r.data),
+  adminCreatePotionRecipe: (data: PotionRecipeCreate) =>
+    client.post<PotionRecipe>('/admin/potion-recipes', data).then((r) => r.data),
+  adminUpdatePotionRecipe: (id: number, data: PotionRecipeCreate) =>
+    client.put<PotionRecipe>(`/admin/potion-recipes/${id}`, data).then((r) => r.data),
+  adminDeletePotionRecipe: (id: number) =>
+    client.delete(`/admin/potion-recipes/${id}`).then((r) => r.data),
+
+  // ── Зелья: игрок ──
+  potionRecipes: (level?: string) =>
+    client.get<PotionRecipe[]>('/potions/recipes', { params: { level } }).then((r) => r.data),
+  createCauldron: (recipeId: number) =>
+    client.post<Cauldron>('/potions/cauldrons', { recipe_id: recipeId }).then((r) => r.data),
+  getCauldron: (id: number) =>
+    client.get<Cauldron>(`/potions/cauldrons/${id}`).then((r) => r.data),
+  fillCauldronSlot: (cauldronId: number, slotIndex: number, itemKind: string, itemId: number) =>
+    client.post<Cauldron>(`/potions/cauldrons/${cauldronId}/slot/${slotIndex}`, { item_kind: itemKind, item_id: itemId }).then((r) => r.data),
+  clearCauldronSlot: (cauldronId: number, slotIndex: number) =>
+    client.delete(`/potions/cauldrons/${cauldronId}/slot/${slotIndex}`).then((r) => r.data),
+  brewCauldron: (cauldronId: number) =>
+    client.post<UserPotion>(`/potions/cauldrons/${cauldronId}/brew`).then((r) => r.data),
+  userPotions: () =>
+    client.get<UserPotion[]>('/potions').then((r) => r.data),
+  activatePotion: (id: number) =>
+    client.post<UserPotion>(`/potions/${id}/activate`).then((r) => r.data),
+
+  // ── Маршруты / уровни ──
+  setRouteVariant: (variant: number) =>
+    client.put<{ route_variant: number }>('/levels/route-variant', { variant }).then((r) => r.data),
+  levels: () =>
+    client.get<any[]>('/levels').then((r) => r.data),
+
+  // ── Настройки: фон ──
+  getBackground: () => client.get<{ url: string }>('/settings/background').then((r) => r.data),
+  setBackground: (url: string) => client.put<{ url: string }>('/settings/background', { url }).then((r) => r.data),
+
+  // ── Скотный двор ──
+  barnyardPens: () => client.get<BarnyardPen[]>('/animals/pens').then((r) => r.data),
+  barnyardInstall: (slotId: number, animalId: number) =>
+    client.post(`/animals/pens/${slotId}/install`, { animal_id: animalId }).then((r) => r.data),
+  barnyardInvest: (slotId: number, amount: number) =>
+    client.post(`/animals/pens/${slotId}/invest`, { amount }).then((r) => r.data),
+  barnyardProduce: (slotId: number) =>
+    client.post<BarnyardProduceResult>(`/animals/pens/${slotId}/produce`).then((r) => r.data),
+
+  // ── Карты-локации: игрок ──
+  fields: () => client.get<FieldInfo[]>('/fields').then((r) => r.data),
+  fieldDetail: (id: number) => client.get<FieldDetail>(`/fields/${id}`).then((r) => r.data),
+  plantOnCell: (fieldId: number, col: number, row: number, plantId: number, qty?: number) =>
+    client.post<FieldCellDetail>(`/fields/${fieldId}/cells/${col}/${row}/plant`, { plant_id: plantId, qty: qty ?? 1 }).then((r) => r.data),
+  harvestCell: (fieldId: number, col: number, row: number) =>
+    client.post<FieldCellDetail>(`/fields/${fieldId}/cells/${col}/${row}/harvest`).then((r) => r.data),
+  startTentBuild: (fieldId: number, tentId: number) =>
+    client.post<Tent>(`/fields/${fieldId}/tents/${tentId}/start-build`).then((r) => r.data),
+  investTentBuild: (fieldId: number, tentId: number, amount: number) =>
+    client.post<Tent>(`/fields/${fieldId}/tents/${tentId}/build-invest`, { amount }).then((r) => r.data),
+
+  sellSurplus: (itemKind: string, itemId: number, qty: number) =>
+    client.post<{ coins_earned: number }>('/farm/sell-surplus', { item_kind: itemKind, item_id: itemId, qty }).then((r) => r.data),
+};

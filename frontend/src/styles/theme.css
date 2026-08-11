@@ -1,0 +1,184 @@
+:root {
+  /* ── Палитра: ферма / лён / зелень / дерево ── */
+  --grass: #5a8f3e;
+  --grass-deep: #2f5a1e;
+  --leaf: #7cb342;
+  --flax: #d9c89a;
+  --flax-light: #efe6cc;
+  --bark: #6d5238;
+  --bark-deep: #3d2c1c;
+  --honey: #e0a83e;
+  --berry: #8e3b5e;
+  --sky: #6fa8c4;
+
+  /* ── Семантические алиасы ── */
+  --bg: #1a2414;
+  --surface: rgba(10, 16, 8, 0.55);
+  --surface-strong: rgba(10, 16, 8, 0.72);
+  --border: rgba(217, 200, 154, 0.22);
+  --text-primary: #ffffff;
+  --text-secondary: #d8cdb0;
+  --text-muted: #9a8f72;
+  --accent: var(--leaf);
+  --accent-warm: var(--honey);
+  --danger: #c4574a;
+  --success: #6fae4a;
+
+  /* ── Типографика ── */
+  --font-display: 'Marcellus', 'Cormorant Garamond', serif;
+  --font-body: 'PT Serif', 'Cormorant Garamond', Georgia, serif;
+
+  /* ── Скругления / измерения ── */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shell-pad: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  background: var(--bg);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Фон страницы рисуется React-компонентом <Background/> (картинка фермы с
+   панорамированием на мобильных). Здесь — только запасной цвет body. */
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 0%, rgba(20, 30, 18, 0.45) 100%);
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin: 0 0 0.4em;
+  letter-spacing: 0.02em;
+}
+
+a {
+  color: var(--accent-warm);
+}
+
+/* ── Карточки ── */
+.fm-card {
+  background: linear-gradient(180deg, rgba(10,16,8,0.60) 0%, rgba(10,16,8,0.48) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ── Кнопки ── */
+.fm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a2414;
+  background: linear-gradient(180deg, var(--leaf) 0%, var(--grass) 100%);
+  border: 1px solid var(--grass-deep);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: transform 0.1s ease, filter 0.1s ease;
+  text-decoration: none;
+}
+.fm-btn:hover { filter: brightness(1.08); }
+.fm-btn:active { transform: translateY(1px); }
+.fm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.fm-btn-outline {
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.fm-btn-outline:hover { background: var(--surface-strong); }
+
+.fm-btn-sm { padding: 6px 10px; font-size: 13px; }
+.fm-btn-xs { padding: 4px 8px; font-size: 12px; }
+.fm-btn-danger {
+  background: linear-gradient(180deg, #d4685a 0%, #a8443a 100%);
+  border-color: #8e3a31;
+  color: #fff;
+}
+
+/* ── Сетка карточек ── */
+.fm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+/* ── Поля ввода ── */
+.fm-input {
+  width: 100%;
+  padding: 9px 12px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.fm-input::placeholder { color: var(--text-muted); }
+
+/* ── Чипы / бейджи ── */
+.fm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 13px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+/* ── Прогресс-бар ── */
+.fm-progress {
+  height: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.fm-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--leaf), var(--grass));
+  transition: width 0.3s ease;
+}
+
+/* ── Анимации появления ── */
+@keyframes fm-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fm-rise { animation: fm-rise 0.3s ease both; }
+.fm-rise-d1 { animation: fm-rise 0.3s ease 0.05s both; }
+.fm-rise-d2 { animation: fm-rise 0.3s ease 0.1s both; }
+
+/* ── Адаптив ── */
+@media (max-width: 768px) {
+  :root { --shell-pad: 10px; }
+}
