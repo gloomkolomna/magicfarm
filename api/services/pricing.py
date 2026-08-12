@@ -1,3 +1,4 @@
+from __future__ import annotations
 from sqlalchemy.orm import Session
 
 PLANT_BASE_PRICES = {1: 5, 2: 10, 3: 15}

@@ -13,7 +13,7 @@ ExecStart=/opt/magicfarm/api/venv/bin/gunicorn \
     --access-logfile /var/log/magicfarm/api-access.log \
     --error-logfile /var/log/magicfarm/api-error.log \
     --timeout 120 \
-    api.main:app
+    main:app
 Restart=always
 RestartSec=5
 

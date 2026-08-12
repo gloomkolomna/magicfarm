@@ -1,3 +1,4 @@
+from __future__ import annotations
 def resolve_vk_names(vk_ids: list[int]) -> dict[int, dict]:
     import config
     if not config.VK_SERVICE_TOKEN or not vk_ids:
