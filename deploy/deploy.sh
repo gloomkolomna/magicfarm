@@ -341,8 +341,14 @@ log "=== 4. Установка зависимостей и миграции ==="
 cd "$API_DIR"
 source venv/bin/activate
 pip install -r requirements.txt
-python -m alembic upgrade head
-MIGRATION_RAN=1
+if [ "$FRESH_DEPLOY" -eq 1 ]; then
+    log "Свежая БД: создаю схему через create_all и помечаю head..."
+    python -c "from db import init_db; init_db()"
+    python -m alembic stamp head
+else
+    python -m alembic upgrade head
+    MIGRATION_RAN=1
+fi
 log "Миграции применены. Текущая ревизия: $(python -m alembic current 2>/dev/null | awk '{print $1}' | head -n1)"
 
 # ===== 5. Сборка фронтенда =====
