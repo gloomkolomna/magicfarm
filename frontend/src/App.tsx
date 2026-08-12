@@ -56,6 +56,7 @@ function App() {
   if (loading) return <><Background /><Skeleton /></>;
   if (!isAdminAllowed(vkUserId)) return <><Background /><StubPage /></>;
   if (sessionLoading) return <><Background /><Skeleton /></>;
+  if (!user) return <><Background /><StubPage /></>;
   if (user && !user.onboarding_done) {
     return (
       <>

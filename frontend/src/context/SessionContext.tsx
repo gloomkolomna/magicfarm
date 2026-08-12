@@ -36,7 +36,7 @@ const SessionContext = createContext<SessionState>({
 const TOKEN_KEY = 'token';
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const { vkUserId, loading: vkLoading } = useVkBridge();
+  const { vkUserId, loading: vkLoading, launchParams } = useVkBridge();
   const [user, setUser] = useState<MeUser | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem(TOKEN_KEY));
   const [loading, setLoading] = useState(true);
@@ -54,7 +54,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     async function login() {
       try {
-        const res = await client.post('/auth/session', { params: { vk_user_id: String(vkUserId) } });
+        const res = await client.post('/auth/session', { params: { ...launchParams, vk_user_id: String(vkUserId) } });
         if (cancelled) return;
         const t = res.data.token as string;
         localStorage.setItem(TOKEN_KEY, t);
