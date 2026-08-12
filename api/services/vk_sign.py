@@ -1,4 +1,5 @@
 from __future__ import annotations
+import base64
 import hashlib
 import hmac
 from typing import Optional
@@ -7,11 +8,12 @@ import config
 
 
 def _calc_sign(query: str) -> str:
-    return hmac.new(
+    digest = hmac.new(
         key=config.VK_APP_SECRET.encode(),
         msg=query.encode(),
         digestmod=hashlib.sha256,
-    ).hexdigest()
+    ).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
 
 
 def verify_launch_params(params: dict) -> Optional[int]:

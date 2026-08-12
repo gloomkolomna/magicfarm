@@ -36,7 +36,9 @@ function StubPage() {
     <div style={zoomed}>
       <div style={{ maxWidth: 'calc(var(--shell-max-width) * 0.8)', margin: '0 auto', padding: 'var(--shell-pad)', textAlign: 'center' }}>
         <div className="fm-card fm-rise">
-          <h1>Магическая ферма</h1>
+          <h1 style={{ fontSize: 'clamp(22px, 6vw, 30px)', lineHeight: 1.18, overflowWrap: 'anywhere' }}>
+            История одной магической фермы
+          </h1>
           <p style={{ color: 'var(--text-secondary)' }}>
             Скоро здесь расцветёт ваша волшебная ферма.
           </p>
