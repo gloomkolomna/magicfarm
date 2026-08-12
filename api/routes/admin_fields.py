@@ -132,6 +132,8 @@ class PlantBedOut(BaseModel):
     col2: int
     row2: int
     plant_category: str | None
+    plant_id: int | None
+    occupant_user_id: int | None
 
 
 class PetZoneOut(BaseModel):
@@ -516,7 +518,7 @@ def _detail(f: Field) -> FieldDetailOut:
         tents=[_tent_to_out(t) for t in f.tents],
         plants=[_plant_to_out(fp.plant) for fp in f.plants],
         plant_beds=[
-            PlantBedOut(id=pb.id, field_id=pb.field_id, col1=pb.col1, row1=pb.row1, col2=pb.col2, row2=pb.row2, plant_category=pb.plant_category)
+            PlantBedOut(id=pb.id, field_id=pb.field_id, col1=pb.col1, row1=pb.row1, col2=pb.col2, row2=pb.row2, plant_category=pb.plant_category, plant_id=pb.plant_id, occupant_user_id=pb.occupant_user_id)
             for pb in f.plant_beds
         ],
         pet_zones=[
@@ -581,7 +583,7 @@ def create_plant_bed(
 
     db.commit()
     db.refresh(pb)
-    return PlantBedOut(id=pb.id, field_id=pb.field_id, col1=pb.col1, row1=pb.row1, col2=pb.col2, row2=pb.row2, plant_category=pb.plant_category)
+    return PlantBedOut(id=pb.id, field_id=pb.field_id, col1=pb.col1, row1=pb.row1, col2=pb.col2, row2=pb.row2, plant_category=pb.plant_category, plant_id=pb.plant_id, occupant_user_id=pb.occupant_user_id)
 
 
 @router.delete("/{field_id}/plant-beds/{bed_id}", status_code=status.HTTP_204_NO_CONTENT)

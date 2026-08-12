@@ -49,6 +49,7 @@ class PlantCreate(BaseModel):
     category: str = "garden"
     level: int = 1
     description: str | None = None
+    stitch_condition: str | None = None
 
 
 class PlantUpdate(BaseModel):
@@ -57,6 +58,7 @@ class PlantUpdate(BaseModel):
     category: str | None = None
     level: int | None = None
     description: str | None = None
+    stitch_condition: str | None = None
 
 
 class PlantOut(BaseModel):
@@ -68,6 +70,7 @@ class PlantOut(BaseModel):
     level: int
     norm_per_crystal: int
     description: str | None
+    stitch_condition: str | None
     image_url: str | None
     image_young_url: str | None
     image_grown_url: str | None
@@ -138,7 +141,7 @@ def _plant_out(p: Plant) -> PlantOut:
     return PlantOut(
         id=p.id, code=p.code, name=p.name, emoji=p.emoji,
         category=p.category, level=p.level, norm_per_crystal=p.norm_per_crystal,
-        description=p.description,
+        description=p.description, stitch_condition=p.stitch_condition,
         image_url=p.image_url, image_young_url=p.image_young_url, image_grown_url=p.image_grown_url,
     )
 
@@ -206,7 +209,7 @@ def create_plant(
     p = Plant(
         code=code, name=req.name.strip(), emoji=req.emoji, category=req.category,
         level=req.level, norm_per_crystal=100,
-        description=req.description,
+        description=req.description, stitch_condition=req.stitch_condition,
     )
     db.add(p)
     db.commit()
@@ -236,6 +239,8 @@ def update_plant(
         p.level = req.level
     if req.description is not None:
         p.description = req.description
+    if req.stitch_condition is not None:
+        p.stitch_condition = req.stitch_condition
     db.commit()
     db.refresh(p)
     return _plant_out(p)

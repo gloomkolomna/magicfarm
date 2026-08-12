@@ -139,7 +139,7 @@ if (Test-Path (Join-Path $frontendDir ".env")) {
 Write-Host ""
 Write-Host "──────────────────────────────────────────" -ForegroundColor DarkGray
 Write-Host "  API:       http://127.0.0.1:8003/api/" -ForegroundColor Green
-Write-Host "  Mini App:  http://127.0.0.1:5175/farm/" -ForegroundColor Green
+Write-Host "  Mini App:  http://127.0.0.1:5175/magicfarm/" -ForegroundColor Green
 if ($demoId) {
     Write-Host "  Дев-режим: ты = vk_id $demoId (админ, без VK-авторизации)" -ForegroundColor Yellow
 } else {

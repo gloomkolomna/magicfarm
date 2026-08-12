@@ -29,6 +29,8 @@ def create_session(req: SessionRequest, db: Session = Depends(get_db)):
 
     user = db.query(User).filter(User.vk_id == vk_id).first()
     is_admin = vk_id in config.get_admin_vk_ids()
+    if config.ADMIN_ONLY and not is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ только для администраторов")
     if user is None:
         user = User(
             vk_id=vk_id,

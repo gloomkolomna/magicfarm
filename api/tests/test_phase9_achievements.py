@@ -233,3 +233,124 @@ def test_fulfill_trigger_coin_achievement(admin_client):
         earned = [a for a in achievements if a["code"] == "ach_coin"]
         assert len(earned) == 1
         assert earned[0]["earned"] is True
+
+
+def test_admin_create_achievement(admin_client):
+    res = admin_client.post("/api/admin/achievements", json={
+        "name": "Test Create",
+        "condition_kind": "plots_count",
+        "condition_value": 1,
+    })
+    assert res.status_code == 201, f"POST failed: {res.status_code} {res.text}"
+    data = res.json()
+    assert data["code"]
+
+
+def test_admin_achievement_kinds(admin_client):
+    r = admin_client.get("/api/admin/achievements/kinds")
+    assert r.status_code == 200
+    kinds = r.json()
+    assert isinstance(kinds, list) and len(kinds) > 0
+    ks = [k["kind"] for k in kinds]
+    assert "plots_count" in ks
+    assert "coins_reached" in ks
+    for k in kinds:
+        assert k["kind"] and k["label"]
+
+
+def test_admin_achievement_kinds_requires_admin(player_client):
+    r = player_client.get("/api/admin/achievements/kinds")
+    assert r.status_code == 403
+
+
+def test_admin_create_achievement_invalid_kind(admin_client):
+    res = admin_client.post("/api/admin/achievements", json={
+        "name": "Bad",
+        "condition_kind": "does_not_exist",
+        "condition_value": 1,
+    })
+    assert res.status_code == 400
+
+
+def test_admin_update_achievement_invalid_kind(admin_client):
+    create = admin_client.post("/api/admin/achievements", json={
+        "name": "To Update",
+        "condition_kind": "plots_count",
+        "condition_value": 1,
+    })
+    assert create.status_code == 201
+    ach_id = create.json()["id"]
+
+    res = admin_client.put(f"/api/admin/achievements/{ach_id}", json={
+        "name": "To Update",
+        "condition_kind": "does_not_exist",
+        "condition_value": 1,
+    })
+    assert res.status_code == 400
+
+
+def test_admin_achievement_image_upload(admin_client, uploads_tmp):
+    res = admin_client.post("/api/admin/achievements", json={
+        "name": "First Plant",
+        "condition_kind": "plots_count",
+        "condition_value": 1,
+    })
+    assert res.status_code == 201
+    ach_id = res.json()["id"]
+
+    from PIL import Image
+    img_buf = io.BytesIO()
+    Image.new("RGB", (100, 100), color="red").save(img_buf, format="JPEG")
+    img_buf.seek(0)
+
+    res = admin_client.put(
+        f"/api/admin/achievements/{ach_id}/image",
+        files={"image": ("test.jpg", img_buf, "image/jpeg")},
+    )
+    assert res.status_code == 200
+    assert res.json()["image_url"] is not None
+    assert res.json()["image_url"].startswith("/api/uploads/")
+
+
+def test_admin_achievement_image_upload_404(admin_client):
+    img_buf = io.BytesIO(b"fake")
+    res = admin_client.put(
+        "/api/admin/achievements/99999/image",
+        files={"image": ("test.jpg", img_buf, "image/jpeg")},
+    )
+    assert res.status_code == 404
+
+
+def test_admin_order_template_potion(admin_client):
+    res = admin_client.post("/api/admin/order-templates", json={
+        "source_kind": "potion",
+        "source_id": 1,
+        "product_id": 1,
+        "qty": 1,
+        "reward_coins": 5,
+    })
+    assert res.status_code == 201, res.text
+    assert res.json()["source_kind"] == "potion"
+
+
+def test_admin_order_template_invalid_source(admin_client):
+    res = admin_client.post("/api/admin/order-templates", json={
+        "source_kind": "invalid",
+        "source_id": 1,
+        "product_id": 1,
+        "qty": 1,
+    })
+    assert res.status_code == 400
+
+
+def test_admin_order_template_with_customer(admin_client):
+    res = admin_client.post("/api/admin/order-templates", json={
+        "source_kind": "plant",
+        "source_id": 1,
+        "product_id": 1,
+        "qty": 1,
+        "reward_coins": 5,
+        "customer": "Леди Бейлин",
+    })
+    assert res.status_code == 201
+    assert res.json()["customer"] == "Леди Бейлин"

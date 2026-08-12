@@ -37,6 +37,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const [rows, setRows] = useState('');
   const [lockRatio, setLockRatio] = useState(false);
   const [name, setName] = useState('');
+  const [minLevel, setMinLevel] = useState('');
 
   const [multiModal, setMultiModal] = useState<{ c1: number; r1: number; c2: number; r2: number } | null>(null);
   const [tentName, setTentName] = useState('');
@@ -55,6 +56,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       setCols(String(fd.cols));
       setRows(String(fd.rows));
       setName(fd.name);
+      setMinLevel(String(fd.min_level ?? 0));
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка загрузки'));
     } finally {
@@ -93,7 +95,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     const key = `${c},${r}`;
     const cell = cellIndex.get(key);
     if (cell?.kind === 'tent') return;
-    if (brush === 'tent' || (brush === 'bed' && field?.plant_category) || (brush === 'pet' && field?.field_kind === 'lawn')) {
+    if (brush === 'tent' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) {
       setMultiDraft((prev) => {
         const next = new Set(prev);
         if (next.has(key)) next.delete(key); else next.add(key);
@@ -119,14 +121,15 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     const newCols = Math.max(1, Math.min(30, Number(cols) || field!.cols));
     const newRows = Math.max(1, Math.min(30, Number(rows) || field!.rows));
     const newName = name.trim() || field!.name;
-    if (newCols === field!.cols && newRows === field!.rows && newName === field!.name) {
+    const newMinLevel = Math.max(0, Math.min(16, Number(minLevel) || 0));
+    if (newCols === field!.cols && newRows === field!.rows && newName === field!.name && newMinLevel === (field!.min_level ?? 0)) {
       setMsg('Нечего сохранять');
       return;
     }
     setBusy(true);
     setMsg(null);
     try {
-      const fd = await api.adminUpdateField(fieldId, { name: newName, cols: newCols, rows: newRows });
+      const fd = await api.adminUpdateField(fieldId, { name: newName, cols: newCols, rows: newRows, min_level: newMinLevel });
       setField(fd);
       setMultiDraft(new Set());
       setMsg('✓ Поле обновлено (сетка пересоздана)');
@@ -154,7 +157,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     }
     for (const pb of field?.plant_beds ?? []) {
       if (!(c2 < pb.col1 || c1 > pb.col2 || r2 < pb.row1 || r1 > pb.row2)) {
-        setMsg('✗ Пересекается с грядкой');
+        setMsg('✗ Пересекается со слотом дерева');
         return;
       }
     }
@@ -177,7 +180,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     try {
       if (brush === 'bed') {
         await api.adminCreatePlantBed(fieldId, multiModal.c1, multiModal.r1, multiModal.c2, multiModal.r2);
-        setMsg('✓ Грядка размещена');
+        setMsg('✓ Слот дерева размещён');
       } else if (brush === 'pet') {
         await api.adminCreatePetZone(fieldId, multiModal.c1, multiModal.r1, multiModal.c2, multiModal.r2);
         setMsg('✓ Зона питомца размещена');
@@ -206,6 +209,20 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       await api.adminDeleteTent(fieldId, tentId);
       await load();
       setMsg('✓ Шатёр удалён');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deletePlantBed(bedId: number) {
+    if (!confirm('Удалить слот дерева? Клетки освободятся.')) return;
+    setBusy(true);
+    try {
+      await api.adminDeletePlantBed(fieldId, bedId);
+      await load();
+      setMsg('✓ Слот дерева удалён');
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally {
@@ -295,6 +312,17 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             />
           </div>
         </div>
+        <div style={{ marginTop: 8, maxWidth: 160 }}>
+          <label style={lbl}>Мин. уровень для открытия</label>
+          <input
+            className="fm-input"
+            type="number"
+            min={0}
+            max={16}
+            value={minLevel}
+            onChange={(e) => setMinLevel(e.target.value)}
+          />
+        </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 13, cursor: 'pointer' }}>
           <input type="checkbox" checked={lockRatio} onChange={(e) => setLockRatio(e.target.checked)} />
           Сохранить пропорции 4:3
@@ -317,9 +345,10 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         const isPlant = !!(field?.plant_category);
         const kind = field?.field_kind || '';
         if (isPlant) {
+          const orchard = field?.plant_category === 'orchard';
           return (
             <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-              <BrushBtn active={brush === 'bed'} onClick={() => setBrush('bed')}>🟩 Грядка</BrushBtn>
+              <BrushBtn active={brush === 'bed'} onClick={() => setBrush('bed')}>{orchard ? '🌳 Садовое растение' : '🟩 Грядка'}</BrushBtn>
             </div>
           );
         }
@@ -356,8 +385,8 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
         {brush === 'tent'
           ? 'Тапайте по клеткам для шатра, затем «Разместить шатёр».'
-          : brush === 'bed' && field?.plant_category
-          ? 'Тапайте по клеткам для грядки, затем «Разместить грядку».'
+          : brush === 'bed' && field?.plant_category === 'orchard'
+          ? 'Тапайте по клеткам под слот дерева (1…N), затем «Разместить слот дерева».'
           : brush === 'pet' && field?.field_kind === 'lawn'
           ? 'Тапайте по клеткам для питомца, затем «Разместить зону».'
           : 'Тапайте по клеткам — тип меняется сразу (повторный тап убирает).'}
@@ -380,7 +409,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             if (c.kind === 'tent') {
               fill = KIND_FILL.tent;
             } else {
-              const isMultiCell = (brush === 'tent' || (brush === 'bed' && field?.plant_category) || (brush === 'pet' && field?.field_kind === 'lawn')) && multiDraft.has(key);
+              const isMultiCell = (brush === 'tent' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && multiDraft.has(key);
               if (isMultiCell) fill = KIND_FILL.tent;
               else fill = KIND_FILL[c.kind] ?? 'transparent';
             }
@@ -459,7 +488,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 width={sz}
                 height={sz}
                 fill="transparent"
-                style={{ cursor: (brush === 'tent' || (brush === 'bed' && field?.plant_category) || (brush === 'pet' && field?.field_kind === 'lawn')) ? 'crosshair' : 'pointer' }}
+                style={{ cursor: (brush === 'tent' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) ? 'crosshair' : 'pointer' }}
                 onClick={() => onCellClick(c, r)}
               />
             )),
@@ -467,9 +496,9 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         </svg>
       </div>
 
-      {(brush === 'tent' || (brush === 'bed' && field?.plant_category) || (brush === 'pet' && field?.field_kind === 'lawn')) && (
+      {(brush === 'tent' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && (
         <button className="fm-btn" style={{ width: '100%', marginBottom: 14 }} disabled={busy || multiDraft.size === 0} onClick={openMultiModal}>
-          {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'bed' ? '🟩 Разместить грядку' : '🐾 Разместить зону'} ({multiDraft.size})
+          {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'bed' ? '🌳 Разместить слот дерева' : '🐾 Разместить зону'} ({multiDraft.size})
         </button>
       )}
 
@@ -486,6 +515,29 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                   {t.col2 - t.col1 + 1}×{t.row2 - t.row1 + 1}
                 </div>
                 <button className="fm-btn fm-btn-sm fm-btn-danger" style={{ marginTop: 8, width: '100%' }} disabled={busy} onClick={() => deleteTent(t.id)}>
+                  Удалить
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Садовые слоты (деревья) */}
+      {field.plant_beds && field.plant_beds.length > 0 && (
+        <>
+          <h3>🌳 Слоты деревьев</h3>
+          <div className="fm-grid" style={{ marginBottom: 14 }}>
+            {field.plant_beds.map((pb) => (
+              <div key={pb.id} className="fm-card">
+                <strong>🌳 Слот дерева</strong>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {pb.plant_name ? `Занят: ${pb.plant_name}` : 'Свободен'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {pb.col2 - pb.col1 + 1}×{pb.row2 - pb.row1 + 1}
+                </div>
+                <button className="fm-btn fm-btn-sm fm-btn-danger" style={{ marginTop: 8, width: '100%' }} disabled={busy} onClick={() => deletePlantBed(pb.id)}>
                   Удалить
                 </button>
               </div>
@@ -518,11 +570,14 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
 
       {/* Модалка создания мульти-зоны */}
       {multiModal && (
-        <div onClick={() => setMultiModal(null)} style={modalOverlay}>
+        <div style={modalOverlay}>
           <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'calc(var(--shell-max-width) * 0.7)' }}>
-            <h3 style={{ marginTop: 0 }}>
-              {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'bed' ? '🟩 Разместить грядку' : '🐾 Разместить зону питомца'}
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <h3 style={{ margin: 0 }}>
+                {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'bed' ? '🌳 Разместить слот дерева' : '🐾 Разместить зону питомца'}
+              </h3>
+              <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setMultiModal(null)}>✕</button>
+            </div>
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               Область: {multiModal.c2 - multiModal.c1 + 1}×{multiModal.r2 - multiModal.r1 + 1} клеток
             </p>
@@ -541,7 +596,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
               </>
             ) : (
               <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                {brush === 'bed' ? 'Мульти-клеточная грядка. Игрок сажает растение на всю область.' : 'Мульти-клеточная зона для питомца.'}
+                {brush === 'bed' ? 'Слот садового дерева: игрок сажает сюда 1 дерево (на весь прямоугольник).' : 'Мульти-клеточная зона для питомца.'}
               </p>
             )}
             <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || (brush === 'tent' && !tentName.trim())} onClick={saveMulti}>
@@ -571,7 +626,6 @@ function BrushBtn({ active, onClick, children }: { active: boolean; onClick: () 
 function Overlay({ onClose, wide, children }: { onClose: () => void; wide?: boolean; children: React.ReactNode }) {
   return (
     <div
-      onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.7)',
         backdropFilter: 'blur(3px)', overflowY: 'auto',

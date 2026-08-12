@@ -33,6 +33,8 @@ export default function PotionsPage() {
   const [warehouseItems, setWarehouseItems] = useState<InventoryItem[]>([]);
   const [warehouseLoading, setWarehouseLoading] = useState(false);
 
+  const [levelPage, setLevelPage] = useState(0);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -155,6 +157,11 @@ export default function PotionsPage() {
   const allSlotsFilled = cauldron && cauldron.slots.length === cauldron.capacity && cauldron.slots.every((s) => s.item_id);
 
   const sortedLevels = Object.keys(groupedByLevel).sort((a, b) => Number(a) - Number(b));
+  const totalLevelPages = sortedLevels.length;
+  const safeLevelPage = Math.max(0, Math.min(levelPage, Math.max(0, totalLevelPages - 1)));
+  const currentLevel = sortedLevels[safeLevelPage];
+
+  const cauldronMaterial = cauldron?.material === 'tin' ? 'олово' : cauldron?.material === 'silver' ? 'серебро' : cauldron?.material === 'gold' ? 'золото' : '';
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
@@ -224,47 +231,56 @@ export default function PotionsPage() {
 
           <h2 style={{ fontSize: 16, marginBottom: 10 }}>Рецепты</h2>
 
+          {totalLevelPages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <button className="fm-card" disabled={safeLevelPage === 0} onClick={() => setLevelPage(safeLevelPage - 1)} style={{ cursor: safeLevelPage === 0 ? 'default' : 'pointer', opacity: safeLevelPage === 0 ? 0.4 : 1, padding: '6px 14px', fontSize: 18 }}>◀</button>
+              <span style={{ fontWeight: 600 }}>
+                {currentLevel === 'green' ? '🟢 Простые' : currentLevel === 'blue' ? '🔵 Средние' : currentLevel === 'violet' ? '🟣 Сложные' : currentLevel}
+                {cauldronMaterial && ` (${cauldronMaterial})`}
+              </span>
+              <button className="fm-card" disabled={safeLevelPage >= totalLevelPages - 1} onClick={() => setLevelPage(safeLevelPage + 1)} style={{ cursor: safeLevelPage >= totalLevelPages - 1 ? 'default' : 'pointer', opacity: safeLevelPage >= totalLevelPages - 1 ? 0.4 : 1, padding: '6px 14px', fontSize: 18 }}>▶</button>
+            </div>
+          )}
+
           {sortedLevels.length === 0 ? (
             <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет доступных рецептов.</div>
-          ) : (
-            sortedLevels.map((lv) => (
-              <div key={lv} style={{ marginBottom: 14 }}>
-                <h3 style={{ fontSize: 15, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-                  Уровень {LEVEL_LABELS[lv] || lv}
-                </h3>
-                <div className="fm-grid">
-                  {groupedByLevel[lv].map((r) => (
-                    <div key={r.id} className="fm-card fm-rise">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <strong>{r.name}</strong>
-                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                            {r.ingredient_slots.map((s) => INGREDIENT_ICON[s] || s).join(' ')} · {r.ingredient_slots.length} слота
+          ) : currentLevel ? (
+            <div style={{ marginBottom: 14 }}>
+              <h3 style={{ fontSize: 15, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+                Уровень {LEVEL_LABELS[currentLevel] || currentLevel}
+              </h3>
+              <div className="fm-grid">
+                {groupedByLevel[currentLevel].map((r) => (
+                  <div key={r.id} className="fm-card fm-rise">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <strong>{r.name}</strong>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          {r.ingredient_slots.map((s) => INGREDIENT_ICON[s] || s).join(' ')} · {r.ingredient_slots.length} слота
+                        </div>
+                        {r.bonus_code && (
+                          <div className="fm-chip" style={{ background: 'rgba(160,120,220,0.18)', marginTop: 4 }}>
+                            Бонус: {r.bonus_code}
                           </div>
-                          {r.bonus_code && (
-                            <div className="fm-chip" style={{ background: 'rgba(160,120,220,0.18)', marginTop: 4 }}>
-                              Бонус: {r.bonus_code}
-                            </div>
-                          )}
-                          <div className="fm-chip" style={{ background: 'rgba(224,168,62,0.18)', marginTop: 2 }}>
-                            🪙 {r.reward_coins} монет
-                          </div>
+                        )}
+                        <div className="fm-chip" style={{ background: 'rgba(224,168,62,0.18)', marginTop: 2 }}>
+                          🪙 {r.reward_coins} монет
                         </div>
                       </div>
-                      <button
-                        className="fm-btn fm-btn-sm"
-                        style={{ width: '100%', marginTop: 10 }}
-                        disabled={busy || !!cauldron}
-                        onClick={() => createCauldron(r.id)}
-                      >
-                        Установить рецепт и котёл
-                      </button>
                     </div>
-                  ))}
-                </div>
+                    <button
+                      className="fm-btn fm-btn-sm"
+                      style={{ width: '100%', marginTop: 10 }}
+                      disabled={busy || !!cauldron}
+                      onClick={() => createCauldron(r.id)}
+                    >
+                      Установить рецепт и котёл
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))
-          )}
+            </div>
+          ) : null}
 
           {userPotions.length > 0 && (
             <>
@@ -333,7 +349,6 @@ export default function PotionsPage() {
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
     <div
-      onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 60,
         background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)',

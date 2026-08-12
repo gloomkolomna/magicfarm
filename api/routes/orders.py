@@ -1,5 +1,4 @@
 import datetime
-import random
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
@@ -15,7 +14,25 @@ from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
-CUSTOMERS = ("Ученица Холли", "Русалка Оресия", "Маг Мерлин", "Травница Морган", "Алхимик Зелье")
+CUSTOMER_NAMES = (
+    "Леди Бейлин", "Иллюзионист Мерлин", "Крестьянка Бэт", "Крестьянин Том",
+    "Травница Свентана", "Профессор Дамболдор", "Волшебница Альвева", "Палач Мор",
+    "Ведьма Бригида", "Волшебник Рандольф", "Ученица Гильда", "Профессор Рон",
+    "Господин Иоханн", "Поэт Вальтер", "Цветочница Колетта", "Маг Годвин",
+    "Ведьма Груда", "Ведьма Доротея", "Водяная Акварис", "Тролль Гослин",
+    "Воин Стасий", "Водяной Дионисий", "Болотная Иса", "Прокажённый Гус",
+    "Хамон", "Разбойница Томасина", "Эльф Эверард", "Бусли",
+    "Разбойник Гольём", "Библиотекарь Летард", "Книжница Элоиза", "Циркач Белкс",
+    "Старец Эдрик", "Изобретатель Нигель", "Розамунда", "Гуннильда",
+    "Фей Алан", "Прометеус", "Гном Дремотун", "Гном Гром",
+    "Гном Плясун", "Султан Арагим", "Султан Эфиос", "Красавица Ева",
+    "Художница Стефания", "Сэр Аорон", "Фея Аврора", "Король Артур",
+    "Оборотень Рандус", "Старец Симонус", "Эльф Анарендил", "Эльфийка Хиварра",
+    "Эльф Фараун", "Астроном Сириус", "Русалка Марин", "Профессор Сусанна",
+    "Гадалка Сванекильда", "Ученица Холли", "Русалка Оресия", "Русалка Эделина",
+    "Профессор Гилотта", "Иллюзионист Сфериус", "Волшебница Идонея", "Учёный Томас",
+    "Профессор Кларисса",
+)
 
 MIN_QTY = 1
 MAX_QTY = 20
@@ -55,10 +72,18 @@ def _to_out(o: OrderReq) -> OrderOut:
     return OrderOut(
         id=o.id, product_id=o.product_id, product_code=o.product.code,
         product_name=o.product.name, product_emoji=o.product.emoji,
-        qty=o.qty, reward_coins=o.reward_coins, customer=o.customer,
+        qty=o.qty, reward_coins=o.reward_coins,
+        customer=o.customer,
         status=o.status, name=o.name, image_url=o.image_url,
         created_at=o.created_at, fulfilled_at=o.fulfilled_at,
     )
+
+
+@router.get("/customers", response_model=list[str])
+def list_customer_names(
+    user: User = Depends(get_current_user),
+):
+    return list(CUSTOMER_NAMES)
 
 
 @router.get("", response_model=list[OrderOut])
@@ -80,6 +105,7 @@ def list_orders(
 class GenerateRequest(BaseModel):
     product_id: int
     qty: int | None = None
+    customer: str | None = None
 
 
 @router.post("/generate", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -91,7 +117,7 @@ def generate_order(
     """Создаёт NPC-заказ для игрока.
 
     В правилах Фермы заказ приходит из игры (карточка). В цифре заказ генерируется
-    по запросу: случайный заказчик, награда = qty × order_reward_per_unit.
+    по запросу: заказчик выбирается из списка, награда = qty × order_reward_per_unit.
     """
     product = db.query(Product).filter(Product.id == req.product_id).first()
     if product is None:
@@ -106,10 +132,25 @@ def generate_order(
     reward = qty * get_order_reward(db)
     o = OrderReq(
         user_id=user.vk_id, product_id=product.id, qty=qty,
-        reward_coins=reward, customer=random.choice(CUSTOMERS),
+        reward_coins=reward, customer=req.customer,
         status="open",
     )
     db.add(o)
+    db.commit()
+    db.refresh(o)
+    return _to_out(o)
+
+
+@router.post("/{order_id}/image", response_model=OrderOut)
+def upload_own_order_image(
+    order_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    o = _get_user_order(order_id, user, db)
+    remove_upload(o.image_url)
+    o.image_url = save_upload(image, f"order_{order_id}", max_size=800)
     db.commit()
     db.refresh(o)
     return _to_out(o)
@@ -201,6 +242,7 @@ def admin_list_orders(
 class AdminGenerateRequest(BaseModel):
     product_id: int
     qty: int | None = None
+    customer: str | None = None
 
 
 @admin_router.post("/generate", response_model=AdminOrderOut, status_code=status.HTTP_201_CREATED)
@@ -219,9 +261,10 @@ def admin_generate_order(
             detail=f"Количество должно быть от {MIN_QTY} до {MAX_QTY}",
         )
     reward = qty * get_order_reward(db)
+    customer = req.customer
     o = OrderReq(
         user_id=None, product_id=product.id, qty=qty,
-        reward_coins=reward, customer=random.choice(CUSTOMERS),
+        reward_coins=reward, customer=customer,
         status="open",
     )
     db.add(o)
@@ -374,8 +417,8 @@ def create_template(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
-    if req.source_kind not in ("plant", "animal", "product"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="source_kind: plant/animal/product")
+    if req.source_kind not in ("plant", "animal", "product", "potion"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="source_kind: plant/animal/product/potion")
     if req.qty < 1:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="qty >= 1")
     product = db.query(Product).filter(Product.id == req.product_id).first()
@@ -402,8 +445,8 @@ def update_template(
     t = db.query(OrderTemplate).filter(OrderTemplate.id == template_id).first()
     if t is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Шаблон не найден")
-    if req.source_kind not in ("plant", "animal", "product"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="source_kind: plant/animal/product")
+    if req.source_kind not in ("plant", "animal", "product", "potion"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="source_kind: plant/animal/product/potion")
     if req.qty < 1:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="qty >= 1")
     t.source_kind = req.source_kind
@@ -430,3 +473,20 @@ def delete_template(
     db.delete(t)
     db.commit()
     return None
+
+
+@template_router.put("/{template_id}/image", response_model=OrderTemplateOut)
+def upload_template_image(
+    template_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    t = db.query(OrderTemplate).filter(OrderTemplate.id == template_id).first()
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Шаблон не найден")
+    remove_upload(t.image_url)
+    t.image_url = save_upload(image, f"order_template_{template_id}", max_size=800)
+    db.commit()
+    db.refresh(t)
+    return _tpl_out(t)

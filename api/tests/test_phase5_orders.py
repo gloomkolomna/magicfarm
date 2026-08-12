@@ -86,6 +86,43 @@ def test_template_player_forbidden(admin_client):
         assert r.status_code == 403
 
 
+def test_template_image_upload(admin_client, monkeypatch):
+    import tempfile
+    import config
+    monkeypatch.setattr(config, "UPLOADS_DIR", tempfile.mkdtemp(prefix="farm_tpl_up_"))
+
+    r = admin_client.post("/api/admin/order-templates", json={
+        "source_kind": "plant", "source_id": 1, "product_id": 1,
+        "qty": 2, "reward_coins": 10, "customer": "Маг",
+    })
+    tid = r.json()["id"]
+    assert r.json()["image_url"] is None
+
+    img = _real_img()
+    r = admin_client.put(f"/api/admin/order-templates/{tid}/image", files=[
+        ("image", ("a.png", img, "image/png")),
+    ])
+    assert r.status_code == 200
+    assert r.json()["image_url"]
+
+    listed = admin_client.get("/api/admin/order-templates").json()
+    assert listed[0]["image_url"]
+
+    with make_user_client(123, "player") as c:
+        r = c.put(f"/api/admin/order-templates/{tid}/image", files=[
+            ("image", ("a.png", img, "image/png")),
+        ])
+        assert r.status_code == 403
+
+
+def test_template_image_not_found(admin_client):
+    img = _real_img()
+    r = admin_client.put("/api/admin/order-templates/9999/image", files=[
+        ("image", ("a.png", img, "image/png")),
+    ])
+    assert r.status_code == 404
+
+
 def test_auto_order_on_plant(admin_client):
     admin_client.post("/api/admin/order-templates", json={
         "source_kind": "plant", "source_id": 1, "product_id": 1,

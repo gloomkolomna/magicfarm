@@ -1,0 +1,17 @@
+[Unit]
+Description=MagicFarm VK Bot (заготовка)
+After=network.target magicfarm-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/magicfarm
+Environment=PATH=/opt/magicfarm/api/venv/bin
+Environment=PYTHONPATH=/opt/magicfarm/api
+# TODO: активировать когда бот будет реализован.
+# ExecStart=/opt/magicfarm/api/venv/bin/python -m bot
+ExecStart=/bin/true
+RemainAfterExit=yes
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

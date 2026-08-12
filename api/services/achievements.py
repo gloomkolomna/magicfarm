@@ -2,6 +2,23 @@ from sqlalchemy.orm import Session
 from models import Achievement, Plot, UserAchievement
 
 
+ACHIEVEMENT_KINDS = [
+    {"kind": "first_plant", "label": "Первое растение", "hint": "первая грядка посажена"},
+    {"kind": "plots_count", "label": "Грядки", "hint": "сколько грядок у игрока"},
+    {"kind": "first_order", "label": "Первый заказ", "hint": "выполнено заказов"},
+    {"kind": "coins_reached", "label": "Монеты", "hint": "всего монет у игрока"},
+    {"kind": "animals_count", "label": "Животные", "hint": "животных в стойле"},
+    {"kind": "pets_count", "label": "Питомцы", "hint": "питомцев у игрока"},
+    {"kind": "potions_count", "label": "Зелья", "hint": "зелий у игрока"},
+    {"kind": "tents_count", "label": "Шатры", "hint": "построено шатров"},
+    {"kind": "level_reached", "label": "Уровень", "hint": "достигнут уровень"},
+]
+
+
+def known_kinds() -> set[str]:
+    return {k["kind"] for k in ACHIEVEMENT_KINDS}
+
+
 def check_and_award(user_id: int, condition_kind: str, db: Session) -> int:
     achievements = db.query(Achievement).filter(
         Achievement.condition_kind == condition_kind

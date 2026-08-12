@@ -18,6 +18,7 @@ class PlantOut(BaseModel):
     level: int
     norm_per_crystal: int
     description: str | None
+    stitch_condition: str | None
     image_url: str | None
     image_young_url: str | None
     image_grown_url: str | None
@@ -27,7 +28,7 @@ def _to_out(p: Plant) -> PlantOut:
     return PlantOut(
         id=p.id, code=p.code, name=p.name, emoji=p.emoji,
         category=p.category, level=p.level, norm_per_crystal=p.norm_per_crystal,
-        description=p.description,
+        description=p.description, stitch_condition=p.stitch_condition,
         image_url=p.image_url, image_young_url=p.image_young_url, image_grown_url=p.image_grown_url,
     )
 

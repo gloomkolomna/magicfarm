@@ -1,0 +1,21 @@
+[Unit]
+Description=MagicFarm API (FastAPI gunicorn)
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/magicfarm
+Environment=PATH=/opt/magicfarm/api/venv/bin
+Environment=PYTHONPATH=/opt/magicfarm/api
+ExecStart=/opt/magicfarm/api/venv/bin/gunicorn \
+    -w 2 \
+    -k uvicorn.workers.UvicornWorker \
+    --bind 127.0.0.1:8003 \
+    --access-logfile /var/log/magicfarm/api-access.log \
+    --error-logfile /var/log/magicfarm/api-error.log \
+    --timeout 120 \
+    api.main:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

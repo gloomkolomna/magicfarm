@@ -1,8 +1,8 @@
 #!/bin/bash
-# Daily DB backup script — «Ферма».
-# В cron, например: 0 3 * * * /opt/farm/deploy/backup.sh
-DB_FILE="/opt/farm/api/farm.db"
-BACKUP_DIR="/opt/farm/api/backups"
+# Daily DB backup script — «MagicFarm».
+# В cron, например: 0 3 * * * /opt/magicfarm/deploy/backup.sh
+DB_FILE="/opt/magicfarm/api/farm.db"
+BACKUP_DIR="/opt/magicfarm/api/backups"
 RETENTION_DAYS=7
 
 mkdir -p "$BACKUP_DIR"

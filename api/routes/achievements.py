@@ -1,12 +1,15 @@
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_role
 from models import Achievement, User, UserAchievement
+from routes.admin_catalog import _auto_code, _unique_code
+from services.achievements import ACHIEVEMENT_KINDS, known_kinds
+from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/achievements", tags=["achievements"])
 
@@ -47,7 +50,7 @@ admin_router = APIRouter(prefix="/api/admin/achievements", tags=["admin-achievem
 
 
 class AchievementCreate(BaseModel):
-    code: str
+    code: str | None = None
     name: str
     condition_kind: str
     condition_value: int = 1
@@ -63,17 +66,24 @@ def admin_list(
     return [_ach_out(a, 0, db) for a in rows]
 
 
+@admin_router.get("/kinds")
+def admin_kinds(
+    user: User = Depends(require_role("admin")),
+):
+    return ACHIEVEMENT_KINDS
+
+
 @admin_router.post("", response_model=AchievementOut, status_code=status.HTTP_201_CREATED)
 def admin_create(
     req: AchievementCreate,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
-    existing = db.query(Achievement).filter(Achievement.code == req.code).first()
-    if existing is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Достижение с таким кодом уже есть")
+    if req.condition_kind not in known_kinds():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный тип условия")
+    code = (req.code or "").strip() or _unique_code(_auto_code(req.name, "ach"), Achievement, db)
     a = Achievement(
-        code=req.code, name=req.name,
+        code=code, name=req.name,
         condition_kind=req.condition_kind, condition_value=req.condition_value,
         image_url=req.image_url,
     )
@@ -93,6 +103,8 @@ def admin_update(
     a = db.query(Achievement).filter(Achievement.id == achievement_id).first()
     if a is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Достижение не найдено")
+    if req.condition_kind not in known_kinds():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный тип условия")
     a.name = req.name
     a.condition_kind = req.condition_kind
     a.condition_value = req.condition_value
@@ -114,3 +126,20 @@ def admin_delete(
     db.delete(a)
     db.commit()
     return None
+
+
+@admin_router.put("/{achievement_id}/image", response_model=AchievementOut)
+def upload_achievement_image(
+    achievement_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    a = db.query(Achievement).filter(Achievement.id == achievement_id).first()
+    if a is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Достижение не найдено")
+    remove_upload(a.image_url)
+    a.image_url = save_upload(image, f"achievement_{achievement_id}", max_size=400)
+    db.commit()
+    db.refresh(a)
+    return _ach_out(a, 0, db)

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { api, type CrystalCard, type FieldCellDetail, type FieldDetail, type Product, type Tent } from '../api/endpoints';
+import { api, type CrystalCard, type FieldCellDetail, type FieldDetail, type PlantBed, type Product, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import plotUrl from '../assets/plot.png';
 
@@ -23,8 +23,14 @@ export default function FieldPage() {
   const [plantSel, setPlantSel] = useState<number | null>(null);
   const [plantQty, setPlantQty] = useState('1');
 
+  // Модалка посадки дерева в слот сада.
+  const [plantBed, setPlantBed] = useState<PlantBed | null>(null);
+  const [plantBedSel, setPlantBedSel] = useState<number | null>(null);
+  const [plantBedQty, setPlantBedQty] = useState('1');
+
   // Модалка ухода за грядкой (invest) + отчёт о вышивке.
   const [careCell, setCareCell] = useState<FieldCellDetail | null>(null);
+  const [careBedId, setCareBedId] = useState<number | null>(null);
   const [investAmount, setInvestAmount] = useState('');
   const [stitchAmount, setStitchAmount] = useState('');
   const [stitchPhotoBefore, setStitchPhotoBefore] = useState<File | null>(null);
@@ -121,6 +127,32 @@ export default function FieldPage() {
     } finally { setBusy(false); }
   }
 
+  async function doPlantBed() {
+    if (!plantBed || plantBedSel == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.plantOnBed(fieldId, plantBed.id, plantBedSel, Number(plantBedQty) || 1);
+      setMsg('✓ Дерево посажено! Нажмите на слот чтобы узнать норму.');
+      setPlantBed(null); setPlantBedSel(null); setPlantBedQty('1');
+      await load(); await refresh();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  function bedToCareCell(pb: PlantBed): FieldCellDetail {
+    return {
+      id: -1, col: pb.col1, row: pb.row1, kind: 'bed',
+      plant_id: pb.plant_id, occupant_user_id: pb.occupant_user_id, tent_id: null,
+      plant_name: pb.plant_name ?? null,
+      plant_emoji: pb.plant_emoji ?? null,
+      plant_image_young: pb.plant_image_young ?? null,
+      plant_image_grown: pb.plant_image_grown ?? null,
+      plot: pb.plot ?? null,
+      tent_name: null, tent_image: null, occupant_name: null,
+    };
+  }
+
   async function doInvest() {
     if (!careCell || !investAmount) return;
     const plot = careCell.plot;
@@ -129,7 +161,7 @@ export default function FieldPage() {
     try {
       await api.investPlot(plot.id, Number(investAmount));
       setMsg('✓ Крестики вложены');
-      setCareCell(null); setInvestAmount('');
+      setCareCell(null); setCareBedId(null); setInvestAmount('');
       await load(); await refresh();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -146,7 +178,7 @@ export default function FieldPage() {
       );
       setMsg('✓ Зачтено! Крестики начислены.');
       setStitchAmount(''); setStitchPhotoBefore(null); setStitchPhoto(null); setStitchNote('');
-      setCareCell(null);
+      setCareCell(null); setCareBedId(null);
       await load(); await refresh();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -156,8 +188,14 @@ export default function FieldPage() {
   async function doHarvest(cell: FieldCellDetail) {
     setBusy(true); setMsg(null);
     try {
-      await api.harvestCell(fieldId, cell.col, cell.row);
-      setMsg('✓ Урожай собран, клетка свободна');
+      if (careBedId != null) {
+        await api.harvestBed(fieldId, careBedId);
+        setMsg('✓ Урожай собран');
+      } else {
+        await api.harvestCell(fieldId, cell.col, cell.row);
+        setMsg('✓ Урожай собран, клетка свободна');
+      }
+      setCareBedId(null);
       await load(); await refresh();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -390,6 +428,80 @@ export default function FieldPage() {
                 </div>
               );
             })}
+
+            {/* Садовые слоты-деревья — кликабельны в пределах своего прямоугольника. */}
+            {field.plant_category === 'orchard' && field.plant_beds?.map((pb) => {
+              const spanCols = pb.col2 - pb.col1 + 1;
+              const spanRows = pb.row2 - pb.row1 + 1;
+              const occupied = pb.occupant_user_id != null;
+              const grownImg = pb.plot?.status === 'grown' ? pb.plant_image_grown : pb.plant_image_young;
+              return (
+                <div
+                  key={`bed-${pb.id}`}
+                  style={{
+                    position: 'absolute', inset: 0, pointerEvents: 'none', display: 'grid',
+                    gridTemplateColumns: `repeat(${field.cols}, 1fr)`,
+                    gridTemplateRows: `repeat(${field.rows}, 1fr)`,
+                  }}
+                >
+                  <div
+                    onClick={() => {
+                      if (!occupied) {
+                        setPlantBed(pb);
+                        setPlantBedSel(field.plants[0]?.id ?? null);
+                      } else {
+                        setShowVideo(false);
+                        setCardResult(null);
+                        setCareBedId(pb.id);
+                        setCareCell(bedToCareCell(pb));
+                        setInvestAmount(pb.plot ? String(pb.plot.required - (pb.plot.accumulated ?? 0)) : '');
+                      }
+                    }}
+                    style={{
+                      gridColumn: `${pb.col1 + 1} / span ${spanCols}`,
+                      gridRow: `${pb.row1 + 1} / span ${spanRows}`,
+                      display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center', gap: 4,
+                      padding: 6, overflow: 'hidden',
+                      border: !occupied ? '2px dashed rgba(120,200,90,0.7)' : 'none',
+                      borderRadius: 6,
+                      background: occupied && pb.plot
+                        ? (pb.plot.status === 'grown' ? 'rgba(111,174,74,0.25)' : 'rgba(90,143,62,0.15)')
+                        : 'transparent',
+                      cursor: 'pointer',
+                      pointerEvents: 'auto',
+                      position: 'relative',
+                    }}
+                  >
+                    {occupied && grownImg && (
+                      <img src={mediaUrl(grownImg)} alt="" style={{ maxWidth: '70%', maxHeight: '55%', objectFit: 'contain', pointerEvents: 'none' }} />
+                    )}
+                    {occupied && !grownImg && pb.plant_emoji && (
+                      <div style={{ fontSize: '8vw', lineHeight: 1, pointerEvents: 'none' }}>{pb.plant_emoji}</div>
+                    )}
+                    {occupied && pb.plot && pb.plot.status !== 'grown' && (
+                      <div style={{ fontSize: 11, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>
+                        {pb.plot.accumulated}/{pb.plot.required}
+                      </div>
+                    )}
+                    {occupied && pb.plot && pb.plot.status === 'grown' && (
+                      <div style={{ fontSize: 20, color: '#7fff7f', pointerEvents: 'none' }}>✓</div>
+                    )}
+                    {occupied && pb.plot && (
+                      <div style={{ position: 'absolute', bottom: 6, left: 6, fontSize: 13, color: '#fff', textShadow: '0 1px 2px #000', fontWeight: 700, pointerEvents: 'none' }}>
+                        ×{pb.plot.qty}
+                      </div>
+                    )}
+                    {!occupied && (
+                      <div style={{ fontSize: 'clamp(11px,3vw,16px)', color: '#d7f5c0', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600, pointerEvents: 'none' }}>
+                        🌳 Слот дерева
+                        <div style={{ fontSize: 10, opacity: 0.85 }}>свободно</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div style={{ color: 'var(--text-muted)', fontSize: 16 }}>Карта не загружена</div>
@@ -447,17 +559,46 @@ export default function FieldPage() {
         </Modal>
       )}
 
+      {/* Модалка посадки дерева в слот сада */}
+      {plantBed && (
+        <Modal title="🌳 Посадить дерево" onClose={() => setPlantBed(null)}>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            Слот дерева ({plantBed.col2 - plantBed.col1 + 1}×{plantBed.row2 - plantBed.row1 + 1}). Выберите садовое растение:
+          </p>
+          {(() => {
+            const plantedIds = new Set<number>([
+              ...field.cells.filter((c) => c.plant_id != null && c.occupant_user_id != null).map((c) => c.plant_id!),
+              ...(field.plant_beds?.filter((b) => b.plant_id != null && b.occupant_user_id != null).map((b) => b.plant_id!) ?? []),
+            ]);
+            const available = field.plants.filter((p) => !plantedIds.has(p.id));
+            if (available.length === 0) {
+              return <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Все доступные растения уже посажены.</div>;
+            }
+            return (
+              <select className="fm-input" value={plantBedSel ?? ''} onChange={(e) => setPlantBedSel(Number(e.target.value))}>
+                {available.map((p) => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+              </select>
+            );
+          })()}
+          <div style={{ marginTop: 8 }}>
+            <label style={{ fontSize: 13 }}>Количество плодов (1–20):</label>
+            <input className="fm-input" type="number" min={1} max={20} value={plantBedQty} onChange={(e) => setPlantBedQty(e.target.value)} />
+          </div>
+          <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || plantBedSel == null} onClick={doPlantBed}>Посадить дерево</button>
+        </Modal>
+      )}
+
       {/* Модалка ухода за грядкой (норма + отчёт) */}
       {careCell && careCell.plot && (
         <Modal
           title={`${careCell.plant_emoji || ''} ${careCell.plant_name || ''}`.trim() || 'Грядка'}
-          onClose={() => { setCareCell(null); }}
+          onClose={() => { setCareCell(null); setCareBedId(null); }}
           wide={showVideo || (careCell.plot.norm_revealed && !showVideo)}
         >
           {careCell.plot.status === 'grown' ? (
             <>
               <p style={{ fontSize: 14, color: 'var(--success)' }}>✓ Растение выросло!</p>
-              <button className="fm-btn" style={{ width: '100%', marginTop: 8 }} disabled={busy} onClick={() => { doHarvest(careCell); setCareCell(null); }}>
+              <button className="fm-btn" style={{ width: '100%', marginTop: 8 }} disabled={busy} onClick={() => { doHarvest(careCell); setCareCell(null); setCareBedId(null); }}>
                 🧺 Собрать урожай
               </button>
             </>
@@ -635,7 +776,7 @@ export default function FieldPage() {
       )}
 
       {zoomedImg && (
-        <div onClick={() => setZoomedImg(null)} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <button
             onClick={() => setZoomedImg(null)}
             style={{ position: 'absolute', top: 16, right: 16, zIndex: 1, fontSize: 24, background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: '8px 12px' }}
@@ -652,7 +793,7 @@ export default function FieldPage() {
 
 function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: wide ? 8 : 16 }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: wide ? 8 : 16 }}>
       <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: wide ? '95vw' : 'calc(var(--shell-max-width) * 0.7)', maxHeight: wide ? '95vh' : '85vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <h2 style={{ margin: 0 }}>{title}</h2>

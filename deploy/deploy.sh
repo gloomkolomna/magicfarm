@@ -3,24 +3,24 @@
 # Деплой системы «Ферма» на прод.
 #
 # Адаптация deploy/deploy.sh из «Затерянный мир» (конвенции 1:1).
-# Различия: пути /opt/farm, порт 8003, префикс /farm/, бота пока нет.
+# Различия: пути /opt/magicfarm, порт 8003, префикс /magicfarm/, бота пока нет.
 #
 # Режим восстановления (флаг -recovery / --recovery):
 #   ./deploy.sh -recovery
-#   Интерактивное восстановление проекта из tar-архива (farm_full_*.tar.gz).
+#   Интерактивное восстановление проекта из tar-архива (magicfarm_full_*.tar.gz).
 #   Перед распаковкой создаёт резервную копию ТЕКУЩЕГО состояния
-#   (farm_pre_recovery_<ts>.tar.gz), чтобы можно было откатиться.
+#   (magicfarm_pre_recovery_<ts>.tar.gz), чтобы можно было откатиться.
 #
 # Обычный деплой (без флагов):
 #   ./deploy.sh
 #   1. Фиксируем текущую ревизию Alembic (точка отката БД) и git (точка отката кода).
 #   2. Полный архив проекта (код + БД + dist + .env) ДО изменений.
-#      Ротация 5 архивов в /opt/farm-backups. Бэкап БД строго до миграции.
+#      Ротация 5 архивов в /opt/magicfarm-backups. Бэкап БД строго до миграции.
 #      Бэкап dist (фронтенд) до сборки.
 #   3. git pull.
 #   4. alembic upgrade head.
-#   5. Сборка фронта + рестарт сервиса farm-api.
-#      (farm-bot пока не реализован — шаг закомментирован, см. TODO.)
+#   5. Сборка фронта + рестарт сервиса magicfarm-api.
+#      (magicfarm-bot пока не реализован — шаг закомментирован, см. TODO.)
 #   6. Health-check после рестарта.
 #   7. При ЛЮБОЙ ошибке на этапах 3–6:
 #      — откат БД (downgrade или бэкап)
@@ -50,10 +50,10 @@ done
 
 # ===== Режим восстановления из tar-архива =====
 if [ "$RECOVERY_MODE" -eq 1 ]; then
-    RECOVERY_BACKUP_DIR="/opt/farm-backups"
+    RECOVERY_BACKUP_DIR="/opt/magicfarm-backups"
     RECOVERY_APP_PARENT="/opt"
-    RECOVERY_APP_NAME="farm"
-    RECOVERY_LOG="/opt/farm-backups/recovery.log"
+    RECOVERY_APP_NAME="magicfarm"
+    RECOVERY_LOG="/opt/magicfarm-backups/recovery.log"
 
     mkdir -p "$RECOVERY_BACKUP_DIR"
 
@@ -63,9 +63,9 @@ if [ "$RECOVERY_MODE" -eq 1 ]; then
 
     _recovery_log "=== ВОССТАНОВЛЕНИЕ ПРОЕКТА ИЗ АРХИВА ==="
 
-    mapfile -t ARCHIVES < <(ls -1t "$RECOVERY_BACKUP_DIR"/farm_full_*.tar.gz 2>/dev/null || true)
+    mapfile -t ARCHIVES < <(ls -1t "$RECOVERY_BACKUP_DIR"/magicfarm_full_*.tar.gz 2>/dev/null || true)
     if [ "${#ARCHIVES[@]}" -eq 0 ]; then
-        _recovery_log "ОШИБКА: архивы не найдены в $RECOVERY_BACKUP_DIR/farm_full_*.tar.gz"
+        _recovery_log "ОШИБКА: архивы не найдены в $RECOVERY_BACKUP_DIR/magicfarm_full_*.tar.gz"
         echo "Нет доступных архивов для восстановления."
         exit 1
     fi
@@ -102,7 +102,7 @@ if [ "$RECOVERY_MODE" -eq 1 ]; then
         exit 0
     fi
 
-    PRE_RECOVERY_ARCHIVE="$RECOVERY_BACKUP_DIR/farm_pre_recovery_$(date '+%Y%m%d_%H%M%S').tar.gz"
+    PRE_RECOVERY_ARCHIVE="$RECOVERY_BACKUP_DIR/magicfarm_pre_recovery_$(date '+%Y%m%d_%H%M%S').tar.gz"
     _recovery_log "Создаю резервную копию текущего состояния: $PRE_RECOVERY_ARCHIVE ..."
     if tar -czf "$PRE_RECOVERY_ARCHIVE" \
         --exclude="$RECOVERY_APP_PARENT/$RECOVERY_APP_NAME/api/venv" \
@@ -120,15 +120,15 @@ if [ "$RECOVERY_MODE" -eq 1 ]; then
         exit 1
     fi
 
-    _recovery_log "Останавливаю сервис farm-api..."
-    systemctl stop farm-api 2>/dev/null || true
+    _recovery_log "Останавливаю сервис magicfarm-api..."
+    systemctl stop magicfarm-api 2>/dev/null || true
     sleep 2
 
     _recovery_log "Восстанавливаю из архива: $SELECTED_ARCHIVE ..."
     if ! tar -xzf "$SELECTED_ARCHIVE" -C "$RECOVERY_APP_PARENT"; then
         _recovery_log "ОШИБКА: распаковка не удалась. Текущее состояние сохранено в $PRE_RECOVERY_ARCHIVE."
         echo "ОШИБКА: распаковка не удалась. Откат: $PRE_RECOVERY_ARCHIVE"
-        systemctl start farm-api 2>/dev/null || true
+        systemctl start magicfarm-api 2>/dev/null || true
         exit 1
     fi
     _recovery_log "Архив распакован."
@@ -142,35 +142,35 @@ if [ "$RECOVERY_MODE" -eq 1 ]; then
         _recovery_log "ПРЕДУПРЕЖДЕНИЕ: venv не найден. Зависимости не переустановлены."
     fi
 
-    _recovery_log "Запускаю сервис farm-api..."
-    systemctl start farm-api 2>/dev/null || true
+    _recovery_log "Запускаю сервис magicfarm-api..."
+    systemctl start magicfarm-api 2>/dev/null || true
     sleep 3
 
-    ls -1t "$RECOVERY_BACKUP_DIR"/farm_pre_recovery_*.tar.gz 2>/dev/null | tail -n +6 | while read -r old; do
+    ls -1t "$RECOVERY_BACKUP_DIR"/magicfarm_pre_recovery_*.tar.gz 2>/dev/null | tail -n +6 | while read -r old; do
         rm -f "$old"
         _recovery_log "Удалён старый pre_recovery архив: $old"
     done
 
     _recovery_log "=== ВОССТАНОВЛЕНИЕ ЗАВЕРШЕНО ==="
-    _recovery_log "API: $(systemctl is-active farm-api || true)."
+    _recovery_log "API: $(systemctl is-active magicfarm-api || true)."
     _recovery_log "Если что-то не так — откат: tar -xzf $PRE_RECOVERY_ARCHIVE -C $RECOVERY_APP_PARENT"
     echo ""
     echo "=== Восстановление завершено ==="
-    echo "Статус сервиса: API=$(systemctl is-active farm-api || echo 'не активен')"
+    echo "Статус сервиса: API=$(systemctl is-active magicfarm-api || echo 'не активен')"
     echo "Резервная копия текущего состояния (до восстановления): $PRE_RECOVERY_ARCHIVE"
     exit 0
 fi
 
 # ===== Конфигурация =====
-APP_DIR="/opt/farm"
+APP_DIR="/opt/magicfarm"
 API_DIR="$APP_DIR/api"
 FRONTEND_DIR="$APP_DIR/frontend"
 DB_FILE="$API_DIR/farm.db"
 BACKUP_DIR="$API_DIR/backups"
 BACKUPS_TO_KEEP=10
-FULL_BACKUP_DIR="/opt/farm-backups"
+FULL_BACKUP_DIR="/opt/magicfarm-backups"
 FULL_BACKUPS_TO_KEEP=5
-GIT_REMOTE="https://github.com/gloomkolomna/farm"   # ЗАМЕНИ, если репозиторий другой
+GIT_REMOTE="https://github.com/gloomkolomna/magicfarm.git"
 GIT_BRANCH="main"
 HEALTH_URL="http://127.0.0.1:8003/api/"              # через nginx — поменяй на домен/путь
 LOG_FILE="$API_DIR/deploy.log"
@@ -245,12 +245,12 @@ rollback_all() {
         mv "$DIST_BACKUP_PATH" "$FRONTEND_DIR/dist"
     fi
 
-    log "ОТКАТ: перезапуск сервиса farm-api..."
-    systemctl restart farm-api || true
+    log "ОТКАТ: перезапуск сервиса magicfarm-api..."
+    systemctl restart magicfarm-api || true
 
     rm -rf "$FRONTEND_DIR/dist.bak" 2>/dev/null || true
 
-    log "ОТКАТ завершён. API: $(systemctl is-active farm-api || true)."
+    log "ОТКАТ завершён. API: $(systemctl is-active magicfarm-api || true)."
 }
 
 # ===== Ловушка ошибок =====
@@ -259,7 +259,7 @@ on_error() {
     log "ДЕПЛОЙ ПРОВАЛЕН (код $exit_code). Запускаю полный откат..."
     trap - ERR
     rollback_all
-    log "Деплой завершён с ошибкой. API: $(systemctl is-active farm-api || true)."
+    log "Деплой завершён с ошибкой. API: $(systemctl is-active magicfarm-api || true)."
 }
 trap on_error ERR
 
@@ -288,7 +288,7 @@ fi
 # ===== 2. Бэкап БД + dist =====
 log "=== 2. Резервное копирование ==="
 
-FULL_ARCHIVE="$FULL_BACKUP_DIR/farm_full_$(date '+%Y%m%d_%H%M%S').tar.gz"
+FULL_ARCHIVE="$FULL_BACKUP_DIR/magicfarm_full_$(date '+%Y%m%d_%H%M%S').tar.gz"
 if tar -czf "$FULL_ARCHIVE" \
     --exclude="$APP_DIR/api/venv" \
     --exclude="$APP_DIR/frontend/node_modules" \
@@ -299,7 +299,7 @@ if tar -czf "$FULL_ARCHIVE" \
     -C "$(dirname "$APP_DIR")" "$(basename "$APP_DIR")" 2>/dev/null; then
     log "Полный архив создан: $FULL_ARCHIVE ($(du -h "$FULL_ARCHIVE" | cut -f1))"
 
-    ls -1t "$FULL_BACKUP_DIR"/farm_full_*.tar.gz 2>/dev/null | tail -n +$((FULL_BACKUPS_TO_KEEP + 1)) | while read -r old; do
+    ls -1t "$FULL_BACKUP_DIR"/magicfarm_full_*.tar.gz 2>/dev/null | tail -n +$((FULL_BACKUPS_TO_KEEP + 1)) | while read -r old; do
         rm -f "$old"
         log "Удалён старый полный архив: $old"
     done
@@ -355,10 +355,10 @@ BUILD_RAN=1
 
 # ===== 6. Перезапуск сервиса =====
 log "=== 6. Перезапуск сервиса ==="
-systemctl restart farm-api
+systemctl restart magicfarm-api
 SERVICES_RESTARTED=1
 sleep 3
-systemctl status farm-api --no-pager | tee -a "$LOG_FILE" || true
+systemctl status magicfarm-api --no-pager | tee -a "$LOG_FILE" || true
 
 # ===== 7. Health-check =====
 log "=== 7. Health-check ==="

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_onboarding
-from models import Field, FieldCell, FieldPlant, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, User, MAX_PLOT_QTY, CARD_DRAW_RULES
+from models import Field, FieldCell, FieldPlant, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, User, MAX_PLOT_QTY, CARD_DRAW_RULES
 from routes.admin_fields import (
     CellOut, FieldOut, PlantOut, TentOut,
     _cell_to_out, _field_to_out, _get_field_or_404, _plant_to_out, _tent_to_out,
@@ -36,10 +36,28 @@ class CellDetailOut(CellOut):
     occupant_name: str | None
 
 
+class PlantBedDetailOut(BaseModel):
+    id: int
+    field_id: int
+    col1: int
+    row1: int
+    col2: int
+    row2: int
+    plant_category: str | None
+    plant_id: int | None
+    occupant_user_id: int | None
+    plant_name: str | None
+    plant_emoji: str | None
+    plant_image_young: str | None
+    plant_image_grown: str | None
+    plot: PlotOut | None
+
+
 class FieldDetailPublic(FieldOut):
     cells: list[CellDetailOut]
     plants: list[PlantOut]
     tents: list[TentOut]
+    plant_beds: list[PlantBedDetailOut]
 
 
 @router.get("", response_model=list[FieldListItem])
@@ -85,6 +103,33 @@ def _cell_detail(c: FieldCell, db: Session) -> CellDetailOut:
     )
 
 
+def _plant_bed_detail(pb: PlantBed, db: Session) -> PlantBedDetailOut:
+    plot = None
+    plant_name = None
+    plant_emoji = None
+    plant_image_young = None
+    plant_image_grown = None
+    if pb.plant is not None:
+        plant_name = pb.plant.name
+        plant_emoji = pb.plant.emoji
+        plant_image_young = pb.plant.image_young_url
+        plant_image_grown = pb.plant.image_grown_url
+    if pb.occupant_user_id is not None:
+        p = db.query(Plot).filter(
+            Plot.plant_bed_id == pb.id, Plot.user_id == pb.occupant_user_id
+        ).first()
+        if p is not None:
+            plot = _plot_to_out(p)
+    return PlantBedDetailOut(
+        id=pb.id, field_id=pb.field_id, col1=pb.col1, row1=pb.row1,
+        col2=pb.col2, row2=pb.row2, plant_category=pb.plant_category,
+        plant_id=pb.plant_id, occupant_user_id=pb.occupant_user_id,
+        plant_name=plant_name, plant_emoji=plant_emoji,
+        plant_image_young=plant_image_young, plant_image_grown=plant_image_grown,
+        plot=plot,
+    )
+
+
 @router.get("/{field_id}", response_model=FieldDetailPublic)
 def get_field(
     field_id: int,
@@ -95,13 +140,14 @@ def get_field(
     cells = [_cell_detail(c, db) for c in f.cells]
     plants = [_plant_to_out(fp.plant) for fp in f.plants]
     tents = [_tent_to_out(t) for t in f.tents]
+    plant_beds = [_plant_bed_detail(pb, db) for pb in f.plant_beds]
     return FieldDetailPublic(
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
         plant_category=f.plant_category, min_level=f.min_level,
         field_kind=f.field_kind,
         created_at=f.created_at,
-        cells=cells, plants=plants, tents=tents,
+        cells=cells, plants=plants, tents=tents, plant_beds=plant_beds,
     )
 
 
@@ -120,6 +166,11 @@ def plant_on_cell(
     user: User = Depends(require_onboarding),
 ):
     f = _get_field_or_404(field_id, db)
+    if f.plant_category == "orchard":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="В саду деревья сажают в слоты, а не на отдельные клетки",
+        )
     cell = db.query(FieldCell).filter(
         FieldCell.field_id == f.id, FieldCell.col == col, FieldCell.row == row
     ).first()
@@ -285,6 +336,187 @@ def harvest_cell(
     check_and_award(user.vk_id, "plots_count", db)
 
     return _cell_detail(cell, db)
+
+
+# ===== Садовые слоты-деревья =====
+
+def _get_bed_on_field(pb_id: int, field_id: int, db: Session) -> PlantBed:
+    pb = db.query(PlantBed).filter(PlantBed.id == pb_id, PlantBed.field_id == field_id).first()
+    if pb is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Слот дерева не найден")
+    return pb
+
+
+class PlantBedPlantRequest(BaseModel):
+    plant_id: int
+    qty: int = 1
+
+
+@router.post("/{field_id}/plant-beds/{pb_id}/plant", response_model=PlantBedDetailOut, status_code=status.HTTP_201_CREATED)
+def plant_on_bed(
+    field_id: int,
+    pb_id: int,
+    req: PlantBedPlantRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_onboarding),
+):
+    f = _get_field_or_404(field_id, db)
+    pb = _get_bed_on_field(pb_id, f.id, db)
+    if f.plant_category != "orchard":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Слоты деревьев доступны только в саду",
+        )
+    if pb.occupant_user_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Этот слот уже занят деревом",
+        )
+
+    if f.min_level is not None and (user.level or 0) < f.min_level:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Эта локация пока недоступна",
+        )
+
+    allowed = {fp.plant_id for fp in f.plants}
+    if req.plant_id not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Это растение недоступно в данной локации",
+        )
+
+    from models import Plant as PlantModel
+    plant_obj = db.query(PlantModel).filter(PlantModel.id == req.plant_id).first()
+    if plant_obj is None or plant_obj.category != "orchard":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="В слот сада можно сажать только садовые растения",
+        )
+
+    if plant_obj.level > (user.unlocked_garden_level or 0):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Сады {plant_obj.level} уровня пока недоступны. Повысьте уровень.",
+        )
+
+    if req.qty < 1 or req.qty > MAX_PLOT_QTY:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Количество растений должно быть от 1 до {MAX_PLOT_QTY}",
+        )
+
+    from sqlalchemy import or_
+    existing = db.query(Plot).filter(
+        Plot.user_id == user.vk_id, Plot.plant_id == req.plant_id
+    ).filter(
+        or_(Plot.cell_id.isnot(None), Plot.plant_bed_id.isnot(None))
+    ).first()
+    if existing is not None and existing.plant_bed_id != pb.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Это растение уже посажено в другом месте",
+        )
+
+    level_key = f"plant_{plant_obj.level}"
+    num_cards, allow_treasure = CARD_DRAW_RULES.get(level_key, (1, False))
+    cards = draw_cards(db, num_cards, allow_treasure)
+    required = calculate_norm(db, user, cards) * req.qty
+
+    plot = Plot(
+        user_id=user.vk_id, plant_id=req.plant_id, qty=req.qty,
+        status="planted", accumulated=0, required=required,
+        drawn_cards_json=cards_to_json(cards), plant_bed_id=pb.id,
+    )
+    db.add(plot)
+    db.flush()
+
+    pb.plant_id = req.plant_id
+    pb.occupant_user_id = user.vk_id
+
+    db.commit()
+    db.refresh(pb)
+
+    check_and_award(user.vk_id, "first_plant", db)
+
+    from models import OrderReq as OrderModel, OrderTemplate
+    templates = db.query(OrderTemplate).filter(
+        OrderTemplate.source_kind == "plant", OrderTemplate.source_id == req.plant_id
+    ).all()
+    for t in templates:
+        existing_order = db.query(OrderModel).filter(
+            OrderModel.user_id == user.vk_id,
+            OrderModel.product_id == t.product_id,
+            OrderModel.status == "open",
+        ).first()
+        if existing_order is None:
+            db.add(OrderModel(
+                user_id=user.vk_id, product_id=t.product_id, qty=t.qty,
+                reward_coins=t.reward_coins, customer=t.customer,
+                status="open", name=t.name, image_url=t.image_url,
+            ))
+    db.commit()
+
+    return _plant_bed_detail(pb, db)
+
+
+@router.post("/{field_id}/plant-beds/{pb_id}/harvest", response_model=PlantBedDetailOut)
+def harvest_bed(
+    field_id: int,
+    pb_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    f = _get_field_or_404(field_id, db)
+    pb = _get_bed_on_field(pb_id, f.id, db)
+    if pb.occupant_user_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="В слоте нет дерева")
+    if pb.occupant_user_id != user.vk_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Это не ваше дерево")
+
+    plot = db.query(Plot).filter(
+        Plot.plant_bed_id == pb.id, Plot.user_id == user.vk_id
+    ).first()
+    if plot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="В слоте нет дерева")
+    if plot.status != "grown":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Дерево ещё не выросло",
+        )
+
+    plot.status = "planted"
+    plot.accumulated = 0
+    plot.norm_revealed = False
+    plot.completed_at = plot.completed_at or datetime.datetime.utcnow()
+
+    from models import Inventory
+    inv = db.query(Inventory).filter(
+        Inventory.user_id == user.vk_id, Inventory.plant_id == plot.plant_id
+    ).first()
+    if inv is None:
+        inv = Inventory(user_id=user.vk_id, plant_id=plot.plant_id, qty=0)
+        db.add(inv)
+    inv.qty = (inv.qty or 0) + plot.qty
+
+    plant_obj = plot.plant
+    bonus = apply_pet_bonus_harvest(user.vk_id, plant_obj.category, plot.qty, db)
+    if bonus > 0:
+        inv.qty = (inv.qty or 0) + bonus
+
+    num_cards, allow_treasure = CARD_DRAW_RULES.get(f"plant_{plant_obj.level}", (1, False))
+    cards = draw_cards(db, num_cards, allow_treasure)
+    plot.required = calculate_norm(db, user, cards) * plot.qty
+    plot.drawn_cards_json = cards_to_json(cards)
+    plot.crystal_color = None
+    plot.crystal_count = None
+
+    db.commit()
+    db.refresh(pb)
+
+    check_and_award(user.vk_id, "plots_count", db)
+
+    return _plant_bed_detail(pb, db)
 
 
 # ===== Строительство шатров =====

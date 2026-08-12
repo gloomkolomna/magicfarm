@@ -7,9 +7,19 @@ export default function InventoryPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [section, setSection] = useState<string>('all');
+
   const [sellItem, setSellItem] = useState<InventoryItem | null>(null);
   const [sellQty, setSellQty] = useState('');
   const [sellResult, setSellResult] = useState<number | null>(null);
+
+  const SECTIONS = [
+    { key: 'all', label: 'Всё' },
+    { key: 'plant', label: '🌱 Растения' },
+    { key: 'product', label: '📦 Товары' },
+    { key: 'potion', label: '🧪 Зелья' },
+    { key: 'production', label: '🏭 Продукция' },
+  ];
 
   useEffect(() => {
     api.inventory()
@@ -17,6 +27,8 @@ export default function InventoryPage() {
       .catch((e) => setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')))
       .finally(() => setLoading(false));
   }, []);
+
+  const filtered = section === 'all' ? items : items.filter((i) => i.item_kind === section);
 
   async function doSell() {
     if (!sellItem || !sellQty) return;
@@ -51,26 +63,46 @@ export default function InventoryPage() {
           Склад пуст. Производите товары в шатрах на полях.
         </div>
       ) : (
-        <div className="fm-grid">
-          {items.map((i) => (
-            <div key={`${i.item_kind}-${i.item_id}`} className="fm-card fm-rise">
-              <strong>{i.item_emoji} {i.item_name}</strong>
-              <div className="fm-chip" style={{ marginTop: 6 }}>×{i.qty}</div>
+        <>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
+            {SECTIONS.map((s) => (
               <button
-                className="fm-btn fm-btn-xs fm-btn-outline"
-                style={{ marginTop: 8, width: '100%' }}
-                disabled={busy}
-                onClick={() => { setSellItem(i); setSellQty('1'); setSellResult(null); }}
+                key={s.key}
+                className={section === s.key ? 'fm-btn fm-btn-sm' : 'fm-btn fm-btn-sm fm-btn-outline'}
+                onClick={() => setSection(s.key)}
               >
-                💰 Продать излишки
+                {s.label}
               </button>
+            ))}
+          </div>
+          {filtered.length === 0 ? (
+            <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет предметов в этой секции.</div>
+          ) : (
+            <div className="fm-grid">
+              {filtered.map((i) => (
+                <div key={`${i.item_kind}-${i.item_id}`} className="fm-card fm-rise">
+                  <strong>
+                    {i.item_emoji} {i.item_name}
+                    {i.ingredient_icon && <span style={{ marginLeft: 6, fontSize: 14 }} title={i.ingredient_type || ''}>{i.ingredient_icon}</span>}
+                  </strong>
+                  <div className="fm-chip" style={{ marginTop: 6 }}>×{i.qty}</div>
+                  <button
+                    className="fm-btn fm-btn-xs fm-btn-outline"
+                    style={{ marginTop: 8, width: '100%' }}
+                    disabled={busy}
+                    onClick={() => { setSellItem(i); setSellQty('1'); setSellResult(null); }}
+                  >
+                    💰 Продать излишки
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {sellItem && (
-        <div onClick={closeSell} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 'calc(var(--shell-max-width) * 0.633)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <h2 style={{ margin: 0 }}>💰 Продать излишки</h2>

@@ -21,6 +21,7 @@ const BASE_TABS: Tab[] = [
   { path: '/potions', label: '🧪 Зелья' },
   { path: '/inventory', label: '📦 Склад' },
   { path: '/orders', label: '🧺 Заказы' },
+  { path: '/achievements', label: '🏆 Достижения' },
   { path: '/profile', label: '👤 Профиль' },
 ];
 

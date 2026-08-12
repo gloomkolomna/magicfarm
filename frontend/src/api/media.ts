@@ -1,4 +1,4 @@
-const BASE = window.location.origin + '/farm';
+const BASE = window.location.origin + '/magicfarm';
 
 export function mediaUrl(path: string | null | undefined): string {
   if (!path) return '';

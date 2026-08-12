@@ -1,0 +1,9 @@
+{
+  "tests/test_phase10_new.py::TestOrderTemplatePotion::test_potion_source_kind_allowed": true,
+  "tests/test_phase10_new.py::TestOrderTemplatePotion::test_invalid_source_kind_rejected": true,
+  "tests/test_phase10_new.py::TestCustomers::test_crud": true,
+  "tests/test_phase10_new.py::TestCustomers::test_duplicate_code": true,
+  "tests/test_phase10_new.py::TestCustomers::test_template_with_customer_id": true,
+  "tests/test_phase10_new.py::TestAchievements::test_crud": true,
+  "tests/test_phase10_new.py::TestAchievements::test_image_upload": true
+}

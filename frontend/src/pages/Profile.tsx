@@ -59,8 +59,13 @@ export default function ProfilePage() {
         </div>
         <div className="fm-card" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 24 }}>🌱</div>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>Ур.{user.round}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>раунд игры</div>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>Ур.{user.level ?? 0}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>этап маршрутного листа</div>
+        </div>
+        <div className="fm-card" style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 24 }}>🔄</div>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>Раунд {user.round}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>цикл игры</div>
         </div>
       </div>
 
@@ -74,7 +79,6 @@ export default function ProfilePage() {
 
       {showNorms && (
         <div
-          onClick={() => setShowNorms(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(0,0,0,0.6)',
             backdropFilter: 'blur(3px)', overflow: 'auto',

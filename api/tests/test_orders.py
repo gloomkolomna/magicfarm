@@ -76,15 +76,30 @@ def test_list_orders_empty(player_client):
 
 def test_generate_order(player_client):
     pid = _poison_id(player_client)
-    res = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 3})
+    res = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 3, "customer": "Леди Бейлин"})
     assert res.status_code == 201
     data = res.json()
     assert data["product_id"] == pid
     assert data["qty"] == 3
     assert data["status"] == "open"
-    assert data["customer"] is not None
+    assert data["customer"] == "Леди Бейлин"
     # reward = qty * order_reward (default 5) = 15.
     assert data["reward_coins"] == 15
+
+
+def test_generate_order_without_customer(player_client):
+    pid = _poison_id(player_client)
+    res = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 1})
+    assert res.status_code == 201
+    assert res.json()["customer"] is None
+
+
+def test_list_customer_names(player_client):
+    data = player_client.get("/api/orders/customers").json()
+    assert isinstance(data, list)
+    assert len(data) == 65
+    assert "Леди Бейлин" in data
+    assert "Профессор Кларисса" in data
 
 
 def test_generate_order_default_qty(player_client):
@@ -194,7 +209,7 @@ def test_admin_generate_order(admin_client):
     assert data["product_id"] == pid
     assert data["qty"] == 3
     assert data["status"] == "open"
-    assert data["customer"] is not None
+    assert data["customer"] is None
     assert data["reward_coins"] == 15
 
 
@@ -203,6 +218,14 @@ def test_admin_generate_order_default_qty(admin_client):
     res = admin_client.post("/api/admin/orders/generate", json={"product_id": pid})
     assert res.status_code == 201, res.text
     assert res.json()["qty"] == 7
+
+
+def test_admin_generate_order_with_customer(admin_client):
+    pid = _poison_id(admin_client)
+    res = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2, "customer": "Леди Бейлин"})
+    assert res.status_code == 201, res.text
+    data = res.json()
+    assert data["customer"] == "Леди Бейлин"
 
 
 def test_admin_generate_order_unknown_product(admin_client):
@@ -374,4 +397,46 @@ def test_admin_update_order_forbidden(player_client):
     pid = _poison_id(player_client)
     oid = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
     res = player_client.put(f"/api/admin/orders/{oid}", json={"qty": 5})
+    assert res.status_code == 403
+
+
+def test_upload_own_order_image(player_client, monkeypatch):
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="farm_ord_img_")
+    monkeypatch.setattr(config, "UPLOADS_DIR", tmp)
+    pid = _poison_id(player_client)
+    oid = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    res = player_client.post(
+        f"/api/orders/{oid}/image",
+        files={"image": ("test.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["image_url"] is not None
+    assert data["image_url"].startswith("/api/uploads/order_")
+
+
+def test_upload_order_image_not_found(player_client, monkeypatch):
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="farm_ord_img_")
+    monkeypatch.setattr(config, "UPLOADS_DIR", tmp)
+    res = player_client.post(
+        "/api/orders/99999/image",
+        files={"image": ("test.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+    assert res.status_code == 404
+
+
+def test_upload_order_image_other_user(player_client, monkeypatch):
+    from tests.conftest import make_user_client
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="farm_ord_img_")
+    monkeypatch.setattr(config, "UPLOADS_DIR", tmp)
+    pid = _poison_id(player_client)
+    with make_user_client(99999001, "player") as other:
+        oid = other.post("/api/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    res = player_client.post(
+        f"/api/orders/{oid}/image",
+        files={"image": ("test.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
     assert res.status_code == 403

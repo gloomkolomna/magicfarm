@@ -20,15 +20,22 @@ export default function OrdersPage() {
   const [showGen, setShowGen] = useState(false);
   const [genProduct, setGenProduct] = useState<number | null>(null);
   const [genQty, setGenQty] = useState('');
+  const [genCustomer, setGenCustomer] = useState('');
+  const [customerNames, setCustomerNames] = useState<string[]>([]);
+  const [genImage, setGenImage] = useState<File | null>(null);
+  const [detailOrder, setDetailOrder] = useState<Order | null>(null);
+  const [zoomImg, setZoomImg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [ord, pr, inv] = await Promise.all([
+      const [ord, pr, inv, names] = await Promise.all([
         api.orders(), api.products(), api.inventory().catch(() => []),
+        api.customerNames().catch(() => [] as string[]),
       ]);
       setOrders(ord);
       setProducts(pr);
+      setCustomerNames(names);
       const invMap: Record<number, number> = {};
       for (const i of inv) invMap[i.item_id] = (invMap[i.item_id] || 0) + i.qty;
       setInventory(invMap);
@@ -74,6 +81,8 @@ export default function OrdersPage() {
         onClick={() => {
           setGenProduct(products[0]?.id ?? null);
           setGenQty('');
+          setGenCustomer(customerNames[0] ?? '');
+          setGenImage(null);
           setShowGen(true);
         }}
       >
@@ -91,7 +100,7 @@ export default function OrdersPage() {
           ) : (
             <div className="fm-grid" style={{ marginBottom: 14 }}>
               {openOrders.map((o) => (
-                <div key={o.id} className="fm-card fm-rise">
+                <div key={o.id} className="fm-card fm-rise" style={{ cursor: 'pointer' }} onClick={() => setDetailOrder(o)}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                     {o.image_url && (
                       <img src={mediaUrl(o.image_url)} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 'var(--radius-sm)', flexShrink: 0 }} />
@@ -121,14 +130,14 @@ export default function OrdersPage() {
                           className="fm-btn fm-btn-sm"
                           style={{ flex: 1 }}
                           disabled={busy}
-                          onClick={() => act(() => api.fulfillOrder(o.id), `Заказ выполнен! +${o.reward_coins} монет`)}
+                          onClick={(e) => { e.stopPropagation(); act(() => api.fulfillOrder(o.id), `Заказ выполнен! +${o.reward_coins} монет`); }}
                         >
                           Выполнить
                         </button>
                         <button
                           className="fm-btn fm-btn-sm fm-btn-outline"
                           disabled={busy}
-                          onClick={() => act(() => api.cancelOrder(o.id), 'Заказ отменён')}
+                          onClick={(e) => { e.stopPropagation(); act(() => api.cancelOrder(o.id), 'Заказ отменён'); }}
                         >
                           Отмена
                         </button>
@@ -184,21 +193,109 @@ export default function OrdersPage() {
             onChange={(e) => setGenQty(e.target.value)}
             placeholder="по умолчанию"
           />
+          <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Заказчик</label>
+          <select
+            className="fm-input"
+            value={genCustomer}
+            onChange={(e) => setGenCustomer(e.target.value)}
+          >
+            {customerNames.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+          <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Изображение</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setGenImage(e.target.files?.[0] ?? null)}
+            style={{ fontSize: 13 }}
+          />
           <button
             className="fm-btn"
             style={{ width: '100%', marginTop: 14 }}
             disabled={busy || !genProduct}
             onClick={async () => {
-              const ok = await act(
-                () => api.generateOrder(genProduct!, genQty ? Number(genQty) : undefined),
-                'Заказ получен!',
-              );
-              if (ok) setShowGen(false);
+              const ok = await act(async () => {
+                const order = await api.generateOrder(genProduct!, genQty ? Number(genQty) : undefined, genCustomer || undefined);
+                if (genImage) {
+                  await api.uploadOrderImage(order.id, genImage);
+                }
+              }, 'Заказ получен!');
+              if (ok) {
+                setGenImage(null);
+                setShowGen(false);
+              }
             }}
           >
             Взять заказ
           </button>
         </Modal>
+      )}
+
+      {detailOrder && (
+        <Modal title="Детали заказа" onClose={() => setDetailOrder(null)}>
+          {detailOrder.image_url && (
+            <img
+              src={mediaUrl(detailOrder.image_url)}
+              alt=""
+              style={{ width: '100%', maxHeight: 280, objectFit: 'contain', borderRadius: 'var(--radius)', marginBottom: 12, cursor: 'pointer' }}
+              onClick={() => setZoomImg(mediaUrl(detailOrder.image_url))}
+            />
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <strong style={{ fontSize: 18 }}>{detailOrder.product_emoji} {detailOrder.product_name}</strong>
+            <span className="fm-chip" style={{ fontSize: 16 }}>×{detailOrder.qty}</span>
+          </div>
+          <div style={{ fontSize: 14, marginBottom: 4 }}>
+            {(() => {
+              const have = inventory[detailOrder.product_id] || 0;
+              const need = detailOrder.qty;
+              const ok = have >= need;
+              return <span style={{ color: ok ? 'var(--success)' : 'var(--danger)' }}>На складе: {have} / {need}</span>;
+            })()}
+          </div>
+          {detailOrder.name && (
+            <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>{detailOrder.name}</div>
+          )}
+          <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>
+            Заказчик: {detailOrder.customer}
+          </div>
+          <div className="fm-chip" style={{ background: 'rgba(224,168,62,0.18)', marginBottom: 14 }}>
+            🪙 {detailOrder.reward_coins} монет
+          </div>
+          {detailOrder.status === 'open' && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="fm-btn"
+                style={{ flex: 1 }}
+                disabled={busy}
+                onClick={() => act(() => api.fulfillOrder(detailOrder.id), `Заказ выполнен! +${detailOrder.reward_coins} монет`)}
+              >
+                Выполнить
+              </button>
+              <button
+                className="fm-btn fm-btn-outline"
+                style={{ flex: 1 }}
+                disabled={busy}
+                onClick={() => act(() => api.cancelOrder(detailOrder.id), 'Заказ отменён')}
+              >
+                Отмена
+              </button>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {zoomImg && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <button
+            onClick={() => setZoomImg(null)}
+            style={{ position: 'absolute', top: 16, right: 16, zIndex: 1, fontSize: 24, background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: '8px 12px' }}
+          >
+            ✕
+          </button>
+          <img src={zoomImg} alt="" style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }} onClick={(e) => e.stopPropagation()} />
+        </div>
       )}
     </div>
   );
@@ -207,7 +304,6 @@ export default function OrdersPage() {
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
     <div
-      onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 60,
         background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)',

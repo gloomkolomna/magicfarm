@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = window.location.origin + '/farm/api';
+const API_BASE = window.location.origin + '/magicfarm/api';
 
 const client = axios.create({
   baseURL: API_BASE,

@@ -50,9 +50,10 @@ def test_levels_list(admin_client):
         r = c.get("/api/levels")
         assert r.status_code == 200
         data = r.json()
-        assert len(data) == 3
-        assert data[0]["level"] == 1
-        assert data[0]["coins_required"] == 800
+        assert len(data) == 4
+        assert data[0]["level"] == 0
+        assert data[0]["coins_required"] == 0
+        assert data[1]["coins_required"] == 800
 
 
 def test_advance_level_insufficient(admin_client):
@@ -84,7 +85,7 @@ def test_advance_level_requires_plots(admin_client):
 def test_admin_crud_levels(admin_client):
     r = admin_client.get("/api/admin/levels")
     assert r.status_code == 200
-    assert len(r.json()) == 3
+    assert len(r.json()) == 4
 
     r = admin_client.put("/api/admin/levels", params={
         "level": 4, "coins_required": 500, "plots_required": 1,
@@ -95,20 +96,25 @@ def test_admin_crud_levels(admin_client):
     assert r.json()["unlock_type"] == "Животноводство +2"
 
     r = admin_client.get("/api/admin/levels")
-    assert len(r.json()) == 4
+    assert len(r.json()) == 5
 
     r = admin_client.delete("/api/admin/levels/4")
     assert r.status_code == 204
 
     r = admin_client.get("/api/admin/levels")
-    assert len(r.json()) == 3
+    assert len(r.json()) == 4
 
 
 def test_admin_levels_validation(admin_client):
     r = admin_client.put("/api/admin/levels", params={
-        "level": 0, "coins_required": 100, "plots_required": 1,
+        "level": -1, "coins_required": 100, "plots_required": 1,
     })
     assert r.status_code == 400
+
+    r = admin_client.put("/api/admin/levels", params={
+        "level": 0, "coins_required": 0, "plots_required": 0,
+    })
+    assert r.status_code == 200
 
     r = admin_client.put("/api/admin/levels", params={
         "level": 17, "coins_required": 100, "plots_required": 1,

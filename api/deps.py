@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
+import config
 from db import get_db
 from models import User
 from services.auth import decode_access_token
@@ -23,6 +24,8 @@ def get_current_user(
     user = db.query(User).filter(User.vk_id == vk_id).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь не найден")
+    if config.ADMIN_ONLY and user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ только для администраторов")
     return user
 
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type AdminOrder, type Animal, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
+import { api, type AdminOrder, type Animal, type Achievement, type AchievementKind, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import CrystalStandardEditor from '../components/CrystalStandardEditor';
@@ -42,7 +42,7 @@ const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
 ];
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'order-templates' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards'>('players');
+  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'order-templates' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements'>('players');
   const [players, setPlayers] = useState<Player[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
@@ -133,6 +133,7 @@ export default function AdminPage() {
         api.products().catch(() => [] as Product[]),
       ]).then(([ords, prods]) => { setAdminOrders(ords); setProducts(prods); });
     }
+    if ((tab === 'orders' || tab === 'order-templates') && !r.has('customer-names')) { r.add('customer-names'); api.customerNames().then(setCustomerNames).catch(() => {}); }
   }, [tab]);
 
   // ── Шаблоны заказов ──
@@ -142,9 +143,9 @@ export default function AdminPage() {
 
   // ── Уровни ──
   const [levels, setLevels] = useState<LevelGate[]>([]);
-  const [levelForm, setLevelForm] = useState({ level: 1, coins_required: 800, plots_required: 2, unlock_type: '' });
+  const [levelForm, setLevelForm] = useState({ level: 0, coins_required: 0, plots_required: 0, unlock_type: '' });
   const [levelImage, setLevelImage] = useState<File | null>(null);
-  const [levelImageLevel, setLevelImageLevel] = useState(1);
+  const [levelImageLevel, setLevelImageLevel] = useState(0);
 
   // ── Рецепты зелий ──
   const [potionRecipes, setPotionRecipes] = useState<PotionRecipe[]>([]);
@@ -168,6 +169,16 @@ export default function AdminPage() {
 
   const [crystalCards, setCrystalCards] = useState<CrystalCard[]>([]);
 
+  // ── Достижения ──
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [achKinds, setAchKinds] = useState<AchievementKind[]>([]);
+  const [achForm, setAchForm] = useState({ name: '', condition_kind: '', condition_value: '1' });
+  const [achEditingId, setAchEditingId] = useState<number | null>(null);
+  const [achImage, setAchImage] = useState<File | null>(null);
+
+  // ── Заказчики (фиксированный список) ──
+  const [customerNames, setCustomerNames] = useState<string[]>([]);
+
   // ── Фон ──
   const [bgUrl, setBgUrl] = useState('');
   const [bgInput, setBgInput] = useState('');
@@ -176,6 +187,7 @@ export default function AdminPage() {
   const [orderFormOpen, setOrderFormOpen] = useState(false);
   const [orderEditingId, setOrderEditingId] = useState<number | null>(null);
   const [orderForm, setOrderForm] = useState<Record<string, string>>({});
+  const [orderImage, setOrderImage] = useState<File | null>(null);
 
   const loadedRef = useRef<Set<string>>(new Set());
 
@@ -434,7 +446,8 @@ export default function AdminPage() {
 
   // ── Заказы: создание и редактирование ──
   function startCreateOrder() {
-    setOrderForm({ product_id: '', qty: '' });
+    setOrderForm({ product_id: '', qty: '', customer: '' });
+    setOrderImage(null);
     setOrderEditingId(null);
     setOrderFormOpen(true);
   }
@@ -455,25 +468,32 @@ export default function AdminPage() {
   async function saveOrder() {
     const pid = Number(orderForm.product_id);
     const q = orderForm.qty ? Number(orderForm.qty) : undefined;
+    const customer = orderForm.customer || undefined;
     if (!pid) return;
     setBusy(true); setMsg(null);
     try {
+      let targetId = orderEditingId;
       if (orderEditingId !== null) {
         await api.adminUpdateOrder(orderEditingId, {
           product_id: pid || undefined,
           qty: q,
           reward_coins: orderForm.reward_coins ? Number(orderForm.reward_coins) : undefined,
-          customer: orderForm.customer || undefined,
+          customer: customer,
           status: orderForm.status || undefined,
           name: orderForm.name || undefined,
         });
         setMsg('✓ Заказ обновлён');
       } else {
-        await api.adminGenerateOrder(pid, q);
+        const created = await api.adminGenerateOrder(pid, q, customer ?? null);
+        targetId = created.id;
         setMsg('✓ Заказ создан');
+      }
+      if (targetId && orderImage) {
+        await api.adminUploadOrderImage(targetId, orderImage);
       }
       setOrderFormOpen(false);
       setOrderEditingId(null);
+      setOrderImage(null);
       await load();
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
@@ -552,6 +572,16 @@ export default function AdminPage() {
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
+  async function uploadTplImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      const compressed = await compressImage(file, 800);
+      await api.adminUploadOrderTemplateImage(id, compressed);
+      await loadOrderTemplates();
+      setMsg('✓ Картинка загружена');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
 
   function renderOrderTemplates() {
     return (
@@ -572,7 +602,10 @@ export default function AdminPage() {
             </select>
             <input className="fm-input" type="number" placeholder="Кол-во" value={tplForm.qty || ''} onChange={(e) => setTplForm({ ...tplForm, qty: Number(e.target.value) })} style={{ width: 80 }} />
             <input className="fm-input" type="number" placeholder="Монет" value={tplForm.reward_coins || ''} onChange={(e) => setTplForm({ ...tplForm, reward_coins: Number(e.target.value) })} style={{ width: 80 }} />
-            <input className="fm-input" placeholder="Покупатель" value={tplForm.customer || ''} onChange={(e) => setTplForm({ ...tplForm, customer: e.target.value })} style={{ width: 120 }} />
+            <select className="fm-input" value={tplForm.customer || ''} onChange={(e) => setTplForm({ ...tplForm, customer: e.target.value })} style={{ width: 180 }}>
+              <option value="">Заказчик</option>
+              {customerNames.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
             <input className="fm-input" placeholder="Название" value={tplForm.name || ''} onChange={(e) => setTplForm({ ...tplForm, name: e.target.value })} style={{ width: 140 }} />
           </div>
           <button className="fm-btn" disabled={busy} onClick={saveOrderTemplate}>
@@ -581,13 +614,26 @@ export default function AdminPage() {
           {tplEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setTplEditingId(null); setTplForm({ source_kind: 'plant', source_id: 0, product_id: 0, qty: 1, reward_coins: 5 }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
-          <thead><tr><th>ID</th><th>Тип</th><th>source_id</th><th>Товар</th><th>Кол-во</th><th>Монет</th><th>Покупатель</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Тип</th><th>source_id</th><th>Товар</th><th>Кол-во</th><th>Монет</th><th>Заказчик</th><th>Картинка</th><th></th></tr></thead>
           <tbody>
             {orderTemplates.map((t) => (
               <tr key={t.id}>
                 <td>{t.id}</td><td>{t.source_kind}</td><td>{t.source_id}</td>
                 <td>{products.find((p) => p.id === t.product_id)?.name || t.product_id}</td>
                 <td>{t.qty}</td><td>{t.reward_coins}</td><td>{t.customer || '—'}</td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {t.image_url && <img src={mediaUrl(t.image_url)} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4 }} />}
+                    <label className="fm-btn fm-btn-sm" style={{ cursor: 'pointer', margin: 0 }}>
+                      🖼
+                      <input type="file" accept="image/*" hidden onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadTplImage(t.id, f);
+                        e.target.value = '';
+                      }} />
+                    </label>
+                  </div>
+                </td>
                 <td>
                   <button className="fm-btn fm-btn-sm" onClick={() => { setTplEditingId(t.id); setTplForm({ source_kind: t.source_kind, source_id: t.source_id, product_id: t.product_id, qty: t.qty, reward_coins: t.reward_coins, customer: t.customer, name: t.name }); }}>✎</button>
                   <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteOrderTemplate(t.id)}>🗑</button>
@@ -638,7 +684,7 @@ export default function AdminPage() {
       <div>
         <h2>📊 Уровни (маршрутный лист)</h2>
         <div className="fm-card" style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input className="fm-input" type="number" placeholder="Уровень (1-16)" value={levelForm.level || ''} onChange={(e) => setLevelForm({ ...levelForm, level: Number(e.target.value) })} style={{ width: 80 }} />
+          <input className="fm-input" type="number" placeholder="Уровень (0-16)" value={levelForm.level} onChange={(e) => setLevelForm({ ...levelForm, level: Number(e.target.value) })} style={{ width: 80 }} />
           <input className="fm-input" type="number" placeholder="Монет" value={levelForm.coins_required || ''} onChange={(e) => setLevelForm({ ...levelForm, coins_required: Number(e.target.value) })} style={{ width: 100 }} />
           <input className="fm-input" type="number" placeholder="Грядок" value={levelForm.plots_required || ''} onChange={(e) => setLevelForm({ ...levelForm, plots_required: Number(e.target.value) })} style={{ width: 80 }} />
           <select className="fm-input" value={levelForm.unlock_type} onChange={(e) => setLevelForm({ ...levelForm, unlock_type: e.target.value })} style={{ width: 200 }}>
@@ -660,7 +706,7 @@ export default function AdminPage() {
             {levels.map((l) => (
               <tr key={l.level}>
                 <td>{l.level}</td>
-                <td>{l.image_url ? <img src={l.image_url} alt="" style={{ maxWidth: 60, maxHeight: 40, borderRadius: 4 }} /> : '—'}</td>
+                <td>{l.image_url ? <img src={mediaUrl(l.image_url)} alt="" style={{ maxWidth: 60, maxHeight: 40, borderRadius: 4 }} /> : '—'}</td>
                 <td>{l.coins_required}</td>
                 <td>{l.plots_required}</td>
                 <td>{l.unlock_type || '—'}</td>
@@ -875,6 +921,50 @@ export default function AdminPage() {
     finally { setBusy(false); }
   }
 
+  // ── Достижения ──
+  async function loadAchievements() {
+    try {
+      const [list, kinds] = await Promise.all([api.adminAchievements(), api.adminAchievementKinds()]);
+      setAchievements(list);
+      setAchKinds(kinds);
+    } catch { /* ignore */ }
+  }
+  async function saveAchievement() {
+    if (!achForm.name.trim() || !achForm.condition_kind.trim()) { setMsg('✗ Заполните название и условие'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const data = { name: achForm.name, condition_kind: achForm.condition_kind, condition_value: Number(achForm.condition_value) || 1 };
+      let targetId = achEditingId;
+      if (targetId) { await api.adminUpdateAchievement(targetId, data); }
+      else {
+        const created = await api.adminCreateAchievement(data);
+        targetId = created.id;
+      }
+      if (targetId && achImage) {
+        await api.adminUploadAchievementImage(targetId, achImage);
+      }
+      await loadAchievements();
+      setAchForm({ name: '', condition_kind: '', condition_value: '1' });
+      setAchEditingId(null);
+      setAchImage(null);
+      setMsg('✓ Сохранено');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function deleteAchievement(id: number) {
+    if (!confirm('Удалить достижение?')) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeleteAchievement(id); await loadAchievements(); setMsg('✓ Удалено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function uploadAchImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadAchievementImage(id, file); await loadAchievements(); setMsg('✓ Картинка загружена'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -892,6 +982,7 @@ export default function AdminPage() {
         <TabBtn active={tab === 'potion-recipes'} onClick={() => { setTab('potion-recipes'); loadPotionRecipes(); }}>🧪 Рецепты зелий</TabBtn>
         <TabBtn active={tab === 'media'} onClick={() => setTab('media')}>🎬 Медиа</TabBtn>
         <TabBtn active={tab === 'crystal-cards'} onClick={() => setTab('crystal-cards')}>🃏 Карты</TabBtn>
+        <TabBtn active={tab === 'achievements'} onClick={() => { setTab('achievements'); loadAchievements(); }}>🏆 Достижения</TabBtn>
       </div>
 
       {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
@@ -1172,9 +1263,12 @@ export default function AdminPage() {
                     </div>
                   )}
                   {showCreate && (
-                    <div onClick={() => setShowCreate(false)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
                       <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 'calc(var(--shell-max-width) * 0.633)' }}>
-                        <h3 style={{ marginTop: 0 }}>➕ Новая локация</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                          <h3 style={{ margin: 0 }}>➕ Новая локация</h3>
+                          <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setShowCreate(false)}>✕</button>
+                        </div>
                         <label style={{ display: 'block', margin: '8px 0 6px', fontSize: 14 }}>Название</label>
                         <input className="fm-input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Огород" />
                         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -1226,7 +1320,7 @@ export default function AdminPage() {
 
           {tab === 'plants' && (
             <CatalogTab title="🌱 Растения" items={plants} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePlant} onDelete={deletePlant} onUploadImage={uploadPlantImage} onUploadImageYoung={uploadPlantImageYoung} onUploadImageGrown={uploadPlantImageGrown}
-              fields={[{ key: 'name', label: 'Название', ph: 'Джекобоб' }, { key: 'level', label: 'Уровень', ph: '1', type: 'number' }, { key: 'category', label: 'Категория', options: [{ value: 'garden', label: '🌱 Грядка' }, { value: 'orchard', label: '🍎 Сад' }] }, { key: 'description', label: 'Описание', ph: 'Грибы' }]}
+              fields={[{ key: 'name', label: 'Название', ph: 'Джекобоб' }, { key: 'level', label: 'Уровень', ph: '1', type: 'number' }, { key: 'category', label: 'Категория', options: [{ value: 'garden', label: '🌱 Грядка' }, { value: 'orchard', label: '🍎 Сад' }] }, { key: 'description', label: 'Описание', ph: 'Грибы' }, { key: 'stitch_condition', label: 'Условие отшива', ph: 'Вышить на белой канве' }]}
             />
           )}
 
@@ -1288,15 +1382,20 @@ export default function AdminPage() {
                     <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Количество (1–20)</label>
                     <input className="fm-input" type="number" min={1} max={20} value={orderForm.qty || ''} onChange={(e) => setOrderForm({ ...orderForm, qty: e.target.value })} placeholder="оставьте пустым для дефолта" />
                   </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Заказчик</label>
+                    <select className="fm-input" value={orderForm.customer || ''} onChange={(e) => setOrderForm({ ...orderForm, customer: e.target.value })}>
+                      <option value="">— не указан —</option>
+                      {customerNames.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
                   {orderEditingId !== null && (
                     <>
                       <div style={{ marginBottom: 8 }}>
                         <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Награда (монет)</label>
                         <input className="fm-input" type="number" value={orderForm.reward_coins || ''} onChange={(e) => setOrderForm({ ...orderForm, reward_coins: e.target.value })} />
-                      </div>
-                      <div style={{ marginBottom: 8 }}>
-                        <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Заказчик</label>
-                        <input className="fm-input" value={orderForm.customer || ''} onChange={(e) => setOrderForm({ ...orderForm, customer: e.target.value })} />
                       </div>
                       <div style={{ marginBottom: 8 }}>
                         <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Статус</label>
@@ -1312,9 +1411,14 @@ export default function AdminPage() {
                       </div>
                     </>
                   )}
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Изображение</label>
+                    <input type="file" accept="image/*" onChange={(e) => setOrderImage(e.target.files?.[0] ?? null)} style={{ fontSize: 13 }} />
+                    {orderImage && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{orderImage.name}</div>}
+                  </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button className="fm-btn" disabled={busy} onClick={saveOrder}>💾 Сохранить</button>
-                    <button className="fm-btn fm-btn-outline" disabled={busy} onClick={() => { setOrderFormOpen(false); setOrderEditingId(null); }}>Отмена</button>
+                    <button className="fm-btn fm-btn-outline" disabled={busy} onClick={() => { setOrderFormOpen(false); setOrderEditingId(null); setOrderImage(null); }}>Отмена</button>
                   </div>
                 </div>
               )}
@@ -1409,6 +1513,50 @@ export default function AdminPage() {
                 })}
               </div>
               {gameMedia.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Медиа пока нет. Выберите тип из списка и создайте запись для загрузки файла.</div>}
+            </div>
+          )}
+
+          {tab === 'achievements' && (
+            <div>
+              <h2 style={{ marginTop: 0 }}>🏆 Достижения</h2>
+              <div className="fm-card" style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
+                  <input className="fm-input" placeholder="Название" value={achForm.name} onChange={(e) => setAchForm({ ...achForm, name: e.target.value })} style={{ width: 160 }} />
+                  <select className="fm-input" value={achForm.condition_kind} onChange={(e) => setAchForm({ ...achForm, condition_kind: e.target.value })} style={{ width: 180 }}>
+                    <option value="">— тип условия —</option>
+                    {achKinds.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
+                  </select>
+                  <input className="fm-input" type="number" placeholder="Значение" value={achForm.condition_value} onChange={(e) => setAchForm({ ...achForm, condition_value: e.target.value })} style={{ width: 80 }} />
+                </div>
+                {(() => { const k = achKinds.find((x) => x.kind === achForm.condition_kind); return k?.hint ? <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>{k.hint}</div> : null; })()}
+                {achEditingId && (() => { const cur = achievements.find((x) => x.id === achEditingId); return cur?.image_url ? <img src={mediaUrl(cur.image_url)} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: 8 }} /> : null; })()}
+                <div style={{ marginBottom: 8 }}>
+                  <input type="file" accept="image/*" onChange={(e) => setAchImage(e.target.files?.[0] ?? null)} style={{ fontSize: 13 }} />
+                  {achImage && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{achImage.name}</div>}
+                </div>
+                <button className="fm-btn" disabled={busy} onClick={saveAchievement}>
+                  {achEditingId ? '✎ Сохранить' : '➕ Создать'}
+                </button>
+                {achEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setAchEditingId(null); setAchForm({ name: '', condition_kind: '', condition_value: '1' }); setAchImage(null); }}>Отмена</button>}
+              </div>
+              <div className="fm-grid">
+                {achievements.map((a) => (
+                  <div key={a.id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
+                    {a.image_url && <img src={mediaUrl(a.image_url)} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: 6 }} />}
+                    <strong>{a.name}</strong>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{achKinds.find((x) => x.kind === a.condition_kind)?.label ?? a.condition_kind}: {a.condition_value}</div>
+                    <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+                      <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setAchEditingId(a.id); setAchForm({ name: a.name, condition_kind: a.condition_kind, condition_value: String(a.condition_value) }); setAchImage(null); }}>✎</button>
+                      <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
+                        🖼️
+                        <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAchImage(a.id, f); e.target.value = ''; }} />
+                      </label>
+                      <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteAchievement(a.id)}>🗑</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {achievements.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Достижений пока нет.</div>}
             </div>
           )}
 

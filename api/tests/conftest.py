@@ -103,6 +103,7 @@ def seed_farm():
             ))
         conn.execute(text(
             "INSERT INTO level_gates (level, coins_required, plots_required) VALUES "
+            "(0, 0, 0), "
             "(1, 800, 2), "
             "(2, 1600, 4), "
             "(3, 2500, 6)"

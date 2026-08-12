@@ -4,7 +4,7 @@ import { useVkBridge } from './context/VkBridgeContext';
 import { useSession } from './context/SessionContext';
 import Background from './components/Background';
 import MiniAppShell from './components/MiniAppShell';
-import { hasBetaList, isBetaAllowed } from './auth/betaGate';
+import { isAdminAllowed } from './auth/adminGate';
 
 const OrdersPage = lazy(() => import('./pages/Orders'));
 const ProfilePage = lazy(() => import('./pages/Profile'));
@@ -16,6 +16,7 @@ const LibraryPage = lazy(() => import('./pages/Library'));
 const BarnyardPage = lazy(() => import('./pages/Barnyard'));
 const PetsPage = lazy(() => import('./pages/PetsPage'));
 const PotionsPage = lazy(() => import('./pages/PotionsPage'));
+const AchievementsPage = lazy(() => import('./pages/Achievements'));
 const Onboarding = lazy(() => import('./pages/Onboarding'));
 
 const zoomed = { zoom: 'var(--app-scale)', width: 'calc(100% / var(--app-scale))', margin: '0 auto' } as const;
@@ -30,17 +31,17 @@ function Skeleton() {
   );
 }
 
-function BetaDenied() {
+function StubPage() {
   return (
     <div style={zoomed}>
       <div style={{ maxWidth: 'calc(var(--shell-max-width) * 0.8)', margin: '0 auto', padding: 'var(--shell-pad)', textAlign: 'center' }}>
         <div className="fm-card fm-rise">
-          <h1>🌾 Ферма</h1>
+          <h1>Магическая ферма</h1>
           <p style={{ color: 'var(--text-secondary)' }}>
-            Игра пока на закрытом тестировании. Доступ открывается постепенно.
+            Скоро здесь расцветёт ваша волшебная ферма.
           </p>
           <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
-            Скоро здесь расцветёт ваша волшебная ферма ✨
+            Мы готовим волшебство ✨
           </p>
         </div>
       </div>
@@ -53,7 +54,7 @@ function App() {
   const { user, loading: sessionLoading } = useSession();
 
   if (loading) return <><Background /><Skeleton /></>;
-  if (hasBetaList() && !isBetaAllowed(vkUserId)) return <><Background /><BetaDenied /></>;
+  if (!isAdminAllowed(vkUserId)) return <><Background /><StubPage /></>;
   if (sessionLoading) return <><Background /><Skeleton /></>;
   if (user && !user.onboarding_done) {
     return (
@@ -79,6 +80,7 @@ function App() {
           <Route path="/barnyard" element={<MiniAppShell><BarnyardPage /></MiniAppShell>} />
           <Route path="/pets" element={<MiniAppShell><PetsPage /></MiniAppShell>} />
           <Route path="/potions" element={<MiniAppShell><PotionsPage /></MiniAppShell>} />
+          <Route path="/achievements" element={<MiniAppShell><AchievementsPage /></MiniAppShell>} />
           <Route path="/orders" element={<MiniAppShell><OrdersPage /></MiniAppShell>} />
           <Route path="/profile" element={<MiniAppShell><ProfilePage /></MiniAppShell>} />
           <Route path="/admin" element={<MiniAppShell><AdminPage /></MiniAppShell>} />

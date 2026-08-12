@@ -9,6 +9,7 @@ export interface Plant {
   level: number;
   norm_per_crystal: number;
   description: string | null;
+  stitch_condition: string | null;
   image_url: string | null;
   image_young_url: string | null;
   image_grown_url: string | null;
@@ -325,6 +326,13 @@ export interface PlantBed {
   col2: number;
   row2: number;
   plant_category: string | null;
+  plant_id: number | null;
+  occupant_user_id: number | null;
+  plant_name?: string | null;
+  plant_emoji?: string | null;
+  plant_image_young?: string | null;
+  plant_image_grown?: string | null;
+  plot?: Plot | null;
 }
 
 export interface PetZone {
@@ -386,6 +394,22 @@ export interface CrystalCard {
   image_url: string | null;
 }
 
+export interface Achievement {
+  id: number;
+  code: string;
+  name: string;
+  condition_kind: string;
+  condition_value: number;
+  image_url: string | null;
+  earned: boolean;
+}
+
+export interface AchievementKind {
+  kind: string;
+  label: string;
+  hint?: string;
+}
+
 export const api = {
   // ── Производства / склад ──
   investPlot: (plot_id: number, amount: number) =>
@@ -436,10 +460,17 @@ export const api = {
     client
       .get<Order[]>('/orders', { params: status_filter ? { status_filter } : {} })
       .then((r) => r.data),
-  generateOrder: (product_id: number, qty?: number) =>
-    client.post<Order>('/orders/generate', { product_id, qty }).then((r) => r.data),
+  generateOrder: (product_id: number, qty?: number, customer?: string | null) =>
+    client.post<Order>('/orders/generate', { product_id, qty, customer }).then((r) => r.data),
+  customerNames: () =>
+    client.get<string[]>('/orders/customers').then((r) => r.data),
   fulfillOrder: (id: number) => client.post<Order>(`/orders/${id}/fulfill`).then((r) => r.data),
   cancelOrder: (id: number) => client.post<Order>(`/orders/${id}/cancel`).then((r) => r.data),
+  uploadOrderImage: (orderId: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.post<Order>(`/orders/${orderId}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
 
   // ── Библиотека рецептов ──
   library: () =>
@@ -486,7 +517,7 @@ export const api = {
     client.post<FieldInfo>('/admin/fields', { name, cols, rows, plant_category, min_level, field_kind }).then((r) => r.data),
   adminGetField: (id: number) =>
     client.get<FieldDetail>(`/admin/fields/${id}`).then((r) => r.data),
-  adminUpdateField: (id: number, data: { name?: string; cols?: number; rows?: number; grid_color?: string }) =>
+  adminUpdateField: (id: number, data: { name?: string; cols?: number; rows?: number; grid_color?: string; min_level?: number }) =>
     client.put<FieldDetail>(`/admin/fields/${id}`, data).then((r) => r.data),
   adminUploadFieldMap: (id: number, mapImage: File) => {
     const form = new FormData();
@@ -654,8 +685,8 @@ export const api = {
   // ── Админ: заказы ──
   adminOrders: (userId?: number) =>
     client.get<AdminOrder[]>('/admin/orders', { params: userId !== undefined ? { user_id: userId } : {} }).then((r) => r.data),
-  adminGenerateOrder: (productId: number, qty?: number) =>
-    client.post<AdminOrder>('/admin/orders/generate', { product_id: productId, qty }).then((r) => r.data),
+  adminGenerateOrder: (productId: number, qty?: number, customer?: string | null) =>
+    client.post<AdminOrder>('/admin/orders/generate', { product_id: productId, qty, customer }).then((r) => r.data),
   adminUpdateOrder: (orderId: number, data: Partial<Pick<AdminOrder, 'product_id' | 'qty' | 'reward_coins' | 'customer' | 'status' | 'name'>>) =>
     client.put<AdminOrder>(`/admin/orders/${orderId}`, data).then((r) => r.data),
   adminCancelOrder: (orderId: number) =>
@@ -677,6 +708,11 @@ export const api = {
     client.put<OrderTemplate>(`/admin/order-templates/${id}`, data).then((r) => r.data),
   adminDeleteOrderTemplate: (id: number) =>
     client.delete(`/admin/order-templates/${id}`).then((r) => r.data),
+  adminUploadOrderTemplateImage: (id: number, image: File) => {
+    const form = new FormData();
+    form.append('image', image);
+    return client.put<OrderTemplate>(`/admin/order-templates/${id}/image`, form).then((r) => r.data);
+  },
 
   // ── Админ: уровни ──
   adminLevels: () =>
@@ -686,7 +722,7 @@ export const api = {
   adminUploadLevelImage: (level: number, file: File) => {
     const fd = new FormData();
     fd.append('image', file);
-    return client.post<LevelGate>(`/admin/levels/${level}/image`, fd).then((r) => r.data);
+    return client.post<LevelGate>(`/admin/levels/${level}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
   adminDeleteLevel: (level: number) =>
     client.delete(`/admin/levels/${level}`).then((r) => r.data),
@@ -743,6 +779,10 @@ export const api = {
     client.post<FieldCellDetail>(`/fields/${fieldId}/cells/${col}/${row}/plant`, { plant_id: plantId, qty: qty ?? 1 }).then((r) => r.data),
   harvestCell: (fieldId: number, col: number, row: number) =>
     client.post<FieldCellDetail>(`/fields/${fieldId}/cells/${col}/${row}/harvest`).then((r) => r.data),
+  plantOnBed: (fieldId: number, bedId: number, plantId: number, qty?: number) =>
+    client.post<PlantBed>(`/fields/${fieldId}/plant-beds/${bedId}/plant`, { plant_id: plantId, qty: qty ?? 1 }).then((r) => r.data),
+  harvestBed: (fieldId: number, bedId: number) =>
+    client.post<PlantBed>(`/fields/${fieldId}/plant-beds/${bedId}/harvest`).then((r) => r.data),
   startTentBuild: (fieldId: number, tentId: number) =>
     client.post<Tent>(`/fields/${fieldId}/tents/${tentId}/start-build`).then((r) => r.data),
   investTentBuild: (fieldId: number, tentId: number, amount: number) =>
@@ -780,4 +820,23 @@ export const api = {
   },
   crystalCards: () =>
     client.get<CrystalCard[]>('/crystal-cards').then((r) => r.data),
+
+  // ── Достижения ──
+  achievements: () =>
+    client.get<Achievement[]>('/achievements').then((r) => r.data),
+  adminAchievements: () =>
+    client.get<Achievement[]>('/admin/achievements').then((r) => r.data),
+  adminAchievementKinds: () =>
+    client.get<AchievementKind[]>('/admin/achievements/kinds').then((r) => r.data),
+  adminCreateAchievement: (data: { name: string; condition_kind: string; condition_value?: number; image_url?: string | null }) =>
+    client.post<Achievement>('/admin/achievements', data).then((r) => r.data),
+  adminUpdateAchievement: (id: number, data: { name: string; condition_kind: string; condition_value?: number; image_url?: string | null }) =>
+    client.put<Achievement>(`/admin/achievements/${id}`, data).then((r) => r.data),
+  adminDeleteAchievement: (id: number) =>
+    client.delete(`/admin/achievements/${id}`).then((r) => r.data),
+  adminUploadAchievementImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Achievement>(`/admin/achievements/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
 };

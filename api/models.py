@@ -157,6 +157,7 @@ class Plot(Base):
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
     cell_id = Column(Integer, ForeignKey("field_cells.id", ondelete="SET NULL"), nullable=True)
+    plant_bed_id = Column(Integer, ForeignKey("plant_beds.id", ondelete="SET NULL"), nullable=True)
 
     user = relationship("User", back_populates="plots")
     plant = relationship("Plant", back_populates="plots")
@@ -334,9 +335,12 @@ class PlantBed(Base):
     col2 = Column(Integer, nullable=False)
     row2 = Column(Integer, nullable=False)
     plant_category = Column(String, nullable=True)
+    plant_id = Column(Integer, ForeignKey("plants.id", ondelete="SET NULL"), nullable=True)
+    occupant_user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     field = relationship("Field", back_populates="plant_beds")
+    plant = relationship("Plant")
 
 
 class PetZone(Base):

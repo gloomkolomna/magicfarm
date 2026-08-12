@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { api, type FieldInfo } from '../api/endpoints';
+import { api, type FieldInfo, type LevelGate } from '../api/endpoints';
+import { mediaUrl } from '../api/media';
 
 const FIELD_KIND_LABEL: Record<string, string> = {
   garden_beds: '🌱 Грядки',
@@ -32,6 +33,7 @@ export default function FieldsPage() {
   const [bgUrl, setBgUrl] = useState('');
   const [page, setPage] = useState(0);
   const [potions, setPotions] = useState<any[]>([]);
+  const [levels, setLevels] = useState<LevelGate[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -40,10 +42,11 @@ export default function FieldsPage() {
       api.userPotions().catch(() => [] as any[]),
       api.levels().catch(() => [] as any[]),
     ])
-      .then(([flds, bg, pots]) => {
+      .then(([flds, bg, pots, lvls]) => {
         setFields(flds);
         setBgUrl(bg.url);
         setPotions(pots);
+        setLevels(lvls);
       })
       .catch((e) => setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')))
       .finally(() => setLoading(false));
@@ -56,6 +59,7 @@ export default function FieldsPage() {
   const safePage = Math.max(0, Math.min(page, Math.max(0, totalPages - 1)));
   const current = categories[safePage];
   const userLevel = user?.level ?? 0;
+  const levelImage = levels.find((l) => l.level === userLevel)?.image_url;
 
   useEffect(() => {
     if (totalPages === 0) return;
@@ -69,6 +73,9 @@ export default function FieldsPage() {
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       {user && (
         <div className="fm-card fm-rise" style={{ textAlign: 'center', marginBottom: 14 }}>
+          {levelImage && (
+            <img src={mediaUrl(levelImage)} alt={`Уровень ${userLevel}`} style={{ maxWidth: 200, maxHeight: 100, marginBottom: 8, borderRadius: 8 }} />
+          )}
           <div style={{ fontSize: 24, marginBottom: 4 }}>🏆 Уровень {userLevel}</div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
             <span>🪙 {user.coins ?? 0}</span>
@@ -82,13 +89,6 @@ export default function FieldsPage() {
               </span>
             </div>
           )}
-          <button
-            className="fm-btn fm-btn-outline"
-            style={{ marginTop: 10 }}
-            onClick={() => nav('/onboarding')}
-          >
-            ⚙️ Настроить игру
-          </button>
         </div>
       )}
       {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}

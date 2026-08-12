@@ -71,7 +71,7 @@ VK Mini App — однопользовательская мотивационн�
       api/client.ts                # axios, Bearer-интерцептор
       api/endpoints.ts             # все вызовы
       api/media.ts                 # URL-хелпер для фото
-      auth/betaGate.ts             # бета-доступ по whitelist VK-ID
+      auth/adminGate.ts             # заглушка: доступ только админам (VK-ID whitelist)
       components/
         MiniAppShell.tsx           # гамбургер-навигация
         Background.tsx             # фон страницы (CSS-переменная)
@@ -83,8 +83,9 @@ VK Mini App — однопользовательская мотивационн�
   deploy/                   # bash-скрипты + systemd units
     deploy.sh               # полнооткатный деплой (trap on_error → rollback_all)
     backup.sh               # ежедневний бэкап БД
-    farm-api.service        # systemd: gunicorn на 127.0.0.1:8003
-    farm-bot.service        # заготовка (TODO: когда бот появится)
+    magicfarm-api.service   # systemd: gunicorn на 127.0.0.1:8003
+    magicfarm-bot.service   # заготовка (TODO: когда бот появится)
+    nginx-magicfarm.conf    # location /magicfarm/ для FastPanel2 (belovolovhome.ru)
   dev.ps1                   # локальный запуск (Windows): venv + alembic + uvicorn + фронт
   docs/
     Правила.md              # структурированные правила игры (из pptx)
@@ -205,14 +206,14 @@ cd api
 3. `git fetch` + `reset --hard`.
 4. `pip install` + `alembic upgrade head`.
 5. `npm install` + `npm run build`.
-6. `systemctl restart farm-api`.
+6. `systemctl restart magicfarm-api`.
 7. Health-check (5 попыток).
 
 При ошибке — `trap on_error` → `rollback_all`. Режим `-recovery` —
 интерактивное восстановление из tar-архива.
 
-Константы: `APP_DIR=/opt/farm`, `DB_FILE=/opt/farm/api/farm.db`.
-Бэкапы: `$API_DIR/backups` (10 копий), `/opt/farm-backups` (5 архивов).
+Константы: `APP_DIR=/opt/magicfarm`, `DB_FILE=/opt/magicfarm/api/farm.db`.
+Бэкапы: `$API_DIR/backups` (10 копий), `/opt/magicfarm-backups` (5 архивов).
 
 ## Конвенции кода
 

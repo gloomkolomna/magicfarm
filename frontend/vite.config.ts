@@ -4,14 +4,14 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: '/farm/',
+  base: '/magicfarm/',
   server: {
     port: 5175,
     proxy: {
-      '/farm/api': {
+      '/magicfarm/api': {
         target: 'http://127.0.0.1:8003',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/farm\/api/, '/api'),
+        rewrite: (path) => path.replace(/^\/magicfarm\/api/, '/api'),
       },
     },
   },

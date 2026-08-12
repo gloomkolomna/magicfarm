@@ -1,0 +1,10 @@
+[
+  "tests/test_phase10_new.py::TestAchievements::test_crud",
+  "tests/test_phase10_new.py::TestAchievements::test_image_upload",
+  "tests/test_phase10_new.py::TestAchievements::test_image_upload_404",
+  "tests/test_phase10_new.py::TestCustomers::test_crud",
+  "tests/test_phase10_new.py::TestCustomers::test_duplicate_code",
+  "tests/test_phase10_new.py::TestCustomers::test_template_with_customer_id",
+  "tests/test_phase10_new.py::TestOrderTemplatePotion::test_invalid_source_kind_rejected",
+  "tests/test_phase10_new.py::TestOrderTemplatePotion::test_potion_source_kind_allowed"
+]

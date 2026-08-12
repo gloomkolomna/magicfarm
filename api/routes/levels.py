@@ -88,8 +88,8 @@ def admin_set_level(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
-    if level < 1 or level > 16:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Уровень 1-16")
+    if level < 0 or level > 16:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Уровень 0-16")
     if unlock_type is not None and unlock_type not in UNLOCK_OPTIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
