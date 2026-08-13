@@ -147,7 +147,6 @@ function MiniAppShell({ children }: Props) {
           zoom: 'var(--app-scale)',
           width: 'calc(100% / var(--app-scale))',
           margin: '0 auto',
-          paddingTop: 'calc(50px + var(--vk-inset-top, 0px))',
         }}
       >
         {children}

@@ -11,6 +11,7 @@ const FIELD_KIND_LABEL: Record<string, string> = {
   house: '🏠 Дом',
   brewery: '🧪 Зельеварня',
   library: '📖 Библиотека',
+  lawn: '🐾 Питомцы',
   default: '🗺️ Поля',
 };
 
@@ -102,12 +103,11 @@ export default function FieldsPage() {
       ) : (
         <>
           {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, background: 'linear-gradient(180deg, var(--leaf) 0%, var(--grass) 100%)', border: '1px solid var(--grass-deep)', borderRadius: 'var(--radius-md)', padding: '8px 10px', color: '#1a2414' }}>
               <button
-                className="fm-card"
                 disabled={safePage === 0}
                 onClick={handlePrev}
-                style={{ cursor: safePage === 0 ? 'default' : 'pointer', opacity: safePage === 0 ? 0.4 : 1, padding: '6px 14px', fontSize: 18 }}
+                style={{ cursor: safePage === 0 ? 'default' : 'pointer', opacity: safePage === 0 ? 0.4 : 1, padding: '6px 14px', fontSize: 18, background: 'transparent', border: 'none', color: 'inherit' }}
               >
                 ◀
               </button>
@@ -115,10 +115,9 @@ export default function FieldsPage() {
                 {FIELD_KIND_LABEL[current.category] || current.category}
               </span>
               <button
-                className="fm-card"
                 disabled={safePage >= totalPages - 1}
                 onClick={handleNext}
-                style={{ cursor: safePage >= totalPages - 1 ? 'default' : 'pointer', opacity: safePage >= totalPages - 1 ? 0.4 : 1, padding: '6px 14px', fontSize: 18 }}
+                style={{ cursor: safePage >= totalPages - 1 ? 'default' : 'pointer', opacity: safePage >= totalPages - 1 ? 0.4 : 1, padding: '6px 14px', fontSize: 18, background: 'transparent', border: 'none', color: 'inherit' }}
               >
                 ▶
               </button>
