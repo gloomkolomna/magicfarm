@@ -306,7 +306,8 @@ export default function FieldPage() {
                         if (!isBed) return;
                         if (cell.occupant_user_id == null) {
                           setPlantCell({ col: c, row: r });
-                          setPlantSel(field.plants[0]?.id ?? null);
+                          const plantedIds = new Set(field.cells.filter((x) => x.plant_id != null && x.occupant_user_id != null).map((x) => x.plant_id!));
+                          setPlantSel(field.plants.find((p) => !plantedIds.has(p.id))?.id ?? null);
                         } else {
                           setShowVideo(false);
                           setCardResult(null);
@@ -446,10 +447,14 @@ export default function FieldPage() {
                 >
                   <div
                     onClick={() => {
-                      if (!occupied) {
-                        setPlantBed(pb);
-                        setPlantBedSel(field.plants[0]?.id ?? null);
-                      } else {
+                        if (!occupied) {
+                          setPlantBed(pb);
+                          const plantedIds = new Set<number>([
+                            ...field.cells.filter((x) => x.plant_id != null && x.occupant_user_id != null).map((x) => x.plant_id!),
+                            ...(field.plant_beds?.filter((b) => b.plant_id != null && b.occupant_user_id != null).map((b) => b.plant_id!) ?? []),
+                          ]);
+                          setPlantBedSel(field.plants.find((p) => !plantedIds.has(p.id))?.id ?? null);
+                        } else {
                         setShowVideo(false);
                         setCardResult(null);
                         setCareBedId(pb.id);
