@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_role
-from models import Field, FieldCell, FieldPlant, PetZone, Plant, PlantBed, ProductionTemplate, Tent, User
+from models import Animal, Field, FieldAnimal, FieldCell, FieldPet, FieldPlant, Pet, PetZone, Plant, PlantBed, ProductionTemplate, Tent, User
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/admin/fields", tags=["admin-fields"])
@@ -123,6 +123,7 @@ class TentOut(BaseModel):
     crystal_color: str | None
     crystal_count: int | None
     drawn_cards_json: str | None
+    norm_revealed: bool = False
 
 
 class PlantBedOut(BaseModel):
@@ -173,6 +174,8 @@ class FieldDetailOut(FieldOut):
     plants: list[PlantOut]
     plant_beds: list[PlantBedOut] = []
     pet_zones: list[PetZoneOut] = []
+    animal_ids: list[int] = []
+    pet_ids: list[int] = []
 
 
 def _field_to_out(f: Field) -> FieldOut:
@@ -408,6 +411,50 @@ def set_field_plants(
     return [_plant_to_out(fp.plant) for fp in f.plants]
 
 
+class FieldAnimalsRequest(BaseModel):
+    animal_ids: list[int]
+
+
+class FieldPetsRequest(BaseModel):
+    pet_ids: list[int]
+
+
+@router.put("/{field_id}/animals", response_model=list[int])
+def set_field_animals(
+    field_id: int,
+    req: FieldAnimalsRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    valid_ids = {a.id for a in db.query(Animal).filter(Animal.id.in_(req.animal_ids)).all()}
+    db.query(FieldAnimal).filter(FieldAnimal.field_id == f.id).delete()
+    for aid in req.animal_ids:
+        if aid in valid_ids:
+            db.add(FieldAnimal(field_id=f.id, animal_id=aid))
+    db.commit()
+    db.refresh(f)
+    return [fa.animal_id for fa in f.animals]
+
+
+@router.put("/{field_id}/pets", response_model=list[int])
+def set_field_pets(
+    field_id: int,
+    req: FieldPetsRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    valid_ids = {p.id for p in db.query(Pet).filter(Pet.id.in_(req.pet_ids)).all()}
+    db.query(FieldPet).filter(FieldPet.field_id == f.id).delete()
+    for pid in req.pet_ids:
+        if pid in valid_ids:
+            db.add(FieldPet(field_id=f.id, pet_id=pid))
+    db.commit()
+    db.refresh(f)
+    return [fp.pet_id for fp in f.pets]
+
+
 class TentCreate(BaseModel):
     name: str
     kind: str = "alchemy"
@@ -526,6 +573,8 @@ def _detail(f: Field) -> FieldDetailOut:
             PetZoneOut(id=pz.id, field_id=pz.field_id, col1=pz.col1, row1=pz.row1, col2=pz.col2, row2=pz.row2)
             for pz in f.pet_zones
         ],
+        animal_ids=[fa.animal_id for fa in f.animals],
+        pet_ids=[fp.pet_id for fp in f.pets],
     )
 
 

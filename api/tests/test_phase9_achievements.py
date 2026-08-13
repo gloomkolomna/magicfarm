@@ -10,11 +10,11 @@ def _real_img():
     return buf.getvalue()
 
 
-def _seed_achievement(db, code, name, condition_kind, value=1):
+def _seed_achievement(db, code, name, condition_kind, value=1, production_code=None):
     from models import Achievement
     a = db.query(Achievement).filter(Achievement.code == code).first()
     if a is None:
-        a = Achievement(code=code, name=name, condition_kind=condition_kind, condition_value=value)
+        a = Achievement(code=code, name=name, condition_kind=condition_kind, condition_value=value, production_code=production_code)
         db.add(a)
         db.commit()
         db.refresh(a)
@@ -126,6 +126,34 @@ def test_tents_count_achievement(db):
                      accumulated=500, required=500))
     db.commit()
     assert check_and_award(123, "tents_count", db) == 1
+
+
+def test_tents_count_achievement_specific_production(db):
+    _seed_achievement(db, "alchemy_tent", "Алхимический шатёр", "tents_count", 1, production_code="alchemy")
+    from services.achievements import check_and_award
+    from models import Tent, TentBuild
+    t = Tent(field_id=1, name="Стол", kind="alchemy", col1=0, row1=0, col2=0, row2=0,
+             build_status="slot", accumulated=0, required=500)
+    db.add(t)
+    db.commit()
+    db.add(TentBuild(user_id=123, tent_id=t.id, build_status="built",
+                     accumulated=500, required=500))
+    db.commit()
+    assert check_and_award(123, "tents_count", db) == 1
+
+
+def test_tents_count_achievement_specific_production_wrong_kind(db):
+    _seed_achievement(db, "alchemy_tent2", "Алхимический шатёр", "tents_count", 1, production_code="alchemy")
+    from services.achievements import check_and_award
+    from models import Tent, TentBuild
+    t = Tent(field_id=1, name="Шатёр", kind="sewing", col1=0, row1=0, col2=0, row2=0,
+             build_status="slot", accumulated=0, required=500)
+    db.add(t)
+    db.commit()
+    db.add(TentBuild(user_id=123, tent_id=t.id, build_status="built",
+                     accumulated=500, required=500))
+    db.commit()
+    assert check_and_award(123, "tents_count", db) == 0
 
 
 def test_level_reached_achievement(db):
@@ -247,6 +275,27 @@ def test_admin_create_achievement(admin_client):
     assert res.status_code == 201, f"POST failed: {res.status_code} {res.text}"
     data = res.json()
     assert data["code"]
+
+
+def test_admin_create_achievement_with_production(admin_client):
+    res = admin_client.post("/api/admin/achievements", json={
+        "name": "Алхимический шатёр",
+        "condition_kind": "tents_count",
+        "condition_value": 1,
+        "production_code": "alchemy",
+    })
+    assert res.status_code == 201, res.text
+    assert res.json()["production_code"] == "alchemy"
+
+
+def test_admin_create_achievement_invalid_production(admin_client):
+    res = admin_client.post("/api/admin/achievements", json={
+        "name": "Bad",
+        "condition_kind": "tents_count",
+        "condition_value": 1,
+        "production_code": "nonexistent",
+    })
+    assert res.status_code == 400
 
 
 def test_admin_achievement_kinds(admin_client):

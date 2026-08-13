@@ -45,7 +45,7 @@ export default function PetsPage() {
     try {
       const [pets, cat] = await Promise.all([
         api.userPets(),
-        api.adminPets(),
+        api.petsCatalog(),
       ]);
       setUserPets(pets);
       setCatalog(cat);

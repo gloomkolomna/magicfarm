@@ -230,6 +230,41 @@ def test_create_product(admin_client):
     assert data["production_kind"] == "alchemy"
 
 
+def test_create_product_with_animal(admin_client):
+    res = admin_client.post(
+        "/api/admin/catalog/products",
+        json={"name": "Радужная шерсть", "animal_id": 1, "stars": 1, "production_kind": "sewing"},
+    )
+    assert res.status_code == 201, res.text
+    data = res.json()
+    assert data["animal_id"] == 1
+
+
+def test_create_product_with_pet(admin_client):
+    res = admin_client.post(
+        "/api/admin/catalog/products",
+        json={"name": "Бонус питомца", "pet_id": 1, "stars": 1},
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["pet_id"] == 1
+
+
+def test_create_product_invalid_animal(admin_client):
+    res = admin_client.post(
+        "/api/admin/catalog/products",
+        json={"name": "X", "animal_id": 999},
+    )
+    assert res.status_code == 404
+
+
+def test_create_product_invalid_pet(admin_client):
+    res = admin_client.post(
+        "/api/admin/catalog/products",
+        json={"name": "Y", "pet_id": 999},
+    )
+    assert res.status_code == 404
+
+
 def test_create_product_duplicate_code(admin_client):
     c1 = admin_client.post("/api/admin/catalog/products", json={"name": "Товар"}).json()["code"]
     c2 = admin_client.post("/api/admin/catalog/products", json={"name": "Товар"}).json()["code"]

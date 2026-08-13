@@ -5,10 +5,25 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user
-from models import Pet, User, UserPet
+from models import Field, FieldPet, Pet, User, UserPet
+from routes.admin_catalog import PetOut, _pet_out
 from services.card_draw import calculate_norm, cards_to_json, draw_cards
 
 router = APIRouter(prefix="/api/pets", tags=["pets"])
+
+
+@router.get("/catalog", response_model=list[PetOut])
+def list_available_pets(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Питомцы, доступные игроку: привязанные к локациям «Лужайка», иначе весь каталог."""
+    bound = db.query(Pet).join(FieldPet, FieldPet.pet_id == Pet.id).join(
+        Field, Field.id == FieldPet.field_id
+    ).filter(Field.field_kind == "lawn").distinct().all()
+    if bound:
+        return [_pet_out(p) for p in bound]
+    return [_pet_out(p) for p in db.query(Pet).order_by(Pet.id.asc()).all()]
 
 
 class UserPetOut(BaseModel):

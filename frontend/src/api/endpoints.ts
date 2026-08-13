@@ -201,6 +201,9 @@ export interface Product {
   code: string;
   name: string;
   emoji: string | null;
+  plant_id: number | null;
+  animal_id: number | null;
+  pet_id: number | null;
   stars: number;
   production_kind: string | null;
   image_url: string | null;
@@ -316,6 +319,8 @@ export interface Tent {
   required: number;
   crystal_color: string | null;
   crystal_count: number | null;
+  drawn_cards_json: string | null;
+  norm_revealed: boolean;
 }
 
 export interface PlantBed {
@@ -350,6 +355,8 @@ export interface FieldDetail extends FieldInfo {
   tents?: Tent[];
   plant_beds?: PlantBed[];
   pet_zones?: PetZone[];
+  animal_ids?: number[];
+  pet_ids?: number[];
 }
 
 export interface NormImage {
@@ -400,6 +407,7 @@ export interface Achievement {
   name: string;
   condition_kind: string;
   condition_value: number;
+  production_code: string | null;
   image_url: string | null;
   earned: boolean;
 }
@@ -534,6 +542,7 @@ export const api = {
   // ── Питомцы ──
   userPets: () => client.get<any[]>('/pets').then(r => r.data),
   settlePet: (petId: number) => client.post('/pets/settle', {pet_id: petId}).then(r => r.data),
+  petsCatalog: () => client.get<Pet[]>('/pets/catalog').then((r) => r.data),
 
   // ── Карты-локации: админка ──
   adminFields: () => client.get<FieldInfo[]>('/admin/fields').then((r) => r.data),
@@ -558,6 +567,10 @@ export const api = {
     client.put<FieldCell>(`/admin/fields/${fieldId}/cell/${col}/${row}`, { kind }).then((r) => r.data),
   adminSetFieldPlants: (id: number, plantIds: number[]) =>
     client.put<Plant[]>(`/admin/fields/${id}/plants`, { plant_ids: plantIds }).then((r) => r.data),
+  adminSetFieldAnimals: (id: number, animalIds: number[]) =>
+    client.put<number[]>(`/admin/fields/${id}/animals`, { animal_ids: animalIds }).then((r) => r.data),
+  adminSetFieldPets: (id: number, petIds: number[]) =>
+    client.put<number[]>(`/admin/fields/${id}/pets`, { pet_ids: petIds }).then((r) => r.data),
   adminCreateTent: (
     id: number,
     data: { name: string; kind: string; col1: number; row1: number; col2: number; row2: number },
@@ -788,6 +801,7 @@ export const api = {
   setBackground: (url: string) => client.put<{ url: string }>('/settings/background', { url }).then((r) => r.data),
 
   // ── Скотный двор ──
+  animalsAvailable: () => client.get<Animal[]>('/animals').then((r) => r.data),
   barnyardPens: () => client.get<BarnyardPen[]>('/animals/pens').then((r) => r.data),
   barnyardInstall: (slotId: number, animalId: number) =>
     client.post<BarnyardPen>(`/animals/pens/${slotId}/install`, { animal_id: animalId }).then((r) => r.data),
@@ -811,6 +825,8 @@ export const api = {
     client.post<Tent>(`/fields/${fieldId}/tents/${tentId}/start-build`).then((r) => r.data),
   investTentBuild: (fieldId: number, tentId: number, amount: number) =>
     client.post<Tent>(`/fields/${fieldId}/tents/${tentId}/build-invest`, { amount }).then((r) => r.data),
+  revealTentNorm: (fieldId: number, tentId: number) =>
+    client.post<Tent>(`/fields/${fieldId}/tents/${tentId}/reveal-norm`).then((r) => r.data),
 
   sellSurplus: (itemKind: string, itemId: number, qty: number) =>
     client.post<{ coins_earned: number }>('/farm/sell-surplus', { item_kind: itemKind, item_id: itemId, qty }).then((r) => r.data),
@@ -852,9 +868,9 @@ export const api = {
     client.get<Achievement[]>('/admin/achievements').then((r) => r.data),
   adminAchievementKinds: () =>
     client.get<AchievementKind[]>('/admin/achievements/kinds').then((r) => r.data),
-  adminCreateAchievement: (data: { name: string; condition_kind: string; condition_value?: number; image_url?: string | null }) =>
+  adminCreateAchievement: (data: { name: string; condition_kind: string; condition_value?: number; production_code?: string | null; image_url?: string | null }) =>
     client.post<Achievement>('/admin/achievements', data).then((r) => r.data),
-  adminUpdateAchievement: (id: number, data: { name: string; condition_kind: string; condition_value?: number; image_url?: string | null }) =>
+  adminUpdateAchievement: (id: number, data: { name: string; condition_kind: string; condition_value?: number; production_code?: string | null; image_url?: string | null }) =>
     client.put<Achievement>(`/admin/achievements/${id}`, data).then((r) => r.data),
   adminDeleteAchievement: (id: number) =>
     client.delete(`/admin/achievements/${id}`).then((r) => r.data),

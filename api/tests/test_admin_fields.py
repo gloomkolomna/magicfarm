@@ -4,6 +4,8 @@ import os
 import pytest
 from PIL import Image
 
+from tests.conftest import make_user_client
+
 
 def _img_bytes(w=800, h=600, fmt="PNG"):
     buf = io.BytesIO()
@@ -237,6 +239,72 @@ def test_set_field_plants_replace(admin_client):
     admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [p1]})
     ids = {p["id"] for p in admin_client.get(f"/api/admin/fields/{fid}").json()["plants"]}
     assert ids == {p1}
+
+
+# ===== Привязка животных/питомцев к локации =====
+
+def test_set_field_animals(admin_client):
+    fid = admin_client.post("/api/admin/fields", json={"name": "Скотный", "field_kind": "barnyard"}).json()["id"]
+    res = admin_client.put(f"/api/admin/fields/{fid}/animals", json={"animal_ids": [1, 9999]})
+    assert res.status_code == 200
+    ids = set(res.json())
+    assert 1 in ids
+    assert 9999 not in ids
+    assert set(admin_client.get(f"/api/admin/fields/{fid}").json()["animal_ids"]) == {1}
+
+
+def test_set_field_pets(admin_client):
+    fid = admin_client.post("/api/admin/fields", json={"name": "Лужайка", "field_kind": "lawn"}).json()["id"]
+    res = admin_client.put(f"/api/admin/fields/{fid}/pets", json={"pet_ids": [1, 9999]})
+    assert res.status_code == 200
+    ids = set(res.json())
+    assert 1 in ids
+    assert 9999 not in ids
+    assert set(admin_client.get(f"/api/admin/fields/{fid}").json()["pet_ids"]) == {1}
+
+
+def test_set_field_animals_requires_admin(player_client):
+    assert player_client.put("/api/admin/fields/1/animals", json={"animal_ids": [1]}).status_code == 403
+
+
+def test_set_field_pets_requires_admin(player_client):
+    assert player_client.put("/api/admin/fields/1/pets", json={"pet_ids": [1]}).status_code == 403
+
+
+# ===== Публичные списки животных/питомцев из локаций =====
+
+def test_available_animals_fallback(player_client):
+    animals = player_client.get("/api/animals").json()
+    assert len(animals) == 2
+
+
+def test_available_pets_fallback(player_client):
+    pets = player_client.get("/api/pets/catalog").json()
+    assert len(pets) == 2
+
+
+def test_available_animals_from_barnyard_binding(admin_client):
+    fid = admin_client.post("/api/admin/fields", json={"name": "Скотный", "field_kind": "barnyard"}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}/animals", json={"animal_ids": [1]})
+    with make_user_client(4001, "player") as c:
+        bound = c.get("/api/animals").json()
+    assert [a["id"] for a in bound] == [1]
+
+
+def test_available_pets_from_lawn_binding(admin_client):
+    fid = admin_client.post("/api/admin/fields", json={"name": "Лужайка", "field_kind": "lawn"}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}/pets", json={"pet_ids": [2]})
+    with make_user_client(4002, "player") as c:
+        bound = c.get("/api/pets/catalog").json()
+    assert [p["id"] for p in bound] == [2]
+
+
+def test_available_animals_requires_auth(client):
+    assert client.get("/api/animals").status_code == 401
+
+
+def test_available_pets_requires_auth(client):
+    assert client.get("/api/pets/catalog").status_code == 401
 
 
 # ===== Шатры-прямоугольники =====

@@ -48,6 +48,8 @@ export default function FieldPage() {
 
   const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string; norm?: number; qty?: number } | null>(null);
   const [showVideo, setShowVideo] = useState(false);
+  const [tentCardResult, setTentCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string; norm?: number } | null>(null);
+  const [tentShowVideo, setTentShowVideo] = useState(false);
   const [cardVideoUrl, setCardVideoUrl] = useState<string | null>(null);
   const [crystalCards, setCrystalCards] = useState<CrystalCard[]>([]);
   const [zoomedImg, setZoomedImg] = useState<string | null>(null);
@@ -208,9 +210,11 @@ export default function FieldPage() {
     setBusy(true); setMsg(null);
     try {
       const updated = await api.startTentBuild(fieldId, t.id);
-      setMsg('✓ Стройка началась! Вытянуты карты кристаллов.');
+      setMsg('✓ Стройка началась! Нажмите «Узнать норму».');
       setTentModal(updated);
-      setBuildInvestAmount(String(updated.required));
+      setBuildInvestAmount('');
+      setTentCardResult(null);
+      setTentShowVideo(false);
       await load(); await refresh();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -229,6 +233,21 @@ export default function FieldPage() {
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally { setBusy(false); }
+  }
+
+  async function doRevealTentNorm() {
+    if (!tentModal) return;
+    let cards: { color: string; value: number; is_treasure: boolean }[] = [];
+    if (tentModal.drawn_cards_json) {
+      try { cards = JSON.parse(tentModal.drawn_cards_json); } catch {}
+    }
+    setTentCardResult({ cards, title: `📖 Норма для ${tentModal.name}`, norm: tentModal.required ?? 0 });
+    setTentShowVideo(!!cardVideoUrl);
+    try {
+      const updated = await api.revealTentNorm(fieldId, tentModal.id);
+      setTentModal(updated);
+      setBuildInvestAmount(String(Math.max(0, updated.required - updated.accumulated)));
+    } catch {}
   }
 
   // ── Крафт в построенном шатре ──
@@ -256,6 +275,8 @@ export default function FieldPage() {
     setBuildInvestAmount(t.build_status === 'planted' ? String(Math.max(0, t.required - t.accumulated)) : '');
     setCraftAmount('');
     setCraftQty('1');
+    setTentCardResult(null);
+    setTentShowVideo(false);
     if (t.build_status === 'built') {
       const first = products.find((x) => x.production_kind === t.kind);
       setCraftProduct(first ? first.id : null);
@@ -295,7 +316,7 @@ export default function FieldPage() {
                   if (cell.kind === 'tent') bg = 'rgba(224,168,62,0.16)';
                   else if (cell.kind === 'pet') bg = 'rgba(200,130,220,0.16)';
                   else if (cell.kind === 'barnyard') bg = 'rgba(220,180,120,0.20)';
-                  else if (cell.kind === 'bed' && cell.occupant_user_id == null) bg = `center/contain no-repeat url(${plotUrl})`;
+                  else if (cell.kind === 'bed' && cell.occupant_user_id == null && field.plant_category !== 'orchard') bg = `center/contain no-repeat url(${plotUrl})`;
                   else if (cell.occupant_user_id != null) bg = cell.plot?.status === 'grown' ? 'rgba(111,174,74,0.30)' : 'rgba(90,143,62,0.20)';
                   const isBed = cell.kind === 'bed';
                   const grownImg = cell.plot?.status === 'grown' ? cell.plant_image_grown : cell.plant_image_young;
@@ -405,23 +426,23 @@ export default function FieldPage() {
                       <img
                         src={mediaUrl(t.image_url)}
                         alt=""
-                        style={{ maxWidth: '80%', maxHeight: '60%', objectFit: 'contain' }}
+                        style={{ maxWidth: '85%', maxHeight: '52%', objectFit: 'contain', pointerEvents: 'none' }}
                       />
                     )}
                     {t.build_status === 'built' && (
-                      <div style={{ fontSize: 'clamp(10px,2.6vw,16px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', lineHeight: 1.15, fontWeight: 600 }}>
+                      <div style={{ fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', lineHeight: 1.1, fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         ⛺ {t.name}
                       </div>
                     )}
                     {t.build_status === 'slot' && (
-                      <div style={{ fontSize: 'clamp(11px,3vw,16px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600 }}>
-                        🏗️ {t.name}
-                        <div style={{ fontSize: 10, opacity: 0.85 }}>свободный слот</div>
+                      <div style={{ fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600, lineHeight: 1.15, maxWidth: '100%' }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🏗️ {t.name}</div>
+                        <div style={{ fontSize: 9, opacity: 0.85 }}>свободный слот</div>
                       </div>
                     )}
                     {t.build_status === 'planted' && (
-                      <div style={{ fontSize: 'clamp(10px,2.6vw,15px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', lineHeight: 1.15, fontWeight: 600 }}>
-                        🔨 {t.name}
+                      <div style={{ fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', lineHeight: 1.15, fontWeight: 600, maxWidth: '100%' }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🔨 {t.name}</div>
                         <div style={{ fontSize: 10 }}>{t.accumulated}/{t.required}</div>
                       </div>
                     )}
@@ -727,7 +748,7 @@ export default function FieldPage() {
 
       {/* Модалка шатра (slot / planted / built) */}
       {tentModal && (
-        <Modal title={`⛺ ${tentModal.name}`} onClose={() => setTentModal(null)}>
+        <Modal title={`⛺ ${tentModal.name}`} onClose={() => setTentModal(null)} wide={tentModal.build_status === 'planted' && (tentShowVideo || (tentModal.norm_revealed && !tentShowVideo))}>
           {tentModal.build_status === 'slot' && (
             <>
               <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
@@ -741,20 +762,83 @@ export default function FieldPage() {
 
           {tentModal.build_status === 'planted' && (
             <>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                {COLOR_LABEL[tentModal.crystal_color || 'green']} ×{tentModal.crystal_count} · осталось {Math.max(0, tentModal.required - tentModal.accumulated)} крестиков
-              </div>
-              <div className="fm-progress" style={{ marginBottom: 10 }}>
-                <div className="fm-progress-fill" style={{ width: `${tentModal.required > 0 ? Math.min(100, Math.round((tentModal.accumulated / tentModal.required) * 100)) : 0}%` }} />
-              </div>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Вложить крестиков</label>
-              <input className="fm-input" type="number" min={1} value={buildInvestAmount} onChange={(e) => setBuildInvestAmount(e.target.value)} />
-              <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} disabled={busy || !buildInvestAmount} onClick={doBuildInvest}>
-                Вложить в стройку
-              </button>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                Чтобы пополнить баланс крестиков — отчитайтесь о вышивке в модалке грядки.
-              </p>
+              {!tentModal.norm_revealed ? (
+                <>
+                  <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                    Стройка началась! Нажмите «Узнать норму» — вытянутся карты кристаллов, и появится норма вышивки.
+                  </p>
+                  <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={doRevealTentNorm}>
+                    🔮 Узнать норму
+                  </button>
+                </>
+              ) : tentShowVideo && cardVideoUrl ? (
+                <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                  <video
+                    ref={videoRef}
+                    src={cardVideoUrl}
+                    autoPlay
+                    muted
+                    playsInline
+                    style={{ width: '100%', maxHeight: '50vh', borderRadius: 8 }}
+                    onEnded={() => setTentShowVideo(false)}
+                    onError={() => setTentShowVideo(false)}
+                  />
+                  <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ marginTop: 6 }} onClick={() => setTentShowVideo(false)}>
+                    Пропустить видео
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {tentCardResult && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                        {tentCardResult.cards.map((c, i) => {
+                          const cardImg = crystalCards.find(
+                            cc => cc.color === c.color && cc.value === c.value && cc.is_treasure === c.is_treasure
+                          )?.image_url;
+                          return (
+                            <div key={i} style={{ textAlign: 'center', padding: 6, borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border)', minWidth: 100 }}>
+                              {cardImg ? (
+                                <img
+                                  src={mediaUrl(cardImg)}
+                                  alt=""
+                                  style={{ width: '30vw', maxWidth: 160, height: 'auto', objectFit: 'contain', marginBottom: 4, cursor: 'pointer' }}
+                                  onClick={(e) => { e.stopPropagation(); setZoomedImg(mediaUrl(cardImg)); }}
+                                />
+                              ) : (
+                                <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 4 }}>
+                                  {c.is_treasure ? '💎' : c.color === 'green' ? '🟢' : c.color === 'blue' ? '🔵' : '🟣'}
+                                </div>
+                              )}
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                {c.is_treasure ? 'Сокровище' : `${c.value}`}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p style={{ fontSize: 16, fontWeight: 700, textAlign: 'center', margin: '8px 0', color: 'var(--text-accent)' }}>
+                        Итоговая норма: {tentCardResult.norm ?? tentModal.required} ✝️
+                      </p>
+                      <div style={{ borderTop: '1px solid var(--border)', margin: '10px 0' }} />
+                    </>
+                  )}
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                    {COLOR_LABEL[tentModal.crystal_color || 'green']} ×{tentModal.crystal_count} · осталось {Math.max(0, tentModal.required - tentModal.accumulated)} крестиков
+                  </div>
+                  <div className="fm-progress" style={{ marginBottom: 10 }}>
+                    <div className="fm-progress-fill" style={{ width: `${tentModal.required > 0 ? Math.min(100, Math.round((tentModal.accumulated / tentModal.required) * 100)) : 0}%` }} />
+                  </div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Вложить крестиков</label>
+                  <input className="fm-input" type="number" min={1} value={buildInvestAmount} onChange={(e) => setBuildInvestAmount(e.target.value)} />
+                  <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} disabled={busy || !buildInvestAmount} onClick={doBuildInvest}>
+                    Вложить в стройку
+                  </button>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                    Чтобы пополнить баланс крестиков — отчитайтесь о вышивке в модалке грядки.
+                  </p>
+                </>
+              )}
             </>
           )}
 

@@ -7,13 +7,28 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user
-from models import Animal, BarnyardSlot, Inventory, User
+from models import Animal, BarnyardSlot, Field, FieldAnimal, Inventory, User
+from routes.admin_catalog import AnimalOut, _animal_out
 from services.achievements import check_and_award
 from services.card_draw import calculate_norm, cards_to_json, draw_cards
 
 router = APIRouter(prefix="/api/animals", tags=["animals"])
 
 MAX_DIE = 6
+
+
+@router.get("", response_model=list[AnimalOut])
+def list_available_animals(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Животные, доступные игроку: привязанные к локациям «Скотный двор», иначе весь каталог."""
+    bound = db.query(Animal).join(FieldAnimal, FieldAnimal.animal_id == Animal.id).join(
+        Field, Field.id == FieldAnimal.field_id
+    ).filter(Field.field_kind == "barnyard").distinct().all()
+    if bound:
+        return [_animal_out(a) for a in bound]
+    return [_animal_out(a) for a in db.query(Animal).order_by(Animal.sort_order.asc(), Animal.id.asc()).all()]
 
 
 class BarnyardOut(BaseModel):

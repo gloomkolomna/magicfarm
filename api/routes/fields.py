@@ -149,6 +149,7 @@ def _tent_to_out_for_user(t: Tent, tb: TentBuild | None) -> TentOut:
             accumulated=tb.accumulated or 0, required=tb.required or 0,
             crystal_color=tb.crystal_color, crystal_count=tb.crystal_count,
             drawn_cards_json=tb.drawn_cards_json,
+            norm_revealed=tb.norm_revealed,
         )
     return TentOut(
         id=t.id, name=t.name, image_url=t.image_url, kind=t.kind,
@@ -681,4 +682,28 @@ def invest_tent_build(
 
     check_and_award(user.vk_id, "tents_count", db)
 
+    return _tent_to_out_for_user(t, tb)
+
+
+@router.post("/{field_id}/tents/{tent_id}/reveal-norm", response_model=TentOut)
+def reveal_tent_norm(
+    field_id: int,
+    tent_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Показывает вытянутые карты и норму вышивки для постройки шатра."""
+    _get_field_or_404(field_id, db)
+    t = _get_tent_on_field(tent_id, field_id, db)
+    tb = db.query(TentBuild).filter(
+        TentBuild.user_id == user.vk_id, TentBuild.tent_id == t.id
+    ).first()
+    if tb is None or tb.build_status != "planted":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Шатёр не в стадии постройки",
+        )
+    tb.norm_revealed = True
+    db.commit()
+    db.refresh(tb)
     return _tent_to_out_for_user(t, tb)

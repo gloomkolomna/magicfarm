@@ -217,7 +217,7 @@ export default function AdminPage() {
   // ── Достижения ──
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [achKinds, setAchKinds] = useState<AchievementKind[]>([]);
-  const [achForm, setAchForm] = useState({ name: '', condition_kind: '', condition_value: '1' });
+  const [achForm, setAchForm] = useState({ name: '', condition_kind: '', condition_value: '1', production_code: '' });
   const [achEditingId, setAchEditingId] = useState<number | null>(null);
   const [achImage, setAchImage] = useState<File | null>(null);
 
@@ -404,7 +404,7 @@ export default function AdminPage() {
 
   // ── Каталог: CRUD ──
   function startCreate() { setCatForm({ name: '' }); setEditingId(null); setFormOpen(true); }
-  function startEdit(item: Record<string, any>) { setCatForm({ ...item }); setEditingId(item.id); setFormOpen(true); }
+  function startEdit(item: Record<string, any>) { const f: Record<string, string> = {}; for (const [k, v] of Object.entries(item)) f[k] = v == null ? '' : String(v); setCatForm(f); setEditingId(item.id); setFormOpen(true); }
   async function cancelForm() {
     if (!catForm.name?.trim() && editingId) {
       if (tab === 'plants') try { await api.adminDeletePlant(editingId); } catch {}
@@ -556,8 +556,14 @@ export default function AdminPage() {
     if (!catForm.name?.trim()) return;
     setBusy(true); setMsg(null);
     try {
-      if (editingId) await api.adminUpdateProduct(editingId, catForm);
-      else { const created = await api.adminCreateProduct(catForm as any); setEditingId(created.id); }
+      const data: Record<string, any> = { ...catForm };
+      for (const k of ['plant_id', 'animal_id', 'pet_id']) {
+        data[k] = (data[k] === '' || data[k] == null) ? null : Number(data[k]);
+      }
+      if (data.stars === '' || data.stars == null) delete data.stars;
+      else data.stars = Number(data.stars);
+      if (editingId) await api.adminUpdateProduct(editingId, data);
+      else { const created = await api.adminCreateProduct(data as any); setEditingId(created.id); }
       setMsg('✓ Сохранено');
       await load();
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -978,7 +984,8 @@ export default function AdminPage() {
     if (!achForm.name.trim() || !achForm.condition_kind.trim()) { setMsg('✗ Заполните название и условие'); return; }
     setBusy(true); setMsg(null);
     try {
-      const data = { name: achForm.name, condition_kind: achForm.condition_kind, condition_value: Number(achForm.condition_value) || 1 };
+      const data: any = { name: achForm.name, condition_kind: achForm.condition_kind, condition_value: Number(achForm.condition_value) || 1 };
+      if (achForm.production_code) data.production_code = achForm.production_code;
       let targetId = achEditingId;
       if (targetId) { await api.adminUpdateAchievement(targetId, data); }
       else {
@@ -989,7 +996,7 @@ export default function AdminPage() {
         await api.adminUploadAchievementImage(targetId, achImage);
       }
       await loadAchievements();
-      setAchForm({ name: '', condition_kind: '', condition_value: '1' });
+      setAchForm({ name: '', condition_kind: '', condition_value: '1', production_code: '' });
       setAchEditingId(null);
       setAchImage(null);
       setMsg('✓ Сохранено');
@@ -1365,13 +1372,13 @@ export default function AdminPage() {
           )}
 
           {tab === 'plants' && (
-            <CatalogTab title="🌱 Растения" items={plants} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePlant} onDelete={deletePlant} onUploadImage={uploadPlantImage} onUploadImageYoung={uploadPlantImageYoung} onUploadImageGrown={uploadPlantImageGrown}
+            <CatalogTab title="🌱 Растения" items={plants} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePlant} onDelete={deletePlant} onUploadImage={uploadPlantImage} onUploadImageYoung={uploadPlantImageYoung} onUploadImageGrown={uploadPlantImageGrown} hideMainImage
               fields={[{ key: 'name', label: 'Название', ph: 'Джекобоб' }, { key: 'level', label: 'Уровень', ph: '1', type: 'number' }, { key: 'category', label: 'Категория', options: [{ value: 'garden', label: '🌱 Грядка' }, { value: 'orchard', label: '🍎 Сад' }] }, { key: 'description', label: 'Описание', ph: 'Грибы' }, { key: 'stitch_condition', label: 'Условие отшива', ph: 'Вышить на белой канве' }]}
             />
           )}
 
           {tab === 'animals' && (
-            <CatalogTab title="🐄 Животные" items={animals} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveAnimal} onDelete={deleteAnimal} onUploadImage={uploadAnimalImage} onUploadImageEmptyPen={uploadAnimalEmptyPenImage} onUploadImagePen={uploadAnimalPenImage}
+            <CatalogTab title="🐄 Животные" items={animals} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveAnimal} onDelete={deleteAnimal} onUploadImage={uploadAnimalImage} onUploadImageEmptyPen={uploadAnimalEmptyPenImage} onUploadImagePen={uploadAnimalPenImage} hideMainImage
               fields={[{ key: 'name', label: 'Название', ph: 'Единорог' }, { key: 'product_name', label: 'Продукция', ph: 'Рог единорога' }]}
             />
           )}
@@ -1385,7 +1392,14 @@ export default function AdminPage() {
 
           {tab === 'products' && (
             <CatalogTab title="📦 Товары" items={catalogProducts} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveProduct} onDelete={deleteProduct} onUploadImage={uploadProductImage}
-              fields={[{ key: 'name', label: 'Название', ph: 'Яд' }, { key: 'stars', label: 'Звёзды', ph: '1', type: 'number' }, { key: 'production_kind', label: 'Производство', ph: '', options: prodTemplates.map((pt) => ({ value: pt.code, label: `${pt.emoji || ''} ${pt.name}` })) }]}
+              fields={[
+                { key: 'name', label: 'Название', ph: 'Яд' },
+                { key: 'stars', label: 'Звёзды', ph: '1', type: 'number' },
+                { key: 'production_kind', label: 'Производство', ph: '', options: prodTemplates.map((pt) => ({ value: pt.code, label: `${pt.emoji || ''} ${pt.name}` })) },
+                { key: 'plant_id', label: 'Растение-источник', options: plants.map((p) => ({ value: String(p.id), label: `${p.emoji || ''} ${p.name}` })) },
+                { key: 'animal_id', label: 'Животное-источник', options: animals.map((a) => ({ value: String(a.id), label: `${a.emoji || ''} ${a.name}` })) },
+                { key: 'pet_id', label: 'Питомец-источник', options: pets.map((p) => ({ value: String(p.id), label: `${p.emoji || ''} ${p.name}` })) },
+              ]}
             />
           )}
 
@@ -1572,6 +1586,12 @@ export default function AdminPage() {
                     <option value="">— тип условия —</option>
                     {achKinds.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
                   </select>
+                  {achForm.condition_kind === 'tents_count' && (
+                    <select className="fm-input" value={achForm.production_code || ''} onChange={(e) => setAchForm({ ...achForm, production_code: e.target.value })} style={{ width: 180 }}>
+                      <option value="">— любой шатёр —</option>
+                      {prodTemplates.map((pt) => <option key={pt.code} value={pt.code}>{pt.emoji || ''} {pt.name}</option>)}
+                    </select>
+                  )}
                   <input className="fm-input" type="number" placeholder="Значение" value={achForm.condition_value} onChange={(e) => setAchForm({ ...achForm, condition_value: e.target.value })} style={{ width: 80 }} />
                 </div>
                 {(() => { const k = achKinds.find((x) => x.kind === achForm.condition_kind); return k?.hint ? <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>{k.hint}</div> : null; })()}
@@ -1583,7 +1603,7 @@ export default function AdminPage() {
                 <button className="fm-btn" disabled={busy} onClick={saveAchievement}>
                   {achEditingId ? '✎ Сохранить' : '➕ Создать'}
                 </button>
-                {achEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setAchEditingId(null); setAchForm({ name: '', condition_kind: '', condition_value: '1' }); setAchImage(null); }}>Отмена</button>}
+                {achEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setAchEditingId(null); setAchForm({ name: '', condition_kind: '', condition_value: '1', production_code: '' }); setAchImage(null); }}>Отмена</button>}
               </div>
               <div className="fm-grid">
                 {achievements.map((a) => (
@@ -1592,7 +1612,7 @@ export default function AdminPage() {
                     <strong>{a.name}</strong>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{achKinds.find((x) => x.kind === a.condition_kind)?.label ?? a.condition_kind}: {a.condition_value}</div>
                     <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-                      <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setAchEditingId(a.id); setAchForm({ name: a.name, condition_kind: a.condition_kind, condition_value: String(a.condition_value) }); setAchImage(null); }}>✎</button>
+                      <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setAchEditingId(a.id); setAchForm({ name: a.name, condition_kind: a.condition_kind, condition_value: String(a.condition_value), production_code: a.production_code || '' }); setAchImage(null); }}>✎</button>
                       <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
                         🖼️
                         <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAchImage(a.id, f); e.target.value = ''; }} />
@@ -1731,7 +1751,7 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 interface CatField { key: string; label: string; ph?: string; type?: string; options?: { value: string; label: string }[] }
 
 function CatalogTab({
-  title, items, busy, form, formOpen, editingId, onFormChange, onCreate, onEdit, onCancel, onSave, onDelete, onUploadImage, onUploadImageYoung, onUploadImageGrown, onUploadImageEmptyPen, onUploadImagePen, fields, imageLabel = 'Изображение',
+  title, items, busy, form, formOpen, editingId, onFormChange, onCreate, onEdit, onCancel, onSave, onDelete, onUploadImage, onUploadImageYoung, onUploadImageGrown, onUploadImageEmptyPen, onUploadImagePen, fields, imageLabel = 'Изображение', hideMainImage = false,
 }: {
   title: string;
   items: any[];
@@ -1752,6 +1772,7 @@ function CatalogTab({
   onUploadImagePen?: (id: number, file: File) => Promise<void>;
   fields: CatField[];
   imageLabel?: string;
+  hideMainImage?: boolean;
 }) {
   const [pendingUpload, setPendingUpload] = useState<{ file: File; cb: (id: number, f: File) => Promise<void> } | null>(null);
 
@@ -1812,10 +1833,12 @@ function CatalogTab({
             <button className="fm-btn fm-btn-outline" disabled={busy} onClick={onCancel}>Отмена</button>
           </div>
           <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
-              🖼️ {imageLabel}
-              <input type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0], onUploadImage)} />
-            </label>
+            {!hideMainImage && (
+              <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
+                🖼️ {imageLabel}
+                <input type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0], onUploadImage)} />
+              </label>
+            )}
             {onUploadImageYoung && (
               <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
                 🌱 Молодое
@@ -1855,7 +1878,7 @@ function CatalogTab({
                   <strong style={{ wordBreak: 'break-word' }}>{item.emoji} {item.name}</strong>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', wordBreak: 'break-all' }}>{item.code}</div>
                 </div>
-                {item.image_url && (
+                {!hideMainImage && item.image_url && (
                   <img src={mediaUrl(item.image_url)} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: 6 }} />
                 )}
                 {(item.image_young_url || item.image_grown_url) && (
@@ -1910,15 +1933,17 @@ function CatalogTab({
                 ) : (
                   <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
                     <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => onEdit(item)}>✎</button>
-                    <label className="fm-btn fm-btn-xs fm-btn-outline" title="Загрузить изображение" style={{ cursor: 'pointer' }}>
-                      🖼️
-                      <input type="file" accept="image/*" style={{ display: 'none' }}
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) { await onUploadImage(item.id, file); }
-                        }}
-                      />
-                    </label>
+                    {!hideMainImage && (
+                      <label className="fm-btn fm-btn-xs fm-btn-outline" title="Загрузить изображение" style={{ cursor: 'pointer' }}>
+                        🖼️
+                        <input type="file" accept="image/*" style={{ display: 'none' }}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) { await onUploadImage(item.id, file); }
+                          }}
+                        />
+                      </label>
+                    )}
                     <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => onDelete(item.id)}>✕</button>
                   </div>
                 )}

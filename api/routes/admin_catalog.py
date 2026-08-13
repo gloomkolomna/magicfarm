@@ -403,6 +403,8 @@ class ProductCreate(BaseModel):
     name: str
     emoji: str | None = None
     plant_id: int | None = None
+    animal_id: int | None = None
+    pet_id: int | None = None
     stars: int = 1
     production_kind: str | None = None
 
@@ -411,6 +413,8 @@ class ProductUpdate(BaseModel):
     name: str | None = None
     emoji: str | None = None
     plant_id: int | None = None
+    animal_id: int | None = None
+    pet_id: int | None = None
     stars: int | None = None
     production_kind: str | None = None
 
@@ -421,6 +425,8 @@ class ProductOut(BaseModel):
     name: str
     emoji: str | None
     plant_id: int | None
+    animal_id: int | None
+    pet_id: int | None
     stars: int
     production_kind: str | None
     image_url: str | None
@@ -429,9 +435,19 @@ class ProductOut(BaseModel):
 def _product_out(p: Product) -> ProductOut:
     return ProductOut(
         id=p.id, code=p.code, name=p.name, emoji=p.emoji,
-        plant_id=p.plant_id, stars=p.stars, production_kind=p.production_kind,
+        plant_id=p.plant_id, animal_id=p.animal_id, pet_id=p.pet_id,
+        stars=p.stars, production_kind=p.production_kind,
         image_url=p.image_url,
     )
+
+
+def _validate_product_source(plant_id: int | None, animal_id: int | None, pet_id: int | None, db: Session) -> None:
+    if animal_id is not None and db.query(Animal).filter(Animal.id == animal_id).first() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Животное не найдено")
+    if pet_id is not None and db.query(Pet).filter(Pet.id == pet_id).first() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Питомец не найден")
+    if plant_id is not None and db.query(Plant).filter(Plant.id == plant_id).first() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Растение не найдено")
 
 
 @router.get("/products", response_model=list[ProductOut])
@@ -450,6 +466,7 @@ def create_product(
 ):
     if not req.name.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название обязательно")
+    _validate_product_source(req.plant_id, req.animal_id, req.pet_id, db)
     code = _unique_code(_auto_code(req.name, "product"), Product, db)
     if req.plant_id is not None:
         existing = db.query(Product).filter(Product.plant_id == req.plant_id).first()
@@ -457,7 +474,8 @@ def create_product(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"У растения уже есть товар «{existing.name}»")
     p = Product(
         code=code, name=req.name.strip(), emoji=req.emoji,
-        plant_id=req.plant_id, stars=req.stars, production_kind=req.production_kind,
+        plant_id=req.plant_id, animal_id=req.animal_id, pet_id=req.pet_id,
+        stars=req.stars, production_kind=req.production_kind,
     )
     db.add(p)
     try:
@@ -489,7 +507,14 @@ def update_product(
         existing = db.query(Product).filter(Product.plant_id == req.plant_id, Product.id != product_id).first()
         if existing:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"У растения уже есть товар «{existing.name}»")
+        _validate_product_source(req.plant_id, None, None, db)
         p.plant_id = req.plant_id
+    if req.animal_id is not None:
+        _validate_product_source(None, req.animal_id, None, db)
+        p.animal_id = req.animal_id
+    if req.pet_id is not None:
+        _validate_product_source(None, None, req.pet_id, db)
+        p.pet_id = req.pet_id
     if req.stars is not None:
         p.stars = req.stars
     if req.production_kind is not None:

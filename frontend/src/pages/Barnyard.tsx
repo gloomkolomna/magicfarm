@@ -30,7 +30,7 @@ export default function BarnyardPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, a] = await Promise.all([api.barnyardPens(), api.adminAnimals()]);
+      const [p, a] = await Promise.all([api.barnyardPens(), api.animalsAvailable()]);
       setPens(p);
       setAnimals(a);
     } catch (e: any) {
@@ -121,7 +121,7 @@ export default function BarnyardPage() {
 
         {sorted.length === 0 ? (
           <div className="fm-card" style={{ color: 'var(--text-muted)' }}>
-            Загоны не найдены. Обратитесь к админу.
+            Загоны пока не открыты. Они появляются с повышением уровня (прокачка «Животноводство»).
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 10 }}>

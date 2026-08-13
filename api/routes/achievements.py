@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_role
-from models import Achievement, User, UserAchievement
+from models import Achievement, ProductionTemplate, User, UserAchievement
 from routes.admin_catalog import _auto_code, _unique_code
 from services.achievements import ACHIEVEMENT_KINDS, known_kinds
 from services.uploads import remove_upload, save_upload
@@ -21,6 +21,7 @@ class AchievementOut(BaseModel):
     name: str
     condition_kind: str
     condition_value: int
+    production_code: str | None = None
     image_url: str | None
     earned: bool
 
@@ -32,6 +33,7 @@ def _ach_out(a: Achievement, user_id: int, db: Session) -> AchievementOut:
     return AchievementOut(
         id=a.id, code=a.code, name=a.name,
         condition_kind=a.condition_kind, condition_value=a.condition_value,
+        production_code=a.production_code,
         image_url=a.image_url, earned=earned,
     )
 
@@ -55,7 +57,15 @@ class AchievementCreate(BaseModel):
     name: str
     condition_kind: str
     condition_value: int = 1
+    production_code: str | None = None
     image_url: str | None = None
+
+
+def _validate_production_code(code: str | None, db: Session) -> None:
+    if not code:
+        return
+    if db.query(ProductionTemplate).filter(ProductionTemplate.code == code).first() is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Производство не найдено")
 
 
 @admin_router.get("", response_model=list[AchievementOut])
@@ -82,10 +92,12 @@ def admin_create(
 ):
     if req.condition_kind not in known_kinds():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный тип условия")
+    _validate_production_code(req.production_code, db)
     code = (req.code or "").strip() or _unique_code(_auto_code(req.name, "ach"), Achievement, db)
     a = Achievement(
         code=code, name=req.name,
         condition_kind=req.condition_kind, condition_value=req.condition_value,
+        production_code=req.production_code,
         image_url=req.image_url,
     )
     db.add(a)
@@ -106,9 +118,11 @@ def admin_update(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Достижение не найдено")
     if req.condition_kind not in known_kinds():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный тип условия")
+    _validate_production_code(req.production_code, db)
     a.name = req.name
     a.condition_kind = req.condition_kind
     a.condition_value = req.condition_value
+    a.production_code = req.production_code
     a.image_url = req.image_url
     db.commit()
     db.refresh(a)

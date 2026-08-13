@@ -36,7 +36,6 @@ export default function AchievementsPage() {
                       <img src={mediaUrl(a.image_url)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: 6 }} />
                     )}
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{a.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.condition_kind}: {a.condition_value}</div>
                   </div>
                 ))}
               </div>
@@ -57,7 +56,6 @@ export default function AchievementsPage() {
                       </div>
                     )}
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{a.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.condition_kind}: {a.condition_value}</div>
                   </div>
                 ))}
               </div>

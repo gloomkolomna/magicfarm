@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, type FieldCell, type FieldDetail, type Plant, type PlantBed, type PetZone, type ProductionTemplate, type Tent } from '../api/endpoints';
+import { api, type Animal, type FieldCell, type FieldDetail, type Pet, type Plant, type PlantBed, type PetZone, type ProductionTemplate, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 
 type Brush = 'bed' | 'pet' | 'tent' | 'barnyard';
@@ -26,6 +26,8 @@ function kindLabel(code: string, templates: ProductionTemplate[]) {
 export default function FieldEditor({ fieldId, onClose }: Props) {
   const [field, setField] = useState<FieldDetail | null>(null);
   const [allPlants, setAllPlants] = useState<Plant[]>([]);
+  const [allAnimals, setAllAnimals] = useState<Animal[]>([]);
+  const [allPets, setAllPets] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -48,10 +50,12 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [fd, pl, pts] = await Promise.all([api.adminGetField(fieldId), api.plants(), api.adminProductionTemplates()]);
+      const [fd, pl, pts, an, pt] = await Promise.all([api.adminGetField(fieldId), api.plants(), api.adminProductionTemplates(), api.adminAnimals(), api.adminPets()]);
       setField(fd);
       setAllPlants(pl);
       setProdTemplates(pts);
+      setAllAnimals(an);
+      setAllPets(pt);
       setMultiDraft(new Set());
       setCols(String(fd.cols));
       setRows(String(fd.rows));
@@ -82,6 +86,9 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     () => new Set(field?.plants.map((p) => p.id) ?? []),
     [field],
   );
+
+  const allowedAnimalIds = useMemo(() => new Set(field?.animal_ids ?? []), [field]);
+  const allowedPetIds = useMemo(() => new Set(field?.pet_ids ?? []), [field]);
 
   function cellSize() {
     if (!field) return 60;
@@ -240,6 +247,42 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     setMsg(null);
     try {
       await api.adminSetFieldPlants(fieldId, Array.from(next));
+      await load();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ── Животные локации (скотный двор) ──
+  async function toggleAnimal(aid: number) {
+    if (!field) return;
+    const next = new Set(allowedAnimalIds);
+    if (next.has(aid)) next.delete(aid);
+    else next.add(aid);
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.adminSetFieldAnimals(fieldId, Array.from(next));
+      await load();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ── Питомцы локации (лужайка) ──
+  async function togglePet(pid: number) {
+    if (!field) return;
+    const next = new Set(allowedPetIds);
+    if (next.has(pid)) next.delete(pid);
+    else next.add(pid);
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.adminSetFieldPets(fieldId, Array.from(next));
       await load();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -546,27 +589,73 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         </>
       )}
 
-      {/* Растения локации */}
-      <h3>🌱 Растения локации</h3>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
-        Отметьте растения, доступные для посадки игроками в этой локации.
-      </p>
-      <div className="fm-grid">
-        {allPlants
-          .filter((p) => !field?.plant_category || p.category === field.plant_category)
-          .map((p) => (
-            <label key={p.id} className="fm-card" style={{ cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={allowedPlantIds.has(p.id)}
-                disabled={busy}
-                onChange={() => togglePlant(p.id)}
-                style={{ marginRight: 8 }}
-              />
-              {p.emoji} {p.name}
-            </label>
-          ))}
-      </div>
+      {/* Привязка объектов локации */}
+      {field?.field_kind === 'barnyard' ? (
+        <>
+          <h3>🐄 Животные локации</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Отметьте животных, доступных для заселения игроками в скотном дворе.
+          </p>
+          <div className="fm-grid">
+            {allAnimals.map((a) => (
+              <label key={a.id} className="fm-card" style={{ cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={allowedAnimalIds.has(a.id)}
+                  disabled={busy}
+                  onChange={() => toggleAnimal(a.id)}
+                  style={{ marginRight: 8 }}
+                />
+                {a.emoji} {a.name}
+              </label>
+            ))}
+          </div>
+        </>
+      ) : field?.field_kind === 'lawn' ? (
+        <>
+          <h3>🐾 Питомцы локации</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Отметьте питомцев, доступных для поселения игроками на лужайке.
+          </p>
+          <div className="fm-grid">
+            {allPets.map((p) => (
+              <label key={p.id} className="fm-card" style={{ cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={allowedPetIds.has(p.id)}
+                  disabled={busy}
+                  onChange={() => togglePet(p.id)}
+                  style={{ marginRight: 8 }}
+                />
+                {p.emoji} {p.name}
+              </label>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <h3>🌱 Растения локации</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Отметьте растения, доступные для посадки игроками в этой локации.
+          </p>
+          <div className="fm-grid">
+            {allPlants
+              .filter((p) => !field?.plant_category || p.category === field.plant_category)
+              .map((p) => (
+                <label key={p.id} className="fm-card" style={{ cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={allowedPlantIds.has(p.id)}
+                    disabled={busy}
+                    onChange={() => togglePlant(p.id)}
+                    style={{ marginRight: 8 }}
+                  />
+                  {p.emoji} {p.name}
+                </label>
+              ))}
+          </div>
+        </>
+      )}
 
       {/* Модалка создания мульти-зоны */}
       {multiModal && (

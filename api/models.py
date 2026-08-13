@@ -192,11 +192,15 @@ class Product(Base):
     name = Column(String, nullable=False)
     emoji = Column(String, nullable=True)
     plant_id = Column(Integer, ForeignKey("plants.id", ondelete="SET NULL"), nullable=True, unique=True)
+    animal_id = Column(Integer, ForeignKey("animals.id", ondelete="SET NULL"), nullable=True)
+    pet_id = Column(Integer, ForeignKey("pets.id", ondelete="SET NULL"), nullable=True)
     stars = Column(Integer, nullable=False, default=1, server_default="1")
     production_kind = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
 
     plant = relationship("Plant", back_populates="products")
+    animal = relationship("Animal")
+    pet = relationship("Pet")
 
 
 class Inventory(Base):
@@ -268,6 +272,8 @@ class Field(Base):
     plants = relationship("FieldPlant", back_populates="field", cascade="all, delete-orphan")
     plant_beds = relationship("PlantBed", back_populates="field", cascade="all, delete-orphan")
     pet_zones = relationship("PetZone", back_populates="field", cascade="all, delete-orphan")
+    animals = relationship("FieldAnimal", back_populates="field", cascade="all, delete-orphan")
+    pets = relationship("FieldPet", back_populates="field", cascade="all, delete-orphan")
 
 
 class FieldPlant(Base):
@@ -278,6 +284,26 @@ class FieldPlant(Base):
 
     field = relationship("Field", back_populates="plants")
     plant = relationship("Plant")
+
+
+class FieldAnimal(Base):
+    __tablename__ = "field_animals"
+
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+    animal_id = Column(Integer, ForeignKey("animals.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+
+    field = relationship("Field", back_populates="animals")
+    animal = relationship("Animal")
+
+
+class FieldPet(Base):
+    __tablename__ = "field_pets"
+
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+    pet_id = Column(Integer, ForeignKey("pets.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+
+    field = relationship("Field", back_populates="pets")
+    pet = relationship("Pet")
 
 
 class FieldCell(Base):
@@ -338,6 +364,7 @@ class TentBuild(Base):
     crystal_color = Column(String, nullable=True)
     crystal_count = Column(Integer, nullable=True)
     drawn_cards_json = Column(Text, nullable=True)
+    norm_revealed = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     __table_args__ = (
@@ -590,6 +617,7 @@ class Achievement(Base):
     name = Column(String, nullable=False)
     condition_kind = Column(String, nullable=False)
     condition_value = Column(Integer, nullable=False, default=1, server_default="1")
+    production_code = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
 
 

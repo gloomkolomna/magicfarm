@@ -184,3 +184,45 @@ def test_field_detail_has_build_fields(admin_client, monkeypatch):
     tent = [t for t in detail["tents"] if t["id"] == tid][0]
     assert tent["build_status"] == "planted"
     assert tent["required"] > 0
+
+
+# ===== reveal-norm =====
+
+def test_reveal_norm_success(admin_client):
+    fid, tid = _make_field_with_slot(admin_client)
+    with make_user_client(1020, "player") as c:
+        started = c.post(f"/api/fields/{fid}/tents/{tid}/start-build").json()
+        assert started["norm_revealed"] is False
+        res = c.post(f"/api/fields/{fid}/tents/{tid}/reveal-norm")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["build_status"] == "planted"
+    assert data["norm_revealed"] is True
+    assert data["drawn_cards_json"]
+
+
+def test_reveal_norm_slot_not_started(admin_client):
+    fid, tid = _make_field_with_slot(admin_client)
+    with make_user_client(1021, "player") as c:
+        res = c.post(f"/api/fields/{fid}/tents/{tid}/reveal-norm")
+    assert res.status_code == 409
+
+
+def test_reveal_norm_other_user_forbidden(admin_client):
+    fid, tid = _make_field_with_slot(admin_client)
+    with make_user_client(1022, "player") as c:
+        c.post(f"/api/fields/{fid}/tents/{tid}/start-build")
+    with make_user_client(1023, "player") as other:
+        res = other.post(f"/api/fields/{fid}/tents/{tid}/reveal-norm")
+    assert res.status_code == 409
+
+
+def test_reveal_norm_tent_not_found(admin_client):
+    fid, _ = _make_field_with_slot(admin_client)
+    with make_user_client(1024, "player") as c:
+        res = c.post(f"/api/fields/{fid}/tents/9999/reveal-norm")
+    assert res.status_code == 404
+
+
+def test_reveal_norm_requires_auth(client):
+    assert client.post("/api/fields/1/tents/1/reveal-norm").status_code == 401
