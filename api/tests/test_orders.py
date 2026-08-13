@@ -97,9 +97,11 @@ def test_generate_order_without_customer(player_client):
 def test_list_customer_names(player_client):
     data = player_client.get("/api/orders/customers").json()
     assert isinstance(data, list)
-    assert len(data) == 65
+    assert len(data) == 67
     assert "Леди Бейлин" in data
     assert "Профессор Кларисса" in data
+    assert "Мышиный воин Осборт" in data
+    assert "Ледяная Сванекильда" in data
 
 
 def test_generate_order_default_qty(player_client):
