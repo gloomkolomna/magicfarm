@@ -223,7 +223,7 @@ def test_harvest_other_user_tree(admin_client):
         c.post(f"/api/fields/{fid}/plant-beds/{pb_id}/plant", json={"plant_id": pid})
     with make_user_client(555, "player") as c2:
         res = c2.post(f"/api/fields/{fid}/plant-beds/{pb_id}/harvest")
-    assert res.status_code == 403
+    assert res.status_code == 404
 
 
 # ===== Удаление слота и детали поля =====

@@ -197,7 +197,7 @@ def test_harvest_not_owner(admin_client, monkeypatch):
     from tests.conftest import make_user_client
     with make_user_client(999, "player") as other:
         res = other.post(f"/api/fields/{fid}/cells/0/0/harvest")
-    assert res.status_code == 403
+    assert res.status_code == 404
 
 
 def test_harvest_empty_cell(admin_client, monkeypatch):

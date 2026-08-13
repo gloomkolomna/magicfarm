@@ -139,7 +139,12 @@ def test_build_invest_other_user_forbidden(admin_client, monkeypatch):
         c.post(f"/api/fields/{fid}/tents/{tid}/start-build")
     with make_user_client(1009, "player") as other:
         res = other.post(f"/api/fields/{fid}/tents/{tid}/build-invest", json={"amount": 1})
-    assert res.status_code == 403
+    assert res.status_code == 409
+    with make_user_client(1008, "player") as c:
+        detail = c.get(f"/api/fields/{fid}").json()
+    tent = [t for t in detail["tents"] if t["id"] == tid][0]
+    assert tent["build_status"] == "planted"
+    assert tent["accumulated"] == 0
 
 
 def test_build_invest_slot_not_started(admin_client):

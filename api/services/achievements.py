@@ -70,9 +70,9 @@ def _meets_condition(user_id: int, a: Achievement, db: Session) -> bool:
         count = db.query(UserPotion).filter(UserPotion.user_id == user_id).count()
         return count >= a.condition_value
     if a.condition_kind == "tents_count":
-        from models import Tent
-        count = db.query(Tent).filter(
-            Tent.builder_user_id == user_id, Tent.build_status == "built"
+        from models import TentBuild
+        count = db.query(TentBuild).filter(
+            TentBuild.user_id == user_id, TentBuild.build_status == "built"
         ).count()
         return count >= a.condition_value
     if a.condition_kind == "level_reached":

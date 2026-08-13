@@ -117,10 +117,13 @@ def test_animals_count_achievement(db):
 def test_tents_count_achievement(db):
     _seed_achievement(db, "first_tent", "Первый шатёр", "tents_count", 1)
     from services.achievements import check_and_award
-    from models import Tent
+    from models import Tent, TentBuild
     t = Tent(field_id=1, name="Шатёр", kind="alchemy", col1=0, row1=0, col2=0, row2=0,
-             builder_user_id=123, build_status="built")
+             build_status="slot", accumulated=0, required=500)
     db.add(t)
+    db.commit()
+    db.add(TentBuild(user_id=123, tent_id=t.id, build_status="built",
+                     accumulated=500, required=500))
     db.commit()
     assert check_and_award(123, "tents_count", db) == 1
 

@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_onboarding
-from models import Field, FieldCell, FieldPlant, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, User, MAX_PLOT_QTY, CARD_DRAW_RULES
+from models import Field, FieldCell, FieldPlant, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, TentBuild, User, MAX_PLOT_QTY, CARD_DRAW_RULES
 from routes.admin_fields import (
     CellOut, FieldOut, PlantOut, TentOut,
-    _cell_to_out, _field_to_out, _get_field_or_404, _plant_to_out, _tent_to_out,
+    _field_to_out, _get_field_or_404, _plant_to_out,
 )
 from routes.farm import PlotOut, _plot_to_out
 from routes.settings import CRYSTAL_COLORS, crystal_norm, get_production_required
@@ -70,26 +70,30 @@ def list_fields(
     return [_field_to_out(f) for f in rows]
 
 
-def _cell_detail(c: FieldCell, db: Session) -> CellDetailOut:
-    plot = None
+def _cell_detail(c: FieldCell, db: Session, user: User, plot: Plot | None = None) -> CellDetailOut:
     plant_name = None
     plant_emoji = None
     plant_image_young = None
     plant_image_grown = None
-    if c.plant_id is not None and c.plant is not None:
-        plant_name = c.plant.name
-        plant_emoji = c.plant.emoji
-        plant_image_young = c.plant.image_young_url
-        plant_image_grown = c.plant.image_grown_url
-    if c.kind == "bed" and c.occupant_user_id is not None:
-        # Найдём Plot игрока, привязанный к этой клетке.
-        p = db.query(Plot).filter(Plot.cell_id == c.id, Plot.user_id == c.occupant_user_id).first()
-        if p is not None:
-            plot = _plot_to_out(p)
+    occupant_user_id = None
+    plant_id = None
+    plot_out = None
+    if c.kind == "bed":
+        if plot is None:
+            plot = db.query(Plot).filter(Plot.cell_id == c.id, Plot.user_id == user.vk_id).first()
+        if plot is not None:
+            occupant_user_id = user.vk_id
+            plant_id = plot.plant_id
+            plant = plot.plant
+            if plant is not None:
+                plant_name = plant.name
+                plant_emoji = plant.emoji
+                plant_image_young = plant.image_young_url
+                plant_image_grown = plant.image_grown_url
+            plot_out = _plot_to_out(plot)
     tent_name = None
     tent_image = None
     if c.tent_id is not None and c.kind == "tent":
-        from models import Tent
         t = db.query(Tent).filter(Tent.id == c.tent_id).first()
         if t is not None:
             tent_name = t.name
@@ -97,37 +101,61 @@ def _cell_detail(c: FieldCell, db: Session) -> CellDetailOut:
     occupant_name = None
     return CellDetailOut(
         id=c.id, col=c.col, row=c.row, kind=c.kind,
-        plant_id=c.plant_id, occupant_user_id=c.occupant_user_id, tent_id=c.tent_id,
+        plant_id=plant_id, occupant_user_id=occupant_user_id, tent_id=c.tent_id,
         plant_name=plant_name, plant_emoji=plant_emoji,
         plant_image_young=plant_image_young, plant_image_grown=plant_image_grown,
-        plot=plot, tent_name=tent_name, tent_image=tent_image, occupant_name=occupant_name,
+        plot=plot_out, tent_name=tent_name, tent_image=tent_image, occupant_name=occupant_name,
     )
 
 
-def _plant_bed_detail(pb: PlantBed, db: Session) -> PlantBedDetailOut:
-    plot = None
+def _plant_bed_detail(pb: PlantBed, db: Session, user: User, plot: Plot | None = None) -> PlantBedDetailOut:
     plant_name = None
     plant_emoji = None
     plant_image_young = None
     plant_image_grown = None
-    if pb.plant is not None:
-        plant_name = pb.plant.name
-        plant_emoji = pb.plant.emoji
-        plant_image_young = pb.plant.image_young_url
-        plant_image_grown = pb.plant.image_grown_url
-    if pb.occupant_user_id is not None:
-        p = db.query(Plot).filter(
-            Plot.plant_bed_id == pb.id, Plot.user_id == pb.occupant_user_id
+    occupant_user_id = None
+    plant_id = None
+    plot_out = None
+    if plot is None:
+        plot = db.query(Plot).filter(
+            Plot.plant_bed_id == pb.id, Plot.user_id == user.vk_id
         ).first()
-        if p is not None:
-            plot = _plot_to_out(p)
+    if plot is not None:
+        occupant_user_id = user.vk_id
+        plant_id = plot.plant_id
+        plant = plot.plant
+        if plant is not None:
+            plant_name = plant.name
+            plant_emoji = plant.emoji
+            plant_image_young = plant.image_young_url
+            plant_image_grown = plant.image_grown_url
+        plot_out = _plot_to_out(plot)
     return PlantBedDetailOut(
         id=pb.id, field_id=pb.field_id, col1=pb.col1, row1=pb.row1,
         col2=pb.col2, row2=pb.row2, plant_category=pb.plant_category,
-        plant_id=pb.plant_id, occupant_user_id=pb.occupant_user_id,
+        plant_id=plant_id, occupant_user_id=occupant_user_id,
         plant_name=plant_name, plant_emoji=plant_emoji,
         plant_image_young=plant_image_young, plant_image_grown=plant_image_grown,
-        plot=plot,
+        plot=plot_out,
+    )
+
+
+def _tent_to_out_for_user(t: Tent, tb: TentBuild | None) -> TentOut:
+    if tb is not None:
+        return TentOut(
+            id=t.id, name=t.name, image_url=t.image_url, kind=t.kind,
+            col1=t.col1, row1=t.row1, col2=t.col2, row2=t.row2,
+            builder_user_id=tb.user_id, build_status=tb.build_status,
+            accumulated=tb.accumulated or 0, required=tb.required or 0,
+            crystal_color=tb.crystal_color, crystal_count=tb.crystal_count,
+            drawn_cards_json=tb.drawn_cards_json,
+        )
+    return TentOut(
+        id=t.id, name=t.name, image_url=t.image_url, kind=t.kind,
+        col1=t.col1, row1=t.row1, col2=t.col2, row2=t.row2,
+        builder_user_id=None, build_status="slot",
+        accumulated=0, required=t.required or 0,
+        crystal_color=None, crystal_count=None, drawn_cards_json=None,
     )
 
 
@@ -138,10 +166,39 @@ def get_field(
     user: User = Depends(get_current_user),
 ):
     f = _get_field_or_404(field_id, db)
-    cells = [_cell_detail(c, db) for c in f.cells]
+
+    cell_ids = [c.id for c in f.cells if c.kind == "bed"]
+    cell_plots: dict[int, Plot] = {}
+    if cell_ids:
+        cell_plots = {
+            p.cell_id: p
+            for p in db.query(Plot).filter(
+                Plot.user_id == user.vk_id, Plot.cell_id.in_(cell_ids)
+            ).all()
+        }
+    bed_plot_ids = [pb.id for pb in f.plant_beds]
+    bed_plots: dict[int, Plot] = {}
+    if bed_plot_ids:
+        bed_plots = {
+            p.plant_bed_id: p
+            for p in db.query(Plot).filter(
+                Plot.user_id == user.vk_id, Plot.plant_bed_id.in_(bed_plot_ids)
+            ).all()
+        }
+    tent_ids = [t.id for t in f.tents]
+    builds: dict[int, TentBuild] = {}
+    if tent_ids:
+        builds = {
+            tb.tent_id: tb
+            for tb in db.query(TentBuild).filter(
+                TentBuild.user_id == user.vk_id, TentBuild.tent_id.in_(tent_ids)
+            ).all()
+        }
+
+    cells = [_cell_detail(c, db, user, cell_plots.get(c.id)) for c in f.cells]
     plants = [_plant_to_out(fp.plant) for fp in f.plants]
-    tents = [_tent_to_out(t) for t in f.tents]
-    plant_beds = [_plant_bed_detail(pb, db) for pb in f.plant_beds]
+    tents = [_tent_to_out_for_user(t, builds.get(t.id)) for t in f.tents]
+    plant_beds = [_plant_bed_detail(pb, db, user, bed_plots.get(pb.id)) for pb in f.plant_beds]
     return FieldDetailPublic(
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
@@ -182,7 +239,10 @@ def plant_on_cell(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="На этой клетке нельзя сажать",
         )
-    if cell.occupant_user_id is not None:
+    own_on_cell = db.query(Plot).filter(
+        Plot.user_id == user.vk_id, Plot.cell_id == cell.id
+    ).first()
+    if own_on_cell is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Клетка уже занята",
@@ -248,9 +308,6 @@ def plant_on_cell(
     db.add(plot)
     db.flush()
 
-    cell.plant_id = req.plant_id
-    cell.occupant_user_id = user.vk_id
-
     db.commit()
     db.refresh(cell)
 
@@ -274,7 +331,7 @@ def plant_on_cell(
             ))
     db.commit()
 
-    return _cell_detail(cell, db)
+    return _cell_detail(cell, db, user, plot)
 
 
 @router.post("/{field_id}/cells/{col}/{row}/harvest", response_model=CellDetailOut)
@@ -291,10 +348,6 @@ def harvest_cell(
     ).first()
     if cell is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Клетка не найдена")
-    if cell.occupant_user_id is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="На клетке нет растения")
-    if cell.occupant_user_id != user.vk_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Это не ваша грядка")
 
     plot = db.query(Plot).filter(Plot.cell_id == cell.id, Plot.user_id == user.vk_id).first()
     if plot is None:
@@ -336,7 +389,7 @@ def harvest_cell(
 
     check_and_award(user.vk_id, "plots_count", db)
 
-    return _cell_detail(cell, db)
+    return _cell_detail(cell, db, user, plot)
 
 
 # ===== Садовые слоты-деревья =====
@@ -368,7 +421,10 @@ def plant_on_bed(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Слоты деревьев доступны только в саду",
         )
-    if pb.occupant_user_id is not None:
+    own_in_bed = db.query(Plot).filter(
+        Plot.user_id == user.vk_id, Plot.plant_bed_id == pb.id
+    ).first()
+    if own_in_bed is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Этот слот уже занят деревом",
@@ -432,9 +488,6 @@ def plant_on_bed(
     db.add(plot)
     db.flush()
 
-    pb.plant_id = req.plant_id
-    pb.occupant_user_id = user.vk_id
-
     db.commit()
     db.refresh(pb)
 
@@ -458,7 +511,7 @@ def plant_on_bed(
             ))
     db.commit()
 
-    return _plant_bed_detail(pb, db)
+    return _plant_bed_detail(pb, db, user, plot)
 
 
 @router.post("/{field_id}/plant-beds/{pb_id}/harvest", response_model=PlantBedDetailOut)
@@ -470,10 +523,6 @@ def harvest_bed(
 ):
     f = _get_field_or_404(field_id, db)
     pb = _get_bed_on_field(pb_id, f.id, db)
-    if pb.occupant_user_id is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="В слоте нет дерева")
-    if pb.occupant_user_id != user.vk_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Это не ваше дерево")
 
     plot = db.query(Plot).filter(
         Plot.plant_bed_id == pb.id, Plot.user_id == user.vk_id
@@ -517,7 +566,7 @@ def harvest_bed(
 
     check_and_award(user.vk_id, "plots_count", db)
 
-    return _plant_bed_detail(pb, db)
+    return _plant_bed_detail(pb, db, user, plot)
 
 
 # ===== Строительство шатров =====
@@ -541,29 +590,34 @@ def start_tent_build(
 ):
     _get_field_or_404(field_id, db)
     t = _get_tent_on_field(tent_id, field_id, db)
-    if t.build_status != "slot":
+
+    tb = db.query(TentBuild).filter(
+        TentBuild.user_id == user.vk_id, TentBuild.tent_id == t.id
+    ).first()
+    if tb is not None and tb.build_status in ("planted", "built"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Этот шатёр уже строят или построен",
         )
 
-    kind_key = f"tent_{t.kind}"
     tmpl = db.query(ProductionTemplate).filter(ProductionTemplate.code == t.kind).first()
     num_cards = tmpl.cards_to_draw if tmpl else 3
     cards = draw_cards(db, num_cards, True)
     required = calculate_norm(db, user, cards)
 
-    t.builder_user_id = user.vk_id
-    t.build_status = "planted"
-    t.required = required
-    t.accumulated = 0
-    t.drawn_cards_json = cards_to_json(cards)
-    t.crystal_color = None
-    t.crystal_count = None
+    if tb is None:
+        tb = TentBuild(user_id=user.vk_id, tent_id=t.id)
+        db.add(tb)
+    tb.build_status = "planted"
+    tb.required = required
+    tb.accumulated = 0
+    tb.drawn_cards_json = cards_to_json(cards)
+    tb.crystal_color = None
+    tb.crystal_count = None
 
     db.commit()
-    db.refresh(t)
-    return _tent_to_out(t)
+    db.refresh(tb)
+    return _tent_to_out_for_user(t, tb)
 
 
 class BuildInvestRequest(BaseModel):
@@ -581,13 +635,14 @@ def invest_tent_build(
     """Вложить крестики с баланса в постройку шатра; при накоплении нормы — построить."""
     _get_field_or_404(field_id, db)
     t = _get_tent_on_field(tent_id, field_id, db)
-    if t.build_status != "planted":
+    tb = db.query(TentBuild).filter(
+        TentBuild.user_id == user.vk_id, TentBuild.tent_id == t.id
+    ).first()
+    if tb is None or tb.build_status != "planted":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Шатёр не в стадии постройки",
         )
-    if t.builder_user_id != user.vk_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Это не ваша стройка")
     if req.amount < MIN_BUILD_INVEST:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -602,10 +657,10 @@ def invest_tent_build(
         )
 
     u.crosses_balance = (u.crosses_balance or 0) - req.amount
-    t.accumulated = (t.accumulated or 0) + req.amount
+    tb.accumulated = (tb.accumulated or 0) + req.amount
 
-    if t.accumulated >= t.required:
-        t.build_status = "built"
+    if tb.accumulated >= tb.required:
+        tb.build_status = "built"
         pr = Production(
             user_id=user.vk_id, kind=t.kind, name=PRODUCTION_NAMES.get(t.kind, t.kind),
             status="installed", accumulated=0, required=get_production_required(db),
@@ -614,8 +669,8 @@ def invest_tent_build(
         db.add(pr)
 
     db.commit()
-    db.refresh(t)
+    db.refresh(tb)
 
     check_and_award(user.vk_id, "tents_count", db)
 
-    return _tent_to_out(t)
+    return _tent_to_out_for_user(t, tb)

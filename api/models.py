@@ -326,6 +326,25 @@ class Tent(Base):
     field = relationship("Field", back_populates="tents")
 
 
+class TentBuild(Base):
+    __tablename__ = "tent_builds"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    tent_id = Column(Integer, ForeignKey("tents.id", ondelete="CASCADE"), nullable=False)
+    build_status = Column(String, nullable=False, default="slot", server_default="slot")
+    accumulated = Column(Integer, nullable=False, default=0, server_default="0")
+    required = Column(Integer, nullable=False, default=0, server_default="0")
+    crystal_color = Column(String, nullable=True)
+    crystal_count = Column(Integer, nullable=True)
+    drawn_cards_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "tent_id", name="uq_tentbuild_user_tent"),
+    )
+
+
 class PlantBed(Base):
     __tablename__ = "plant_beds"
 

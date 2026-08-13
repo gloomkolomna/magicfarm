@@ -6,7 +6,7 @@ from sqlalchemy import func
 
 from db import get_db
 from deps import require_role
-from models import Field, FieldCell, FieldPlant, Inventory, Plot, Production, StitchReport, Tent, User
+from models import Field, FieldCell, FieldPlant, Inventory, Plot, Production, StitchReport, Tent, TentBuild, User
 from services.vk_names import resolve_vk_names
 
 router = APIRouter(prefix="/api/admin/players", tags=["admin-players"])
@@ -272,30 +272,51 @@ def get_player_field(
     if f is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Поле не найдено")
 
+    cell_ids = [c.id for c in f.cells if c.kind == "bed"]
+    plots_by_cell: dict[int, Plot] = {}
+    if cell_ids:
+        plots_by_cell = {
+            p.cell_id: p
+            for p in db.query(Plot).filter(
+                Plot.user_id == vk_id, Plot.cell_id.in_(cell_ids)
+            ).all()
+        }
+    tent_ids = [t.id for t in f.tents]
+    builds_by_tent: dict[int, TentBuild] = {}
+    if tent_ids:
+        builds_by_tent = {
+            tb.tent_id: tb
+            for tb in db.query(TentBuild).filter(
+                TentBuild.user_id == vk_id, TentBuild.tent_id.in_(tent_ids)
+            ).all()
+        }
+
     cells_out = []
     for c in f.cells:
         plant_name = None
         plant_emoji = None
         plant_image_young = None
         plant_image_grown = None
-        if c.plant_id is not None and c.plant is not None:
-            plant_name = c.plant.name
-            plant_emoji = c.plant.emoji
-            plant_image_young = c.plant.image_young_url
-            plant_image_grown = c.plant.image_grown_url
+        plant_id = None
+        occupant_user_id = None
         plot_out = None
-        if c.kind == "bed" and c.occupant_user_id == vk_id:
-            p = db.query(Plot).filter(Plot.cell_id == c.id, Plot.user_id == vk_id).first()
-            if p is not None:
-                plot_out = PlayerPlotOut(
-                    id=p.id, plant_id=p.plant_id, plant_name=p.plant.name,
-                    plant_emoji=p.plant.emoji, qty=p.qty or 0, status=p.status,
-                    accumulated=p.accumulated or 0, required=p.required or 0,
-                    crystal_color=p.crystal_color, crystal_count=p.crystal_count,
-                    cell_id=p.cell_id,
-                    created_at=p.created_at.isoformat() if p.created_at else None,
-                    completed_at=p.completed_at.isoformat() if p.completed_at else None,
-                )
+        p = plots_by_cell.get(c.id) if c.kind == "bed" else None
+        if p is not None:
+            occupant_user_id = vk_id
+            plant_id = p.plant_id
+            plant_name = p.plant.name
+            plant_emoji = p.plant.emoji
+            plant_image_young = p.plant.image_young_url
+            plant_image_grown = p.plant.image_grown_url
+            plot_out = PlayerPlotOut(
+                id=p.id, plant_id=p.plant_id, plant_name=p.plant.name,
+                plant_emoji=p.plant.emoji, qty=p.qty or 0, status=p.status,
+                accumulated=p.accumulated or 0, required=p.required or 0,
+                crystal_color=p.crystal_color, crystal_count=p.crystal_count,
+                cell_id=p.cell_id,
+                created_at=p.created_at.isoformat() if p.created_at else None,
+                completed_at=p.completed_at.isoformat() if p.completed_at else None,
+            )
         tent_name = None
         tent_image = None
         if c.tent_id is not None and c.kind == "tent":
@@ -305,25 +326,28 @@ def get_player_field(
                 tent_image = t.image_url
         cells_out.append(AdminFieldCellOut(
             id=c.id, col=c.col, row=c.row, kind=c.kind,
-            plant_id=c.plant_id, occupant_user_id=c.occupant_user_id, tent_id=c.tent_id,
+            plant_id=plant_id, occupant_user_id=occupant_user_id, tent_id=c.tent_id,
             plant_name=plant_name, plant_emoji=plant_emoji,
             plant_image_young=plant_image_young, plant_image_grown=plant_image_grown,
             plot=plot_out, tent_name=tent_name, tent_image=tent_image,
         ))
+
+    def _tent_out(t: Tent) -> AdminTentOut:
+        tb = builds_by_tent.get(t.id)
+        return AdminTentOut(
+            id=t.id, name=t.name, image_url=t.image_url, kind=t.kind,
+            col1=t.col1, row1=t.row1, col2=t.col2, row2=t.row2,
+            build_status=tb.build_status if tb is not None else "slot",
+            accumulated=(tb.accumulated or 0) if tb is not None else 0,
+            required=(tb.required or 0) if tb is not None else (t.required or 0),
+        )
 
     return AdminFieldDetailOut(
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
         created_at=f.created_at.isoformat() if f.created_at else None,
         cells=cells_out,
-        tents=[
-            AdminTentOut(
-                id=t.id, name=t.name, image_url=t.image_url, kind=t.kind,
-                col1=t.col1, row1=t.row1, col2=t.col2, row2=t.row2,
-                build_status=t.build_status,
-                accumulated=t.accumulated or 0, required=t.required or 0,
-            ) for t in f.tents
-        ],
+        tents=[_tent_out(t) for t in f.tents],
     )
 
 
