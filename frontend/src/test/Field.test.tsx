@@ -112,3 +112,31 @@ describe('FieldPage — care modal states', () => {
     expect(screen.queryByText('Вложить крестиков')).not.toBeInTheDocument();
   });
 });
+
+describe('FieldPage — zoom controls', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders zoom controls and changes scale', async () => {
+    render(<Wrapper><FieldPage /></Wrapper>);
+    await waitFor(() => {
+      expect(screen.getByText('🗺️ Грядки')).toBeInTheDocument();
+    });
+    expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(screen.getByLabelText('Вместить в экран')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Увеличить'));
+    expect(screen.getByText('125%')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Уменьшить'));
+    expect(screen.getByText('100%')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Увеличить'));
+    fireEvent.click(screen.getByLabelText('Увеличить'));
+    expect(screen.getByText('156%')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('156%'));
+    expect(screen.getByText('100%')).toBeInTheDocument();
+  });
+});
