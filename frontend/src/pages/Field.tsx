@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { api, type CrystalCard, type FieldCellDetail, type FieldDetail, type PlantBed, type Product, type Tent } from '../api/endpoints';
+import { api, type Animal, type CrystalCard, type FieldCellDetail, type FieldDetail, type Pet, type PlantBed, type Product, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import StitchReportForm from '../components/StitchReportForm';
 import plotUrl from '../assets/plot.png';
 
 const COLOR_LABEL: Record<string, string> = { green: '🟢', blue: '🔵', violet: '🟣' };
@@ -46,6 +47,18 @@ export default function FieldPage() {
   const [craftAmount, setCraftAmount] = useState('');
   const [craftQty, setCraftQty] = useState('1');
 
+  // Модалка загона скотного двора.
+  const [barnyardCell, setBarnyardCell] = useState<FieldCellDetail | null>(null);
+  const [barnyardAnimals, setBarnyardAnimals] = useState<Animal[]>([]);
+  const [barnyardSel, setBarnyardSel] = useState<number | null>(null);
+  const [barnyardInvest, setBarnyardInvest] = useState('');
+
+  // Модалка клетки питомца.
+  const [petCell, setPetCell] = useState<FieldCellDetail | null>(null);
+  const [petCatalog, setPetCatalog] = useState<Pet[]>([]);
+  const [petSel, setPetSel] = useState<number | null>(null);
+  const [petSettleResult, setPetSettleResult] = useState<{ pet_id: number; pet_name: string; required: number } | null>(null);
+
   const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string; norm?: number; qty?: number } | null>(null);
   const [showVideo, setShowVideo] = useState(false);
   const [tentCardResult, setTentCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string; norm?: number } | null>(null);
@@ -75,12 +88,16 @@ export default function FieldPage() {
 
   const loadVideo = useCallback(async () => {
     try {
-      const [gm, cards] = await Promise.all([
+      const [gm, cards, animals, pets] = await Promise.all([
         api.gameMediaByCode('card_shuffle').catch(() => null),
         api.crystalCards().catch(() => [] as CrystalCard[]),
+        api.animalsAvailable().catch(() => [] as Animal[]),
+        api.petsCatalog().catch(() => [] as Pet[]),
       ]);
       if (gm?.url) setCardVideoUrl(mediaUrl(gm.url));
       setCrystalCards(cards || []);
+      setBarnyardAnimals(animals || []);
+      setPetCatalog(pets || []);
     } catch {}
   }, []);
 
@@ -152,6 +169,7 @@ export default function FieldPage() {
       plant_image_grown: pb.plant_image_grown ?? null,
       plot: pb.plot ?? null,
       tent_name: null, tent_image: null, occupant_name: null,
+      barnyard: null, pet: null,
     };
   }
 
@@ -267,6 +285,72 @@ export default function FieldPage() {
     } finally { setBusy(false); }
   }
 
+  // ── Скотный двор: загон на клетке ──
+
+  function openBarnyardCell(cell: FieldCellDetail) {
+    setBarnyardCell(cell);
+    setBarnyardSel(cell.barnyard?.animal_id ?? barnyardAnimals[0]?.id ?? null);
+    setBarnyardInvest(cell.barnyard ? String(Math.max(0, cell.barnyard.required - cell.barnyard.accumulated)) : '');
+  }
+
+  async function doBarnyardInstall() {
+    if (!barnyardCell || barnyardSel == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.barnyardInstallOnCell(barnyardCell.id, barnyardSel);
+      setMsg('✓ Животное установлено!');
+      setBarnyardCell(null);
+      await load(); await refresh();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  async function doBarnyardInvest() {
+    if (!barnyardCell?.barnyard || !barnyardInvest) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.barnyardInvest(barnyardCell.barnyard.slot_id, Number(barnyardInvest));
+      setMsg('✓ Крестики вложены');
+      setBarnyardCell(null);
+      await load(); await refresh();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  async function doBarnyardProduce() {
+    if (!barnyardCell?.barnyard) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.barnyardProduce(barnyardCell.barnyard.slot_id);
+      setMsg('✓ Продукция получена!');
+      setBarnyardCell(null);
+      await load(); await refresh();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  // ── Питомцы: клетка на лужайке ──
+
+  function openPetCell(cell: FieldCellDetail) {
+    setPetCell(cell);
+    setPetSel(cell.pet?.pet_id ?? petCatalog[0]?.id ?? null);
+    setPetSettleResult(null);
+  }
+
+  async function doPetSettle() {
+    if (!petCell || petSel == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      const result = await api.settlePetOnCell(petCell.id, petSel);
+      setPetSettleResult(result);
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
   if (loading) return <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}><div className="fm-card">Загрузка поля…</div></div>;
   if (!field) return <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}><div className="fm-card">Поле не найдено.</div></div>;
 
@@ -324,6 +408,14 @@ export default function FieldPage() {
                     <div
                       key={`cell-${c}-${r}`}
                       onClick={async () => {
+                        if (cell.kind === 'barnyard') {
+                          openBarnyardCell(cell);
+                          return;
+                        }
+                        if (cell.kind === 'pet') {
+                          openPetCell(cell);
+                          return;
+                        }
                         if (!isBed) return;
                         if (cell.occupant_user_id == null) {
                           setPlantCell({ col: c, row: r });
@@ -347,7 +439,7 @@ export default function FieldPage() {
                         borderBottom: r < field.rows - 1 ? `1px solid ${field.grid_color}` : 'none',
                         boxShadow: 'inset 0 0 0 0.5px rgba(255,255,255,0.05)',
                         background: bg,
-                        cursor: isBed ? 'pointer' : 'default',
+                        cursor: isBed || cell.kind === 'barnyard' || cell.kind === 'pet' ? 'pointer' : 'default',
                         position: 'relative',
                         display: 'flex', flexDirection: 'column',
                         alignItems: 'center', justifyContent: 'center',
@@ -383,10 +475,35 @@ export default function FieldPage() {
                         </>
                       )}
                       {cell.kind === 'pet' && (
-                        <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🐾</div>
+                        <>
+                          {cell.pet?.pet_id ? (
+                            <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.pet.pet_emoji || '🐾'}</div>
+                          ) : (
+                            <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🐾</div>
+                          )}
+                          {cell.pet?.pet_id && (
+                            <div style={{ fontSize: 9, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                              {cell.pet.pet_name}
+                            </div>
+                          )}
+                        </>
                       )}
                       {cell.kind === 'barnyard' && (
-                        <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🐄</div>
+                        <>
+                          {cell.barnyard?.animal_id != null && cell.barnyard.animal_emoji ? (
+                            <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.barnyard.animal_emoji}</div>
+                          ) : (
+                            <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🐄</div>
+                          )}
+                          {cell.barnyard?.animal_id != null && cell.barnyard.status === 'building' && (
+                            <div style={{ fontSize: 9, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>
+                              {cell.barnyard.accumulated}/{cell.barnyard.required}
+                            </div>
+                          )}
+                          {cell.barnyard?.status === 'ready' && (
+                            <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 14, color: '#7fff7f', pointerEvents: 'none' }}>✓</div>
+                          )}
+                        </>
                       )}
                     </div>
                   );
@@ -729,10 +846,10 @@ export default function FieldPage() {
                   <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Сколько крестиков вышито</label>
                   <input className="fm-input" type="number" min={1} value={stitchAmount} onChange={(e) => setStitchAmount(e.target.value)} placeholder="например, 150" />
                   <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Фото ДО вышивки</label>
-                  <input type="file" accept="image/*" capture="environment" onChange={(e) => setStitchPhotoBefore(e.target.files?.[0] || null)} />
+                  <input type="file" accept="image/*" onChange={(e) => setStitchPhotoBefore(e.target.files?.[0] || null)} />
                   {stitchPhotoBefore && <div style={{ fontSize: 11, color: '#5f8', marginTop: 2 }}>✓ {stitchPhotoBefore.name}</div>}
                   <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Фото ПОСЛЕ вышивки</label>
-                  <input type="file" accept="image/*" capture="environment" onChange={(e) => setStitchPhoto(e.target.files?.[0] || null)} />
+                  <input type="file" accept="image/*" onChange={(e) => setStitchPhoto(e.target.files?.[0] || null)} />
                   {stitchPhoto && <div style={{ fontSize: 11, color: '#5f8', marginTop: 2 }}>✓ {stitchPhoto.name}</div>}
                   <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Заметка (необязательно)</label>
                   <input className="fm-input" value={stitchNote} onChange={(e) => setStitchNote(e.target.value)} placeholder="что вышили" />
@@ -829,14 +946,13 @@ export default function FieldPage() {
                   <div className="fm-progress" style={{ marginBottom: 10 }}>
                     <div className="fm-progress-fill" style={{ width: `${tentModal.required > 0 ? Math.min(100, Math.round((tentModal.accumulated / tentModal.required) * 100)) : 0}%` }} />
                   </div>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Вложить крестиков</label>
-                  <input className="fm-input" type="number" min={1} value={buildInvestAmount} onChange={(e) => setBuildInvestAmount(e.target.value)} />
-                  <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} disabled={busy || !buildInvestAmount} onClick={doBuildInvest}>
-                    Вложить в стройку
-                  </button>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                    Чтобы пополнить баланс крестиков — отчитайтесь о вышивке в модалке грядки.
-                  </p>
+                  <StitchReportForm
+                    contextType="tent_build"
+                    contextId={tentModal.id}
+                    required={Math.max(0, tentModal.required - tentModal.accumulated)}
+                    busy={busy}
+                    onDone={async () => { setMsg('✓ Зачтено!'); setTentModal(null); await load(); await refresh(); }}
+                  />
                 </>
               )}
             </>
@@ -859,6 +975,102 @@ export default function FieldPage() {
               <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || !craftProduct || !craftAmount} onClick={doCraft}>
                 Скрафтить
               </button>
+            </>
+          )}
+        </Modal>
+      )}
+
+      {/* Модалка загона скотного двора */}
+      {barnyardCell && (
+        <Modal title="🐄 Скотный двор" onClose={() => setBarnyardCell(null)}>
+          {!barnyardCell.barnyard || barnyardCell.barnyard.animal_id == null ? (
+            <>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
+                Выберите животное для заселения:
+              </p>
+              {barnyardAnimals.length === 0 ? (
+                <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет доступных животных. Обратитесь к админу.</div>
+              ) : (
+                <select className="fm-input" value={barnyardSel ?? ''} onChange={(e) => setBarnyardSel(Number(e.target.value))}>
+                  {barnyardAnimals.map((a) => <option key={a.id} value={a.id}>{a.emoji} {a.name}</option>)}
+                </select>
+              )}
+              <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || barnyardSel == null} onClick={doBarnyardInstall}>
+                Установить
+              </button>
+            </>
+          ) : barnyardCell.barnyard.status === 'building' ? (
+            <>
+              <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6 }}>{barnyardCell.barnyard.animal_emoji}</div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{barnyardCell.barnyard.animal_name}</div>
+              <div className="fm-progress" style={{ marginBottom: 6 }}>
+                <div className="fm-progress-fill" style={{ width: `${barnyardCell.barnyard.required > 0 ? Math.min(100, Math.round((barnyardCell.barnyard.accumulated / barnyardCell.barnyard.required) * 100)) : 0}%` }} />
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                {barnyardCell.barnyard.accumulated}/{barnyardCell.barnyard.required} крестиков
+              </div>
+              <StitchReportForm
+                contextType="animal_build"
+                contextId={barnyardCell.barnyard.slot_id}
+                required={Math.max(0, barnyardCell.barnyard.required - barnyardCell.barnyard.accumulated)}
+                busy={busy}
+                onDone={async () => { setMsg('✓ Зачтено!'); setBarnyardCell(null); await load(); await refresh(); }}
+              />
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6 }}>{barnyardCell.barnyard.animal_emoji}</div>
+              <div style={{ fontWeight: 600, marginBottom: 10 }}>{barnyardCell.barnyard.animal_name}</div>
+              <button className="fm-btn" style={{ width: '100%' }} disabled={busy} onClick={doBarnyardProduce}>
+                🥚 Получить продукцию
+              </button>
+            </>
+          )}
+        </Modal>
+      )}
+
+      {/* Модалка клетки питомца */}
+      {petCell && (
+        <Modal title="🐾 Питомец" onClose={() => setPetCell(null)}>
+          {!petCell.pet ? (
+            !petSettleResult ? (
+              <>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
+                  Выберите питомца для поселения:
+                </p>
+                {petCatalog.length === 0 ? (
+                  <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет доступных питомцев. Обратитесь к админу.</div>
+                ) : (
+                  <select className="fm-input" value={petSel ?? ''} onChange={(e) => setPetSel(Number(e.target.value))}>
+                    {petCatalog.map((p) => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+                  </select>
+                )}
+                <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || petSel == null} onClick={doPetSettle}>
+                  Поселить
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 10 }}>
+                  Норма для {petSettleResult.pet_name}: {petSettleResult.required} крестиков.
+                </p>
+                <StitchReportForm
+                  contextType="pet_settle"
+                  contextId={petSettleResult.pet_id}
+                  cellId={petCell.id}
+                  required={petSettleResult.required}
+                  busy={busy}
+                  onDone={async () => { setMsg('✓ Зачтено!'); setPetCell(null); setPetSettleResult(null); await load(); await refresh(); }}
+                />
+              </>
+            )
+          ) : (
+            <>
+              <div style={{ fontSize: 40, lineHeight: 1, marginBottom: 6 }}>{petCell.pet.pet_emoji || '🐾'}</div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{petCell.pet.pet_name}</div>
+              {petCell.pet.bonus_description && (
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{petCell.pet.bonus_description}</div>
+              )}
             </>
           )}
         </Modal>

@@ -293,6 +293,24 @@ export interface FieldCell {
   tent_id: number | null;
 }
 
+export interface BarnyardCell {
+  slot_id: number;
+  animal_id: number | null;
+  animal_name: string | null;
+  animal_emoji: string | null;
+  status: string;
+  accumulated: number;
+  required: number;
+  last_die: number | null;
+}
+
+export interface PetCell {
+  pet_id: number;
+  pet_name: string;
+  pet_emoji: string | null;
+  bonus_description: string | null;
+}
+
 export interface FieldCellDetail extends FieldCell {
   plant_name: string | null;
   plant_emoji: string | null;
@@ -302,6 +320,8 @@ export interface FieldCellDetail extends FieldCell {
   tent_name: string | null;
   tent_image: string | null;
   occupant_name: string | null;
+  barnyard: BarnyardCell | null;
+  pet: PetCell | null;
 }
 
 export interface Tent {
@@ -464,7 +484,7 @@ export const api = {
       .then((r) => r.data),
 
   // ── Фото-отчёты по вышивке ──
-  createStitchReport: (amount: number, photoBefore: File, photoAfter: File, note?: string, contextType?: string, contextId?: number) => {
+  createStitchReport: (amount: number, photoBefore: File, photoAfter: File, note?: string, contextType?: string, contextId?: number, cellId?: number) => {
     const form = new FormData();
     form.append('amount', String(amount));
     if (note) form.append('note', note);
@@ -472,6 +492,7 @@ export const api = {
     form.append('photo_after', photoAfter);
     if (contextType) form.append('context_type', contextType);
     if (contextId != null) form.append('context_id', String(contextId));
+    if (cellId != null) form.append('cell_id', String(cellId));
     return client
       .post<StitchReport>('/stitches/reports', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -542,6 +563,8 @@ export const api = {
   // ── Питомцы ──
   userPets: () => client.get<any[]>('/pets').then(r => r.data),
   settlePet: (petId: number) => client.post('/pets/settle', {pet_id: petId}).then(r => r.data),
+  settlePetOnCell: (cellId: number, petId: number) =>
+    client.post(`/pets/cells/${cellId}/settle`, { pet_id: petId }).then(r => r.data),
   petsCatalog: () => client.get<Pet[]>('/pets/catalog').then((r) => r.data),
 
   // ── Карты-локации: админка ──
@@ -805,6 +828,8 @@ export const api = {
   barnyardPens: () => client.get<BarnyardPen[]>('/animals/pens').then((r) => r.data),
   barnyardInstall: (slotId: number, animalId: number) =>
     client.post<BarnyardPen>(`/animals/pens/${slotId}/install`, { animal_id: animalId }).then((r) => r.data),
+  barnyardInstallOnCell: (cellId: number, animalId: number) =>
+    client.post<BarnyardPen>(`/animals/cells/${cellId}/install`, { animal_id: animalId }).then((r) => r.data),
   barnyardInvest: (slotId: number, amount: number) =>
     client.post(`/animals/pens/${slotId}/invest`, { amount }).then((r) => r.data),
   barnyardProduce: (slotId: number) =>

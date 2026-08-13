@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
 import { api, type CrystalCard, type Pet } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import StitchReportForm from '../components/StitchReportForm';
 
 interface UserPet {
   id: number;
@@ -194,12 +195,13 @@ export default function PetsPage() {
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Требуется крестиков</div>
             <div style={{ fontSize: 24, fontWeight: 700 }}>✕ {settleResult.required}</div>
           </div>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, textAlign: 'center' }}>
-            Отчитайтесь о вышивке — после зачёта питомец появится в слоте.
-          </p>
-          <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} onClick={() => setSettleResult(null)}>
-            Понятно
-          </button>
+          <StitchReportForm
+            contextType="pet_settle"
+            contextId={settleResult.pet_id}
+            required={settleResult.required}
+            busy={busy}
+            onDone={async () => { setSettleResult(null); await load(); await refresh(); }}
+          />
         </Modal>
       )}
     </div>

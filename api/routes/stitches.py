@@ -72,13 +72,48 @@ def _process_context(report: "StitchReport", db: Session) -> None:
             if animal:
                 pass
             db.commit()
+    elif report.context_type == "tent_build" and report.context_id is not None:
+        from models import PRODUCTION_NAMES, Production, Tent, TentBuild
+        tb = db.query(TentBuild).filter(
+            TentBuild.user_id == report.user_id, TentBuild.tent_id == report.context_id
+        ).first()
+        if tb is not None and tb.build_status == "planted":
+            tb.accumulated = (tb.accumulated or 0) + report.amount
+            if tb.accumulated >= (tb.required or 0):
+                tb.build_status = "built"
+                t = db.query(Tent).filter(Tent.id == tb.tent_id).first()
+                if t is not None:
+                    from routes.settings import get_production_required
+                    exists = db.query(Production).filter(
+                        Production.user_id == report.user_id, Production.tent_id == t.id
+                    ).first()
+                    if exists is None:
+                        db.add(Production(
+                            user_id=report.user_id, kind=t.kind,
+                            name=PRODUCTION_NAMES.get(t.kind, t.kind),
+                            status="installed", accumulated=0,
+                            required=get_production_required(db), tent_id=t.id,
+                        ))
+            db.commit()
+            check_and_award(report.user_id, "tents_count", db)
+    elif report.context_type == "animal_build" and report.context_id is not None:
+        from models import BarnyardSlot
+        slot = db.query(BarnyardSlot).filter(
+            BarnyardSlot.id == report.context_id, BarnyardSlot.user_id == report.user_id
+        ).first()
+        if slot is not None and slot.status == "building":
+            slot.accumulated = (slot.accumulated or 0) + report.amount
+            if slot.accumulated >= (slot.required or 0):
+                slot.status = "ready"
+            db.commit()
+            check_and_award(report.user_id, "animals_count", db)
     elif report.context_type == "pet_settle" and report.context_id is not None:
         from models import UserPet
         existing = db.query(UserPet).filter(
             UserPet.user_id == report.user_id, UserPet.pet_id == report.context_id
         ).first()
         if existing is None:
-            db.add(UserPet(user_id=report.user_id, pet_id=report.context_id))
+            db.add(UserPet(user_id=report.user_id, pet_id=report.context_id, cell_id=report.cell_id))
             db.commit()
             check_and_award(report.user_id, "pets_count", db)
 
@@ -116,6 +151,7 @@ def create_report(
     note: str | None = Form(default=None),
     context_type: str | None = Form(default=None),
     context_id: int | None = Form(default=None),
+    cell_id: int | None = Form(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -161,6 +197,7 @@ def create_report(
         user_id=user.vk_id, amount=amount,
         photo_before_url=before_url, photo_after_url=after_url,
         note=note, context_type=context_type, context_id=context_id,
+        cell_id=cell_id,
         status="pending",
     )
 

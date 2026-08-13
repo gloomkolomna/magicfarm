@@ -171,3 +171,73 @@ def test_other_user_pen_forbidden(admin_client):
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/animals/pens/{sid}/install", json={"animal_id": 1})
         assert r.status_code == 404
+
+
+# ===== Установка животного на клетку локации =====
+
+def _make_barnyard_cell(admin_client):
+    fid = admin_client.post("/api/admin/fields", json={"name": "Скотный", "cols": 2, "rows": 2, "field_kind": "barnyard"}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}/cells/blocked", json={"cells": [{"col": 0, "row": 0}], "kind": "barnyard"})
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    cell = [c for c in detail["cells"] if c["col"] == 0 and c["row"] == 0][0]
+    return fid, cell["id"]
+
+
+def test_install_animal_on_cell(admin_client):
+    fid, cell_id = _make_barnyard_cell(admin_client)
+    with make_user_client(2001, "player") as c:
+        r = c.post(f"/api/animals/cells/{cell_id}/install", json={"animal_id": 1})
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["animal_id"] == 1
+        assert data["cell_id"] == cell_id
+
+        detail = c.get(f"/api/fields/{fid}").json()
+        cell = [x for x in detail["cells"] if x["id"] == cell_id][0]
+        assert cell["barnyard"]["animal_id"] == 1
+        assert cell["barnyard"]["status"] == "building"
+
+
+def test_install_animal_on_cell_locked(admin_client):
+    fid, cell_id = _make_barnyard_cell(admin_client)
+    from models import User
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        u = s.query(User).filter(User.vk_id == 2002).first()
+        if u is None:
+            u = User(vk_id=2002, role="player", unlocked_barnyard=0, unlocked_pets=0)
+            s.add(u)
+            s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(2002, "player") as c:
+        r = c.post(f"/api/animals/cells/{cell_id}/install", json={"animal_id": 1})
+        assert r.status_code == 403
+
+
+def test_install_animal_on_cell_wrong_kind(admin_client):
+    fid = admin_client.post("/api/admin/fields", json={"name": "Огород", "cols": 2, "rows": 2}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}/cells/blocked", json={"cells": [{"col": 0, "row": 0}], "kind": "bed"})
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    cell = [c for c in detail["cells"] if c["col"] == 0 and c["row"] == 0][0]
+    with make_user_client(2003, "player") as c:
+        r = c.post(f"/api/animals/cells/{cell['id']}/install", json={"animal_id": 1})
+        assert r.status_code == 404
+
+
+def test_animal_build_via_report(admin_client):
+    fid, cell_id = _make_barnyard_cell(admin_client)
+    with make_user_client(2004, "player") as c:
+        installed = c.post(f"/api/animals/cells/{cell_id}/install", json={"animal_id": 1}).json()
+        required = installed["required"]
+        rep = c.post(
+            "/api/stitches/reports",
+            data={"amount": str(required), "context_type": "animal_build", "context_id": str(installed["id"])},
+            files=[("photo_after", ("a.png", _real_img(), "image/png"))],
+        )
+        assert rep.status_code == 201, rep.text
+        detail = c.get(f"/api/fields/{fid}").json()
+        cell = [x for x in detail["cells"] if x["id"] == cell_id][0]
+        assert cell["barnyard"]["status"] == "ready"

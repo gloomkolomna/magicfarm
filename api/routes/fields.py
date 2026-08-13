@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_onboarding
-from models import Field, FieldCell, FieldPlant, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, TentBuild, User, MAX_PLOT_QTY, CARD_DRAW_RULES
+from models import BarnyardSlot, Field, FieldCell, FieldPlant, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, TentBuild, User, UserPet, MAX_PLOT_QTY, CARD_DRAW_RULES
 from routes.admin_fields import (
     CellOut, FieldOut, PlantOut, TentOut,
     _field_to_out, _get_field_or_404, _plant_to_out,
@@ -26,6 +26,24 @@ class FieldListItem(FieldOut):
     pass
 
 
+class BarnyardCellOut(BaseModel):
+    slot_id: int
+    animal_id: int | None
+    animal_name: str | None
+    animal_emoji: str | None
+    status: str
+    accumulated: int
+    required: int
+    last_die: int | None
+
+
+class PetCellOut(BaseModel):
+    pet_id: int
+    pet_name: str
+    pet_emoji: str | None
+    bonus_description: str | None
+
+
 class CellDetailOut(CellOut):
     plant_name: str | None
     plant_emoji: str | None
@@ -35,6 +53,8 @@ class CellDetailOut(CellOut):
     tent_name: str | None
     tent_image: str | None
     occupant_name: str | None
+    barnyard: BarnyardCellOut | None = None
+    pet: PetCellOut | None = None
 
 
 class PlantBedDetailOut(BaseModel):
@@ -98,6 +118,29 @@ def _cell_detail(c: FieldCell, db: Session, user: User, plot: Plot | None = None
         if t is not None:
             tent_name = t.name
             tent_image = t.image_url
+    barnyard = None
+    if c.kind == "barnyard":
+        slot = db.query(BarnyardSlot).filter(
+            BarnyardSlot.user_id == user.vk_id, BarnyardSlot.cell_id == c.id
+        ).first()
+        if slot is not None:
+            barnyard = BarnyardCellOut(
+                slot_id=slot.id, animal_id=slot.animal_id,
+                animal_name=slot.animal.name if slot.animal else None,
+                animal_emoji=slot.animal.emoji if slot.animal else None,
+                status=slot.status, accumulated=slot.accumulated,
+                required=slot.required, last_die=slot.last_die,
+            )
+    pet = None
+    if c.kind == "pet":
+        up = db.query(UserPet).filter(
+            UserPet.user_id == user.vk_id, UserPet.cell_id == c.id
+        ).first()
+        if up is not None and up.pet is not None:
+            pet = PetCellOut(
+                pet_id=up.pet_id, pet_name=up.pet.name,
+                pet_emoji=up.pet.emoji, bonus_description=up.pet.bonus_description,
+            )
     occupant_name = None
     return CellDetailOut(
         id=c.id, col=c.col, row=c.row, kind=c.kind,
@@ -105,6 +148,7 @@ def _cell_detail(c: FieldCell, db: Session, user: User, plot: Plot | None = None
         plant_name=plant_name, plant_emoji=plant_emoji,
         plant_image_young=plant_image_young, plant_image_grown=plant_image_grown,
         plot=plot_out, tent_name=tent_name, tent_image=tent_image, occupant_name=occupant_name,
+        barnyard=barnyard, pet=pet,
     )
 
 

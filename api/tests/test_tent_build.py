@@ -226,3 +226,19 @@ def test_reveal_norm_tent_not_found(admin_client):
 
 def test_reveal_norm_requires_auth(client):
     assert client.post("/api/fields/1/tents/1/reveal-norm").status_code == 401
+
+
+def test_tent_build_via_report(admin_client):
+    fid, tid = _make_field_with_slot(admin_client)
+    with make_user_client(1030, "player") as c:
+        started = c.post(f"/api/fields/{fid}/tents/{tid}/start-build").json()
+        required = started["required"]
+        rep = c.post(
+            "/api/stitches/reports",
+            data={"amount": str(required), "context_type": "tent_build", "context_id": str(tid)},
+            files=[("photo_after", ("a.png", io.BytesIO(_img_bytes()), "image/png"))],
+        )
+        assert rep.status_code == 201, rep.text
+        detail = c.get(f"/api/fields/{fid}").json()
+        tent = [t for t in detail["tents"] if t["id"] == tid][0]
+        assert tent["build_status"] == "built"

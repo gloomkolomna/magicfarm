@@ -33,6 +33,7 @@ class UserPetOut(BaseModel):
     pet_emoji: str | None
     bonus_description: str | None
     acquired_at: str | None
+    cell_id: int | None = None
 
 
 def _up_out(up: UserPet) -> UserPetOut:
@@ -41,6 +42,7 @@ def _up_out(up: UserPet) -> UserPetOut:
         pet_name=up.pet.name, pet_emoji=up.pet.emoji,
         bonus_description=up.pet.bonus_description,
         acquired_at=up.acquired_at.isoformat() if up.acquired_at else None,
+        cell_id=up.cell_id,
     )
 
 
@@ -57,18 +59,13 @@ class SettleRequest(BaseModel):
     pet_id: int
 
 
-@router.post("/settle", response_model=dict, status_code=status.HTTP_201_CREATED)
-def settle_pet(
-    req: SettleRequest,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    pet = db.query(Pet).filter(Pet.id == req.pet_id).first()
+def _draw_settle(db: Session, user: User, pet_id: int):
+    pet = db.query(Pet).filter(Pet.id == pet_id).first()
     if pet is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Питомец не найден")
 
     existing = db.query(UserPet).filter(
-        UserPet.user_id == user.vk_id, UserPet.pet_id == req.pet_id
+        UserPet.user_id == user.vk_id, UserPet.pet_id == pet_id
     ).first()
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот питомец уже заселён")
@@ -82,10 +79,48 @@ def settle_pet(
 
     cards = draw_cards(db, 10, False)
     required = calculate_norm(db, user, cards)
+    return pet, cards, required
+
+
+@router.post("/settle", response_model=dict, status_code=status.HTTP_201_CREATED)
+def settle_pet(
+    req: SettleRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    pet, cards, required = _draw_settle(db, user, req.pet_id)
+    return {
+        "pet_id": req.pet_id,
+        "pet_name": pet.name,
+        "drawn_cards": cards,
+        "required": required,
+    }
+
+
+@router.post("/cells/{cell_id}/settle", response_model=dict, status_code=status.HTTP_201_CREATED)
+def settle_pet_on_cell(
+    cell_id: int,
+    req: SettleRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from models import FieldCell
+    cell = db.query(FieldCell).filter(FieldCell.id == cell_id).first()
+    if cell is None or cell.kind != "pet":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Клетка питомца не найдена")
+
+    occupied = db.query(UserPet).filter(
+        UserPet.user_id == user.vk_id, UserPet.cell_id == cell.id
+    ).first()
+    if occupied is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Эта клетка уже занята питомцем")
+
+    pet, cards, required = _draw_settle(db, user, req.pet_id)
 
     return {
         "pet_id": req.pet_id,
         "pet_name": pet.name,
         "drawn_cards": cards,
         "required": required,
+        "cell_id": cell.id,
     }

@@ -42,6 +42,7 @@ class BarnyardOut(BaseModel):
     last_die: int | None
     drawn_cards_json: str | None
     opening_order: int | None
+    cell_id: int | None = None
 
 
 def _slot_out(s: BarnyardSlot) -> BarnyardOut:
@@ -53,6 +54,7 @@ def _slot_out(s: BarnyardSlot) -> BarnyardOut:
         required=s.required, last_die=s.last_die,
         drawn_cards_json=s.drawn_cards_json,
         opening_order=s.opening_order,
+        cell_id=s.cell_id,
     )
 
 
@@ -77,27 +79,13 @@ class InstallRequest(BaseModel):
     animal_id: int
 
 
-@router.post("/pens/{slot_id}/install", response_model=BarnyardOut)
-def install_animal(
-    slot_id: int,
-    req: InstallRequest,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    slot = db.query(BarnyardSlot).filter(
-        BarnyardSlot.id == slot_id, BarnyardSlot.user_id == user.vk_id
-    ).first()
-    if slot is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Загон не найден")
-    if slot.status != "empty":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Загон уже занят или строится")
-
-    animal = db.query(Animal).filter(Animal.id == req.animal_id).first()
+def _install_into_slot(db: Session, user: User, slot: BarnyardSlot, animal_id: int) -> BarnyardSlot:
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if animal is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Животное не найдено")
 
     existing = db.query(BarnyardSlot).filter(
-        BarnyardSlot.user_id == user.vk_id, BarnyardSlot.animal_id == req.animal_id
+        BarnyardSlot.user_id == user.vk_id, BarnyardSlot.animal_id == animal_id
     ).first()
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Это животное уже заселено")
@@ -105,7 +93,7 @@ def install_animal(
     cards = draw_cards(db, 5, True)
     required = calculate_norm(db, user, cards)
 
-    slot.animal_id = req.animal_id
+    slot.animal_id = animal_id
     slot.status = "building"
     slot.required = required
     slot.accumulated = 0
@@ -117,7 +105,7 @@ def install_animal(
 
     from models import OrderReq as OrderModel, OrderTemplate
     templates = db.query(OrderTemplate).filter(
-        OrderTemplate.source_kind == "animal", OrderTemplate.source_id == req.animal_id
+        OrderTemplate.source_kind == "animal", OrderTemplate.source_id == animal_id
     ).all()
     for t in templates:
         existing = db.query(OrderModel).filter(
@@ -137,6 +125,60 @@ def install_animal(
 
     check_and_award(user.vk_id, "animals_count", db)
 
+    return slot
+
+
+@router.post("/pens/{slot_id}/install", response_model=BarnyardOut)
+def install_animal(
+    slot_id: int,
+    req: InstallRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    slot = db.query(BarnyardSlot).filter(
+        BarnyardSlot.id == slot_id, BarnyardSlot.user_id == user.vk_id
+    ).first()
+    if slot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Загон не найден")
+    if slot.status != "empty":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Загон уже занят или строится")
+
+    _install_into_slot(db, user, slot, req.animal_id)
+    return _slot_out(slot)
+
+
+@router.post("/cells/{cell_id}/install", response_model=BarnyardOut)
+def install_animal_on_cell(
+    cell_id: int,
+    req: InstallRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from models import FieldCell
+    cell = db.query(FieldCell).filter(FieldCell.id == cell_id).first()
+    if cell is None or cell.kind != "barnyard":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Загон не найден")
+
+    slot = db.query(BarnyardSlot).filter(
+        BarnyardSlot.user_id == user.vk_id, BarnyardSlot.cell_id == cell.id
+    ).first()
+    if slot is None:
+        slot = BarnyardSlot(user_id=user.vk_id, cell_id=cell.id, status="empty")
+        db.add(slot)
+        db.flush()
+    if slot.animal_id is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Загон уже занят")
+
+    occupied = db.query(BarnyardSlot).filter(
+        BarnyardSlot.user_id == user.vk_id, BarnyardSlot.animal_id.isnot(None)
+    ).count()
+    if occupied >= (user.unlocked_barnyard or 0):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Нет открытых загонов. Повысьте уровень (прокачка «Животноводство»).",
+        )
+
+    _install_into_slot(db, user, slot, req.animal_id)
     return _slot_out(slot)
 
 

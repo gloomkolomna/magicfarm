@@ -78,3 +78,56 @@ def test_pet_settled_on_report_accept(admin_client):
         assert len(pets) == 1
         assert pets[0]["pet_id"] == 1
         assert pets[0]["pet_name"] == "Дракон Эфир"
+
+
+# ===== Поселение питомца на клетку локации =====
+
+def _make_pet_cell(admin_client):
+    fid = admin_client.post("/api/admin/fields", json={"name": "Лужайка", "cols": 2, "rows": 2, "field_kind": "lawn"}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}/cells/blocked", json={"cells": [{"col": 0, "row": 0}], "kind": "pet"})
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    cell = [c for c in detail["cells"] if c["col"] == 0 and c["row"] == 0][0]
+    return fid, cell["id"]
+
+
+def _report_settle(c, pet_id, cell_id=None, amount=1):
+    img = _real_img()
+    data = {"amount": str(amount), "context_type": "pet_settle", "context_id": str(pet_id)}
+    if cell_id is not None:
+        data["cell_id"] = str(cell_id)
+    return c.post("/api/stitches/reports", data=data, files=[("photo_after", ("a.png", img, "image/png"))])
+
+
+def test_settle_pet_on_cell(admin_client):
+    fid, cell_id = _make_pet_cell(admin_client)
+    with make_user_client(3001, "player") as c:
+        r = c.post(f"/api/pets/cells/{cell_id}/settle", json={"pet_id": 1})
+        assert r.status_code == 201, r.text
+        assert r.json()["pet_id"] == 1
+
+        rep = _report_settle(c, 1, cell_id=cell_id)
+        assert rep.status_code == 201
+
+        detail = c.get(f"/api/fields/{fid}").json()
+        cell = [x for x in detail["cells"] if x["id"] == cell_id][0]
+        assert cell["pet"]["pet_id"] == 1
+        assert cell["pet"]["pet_name"] == "Дракон Эфир"
+
+
+def test_settle_pet_on_cell_occupied(admin_client):
+    fid, cell_id = _make_pet_cell(admin_client)
+    with make_user_client(3002, "player") as c:
+        c.post(f"/api/pets/cells/{cell_id}/settle", json={"pet_id": 1})
+        _report_settle(c, 1, cell_id=cell_id)
+        r = c.post(f"/api/pets/cells/{cell_id}/settle", json={"pet_id": 2})
+        assert r.status_code == 409
+
+
+def test_settle_pet_on_cell_wrong_kind(admin_client):
+    fid = admin_client.post("/api/admin/fields", json={"name": "Огород", "cols": 2, "rows": 2}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}/cells/blocked", json={"cells": [{"col": 0, "row": 0}], "kind": "bed"})
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    cell = [c for c in detail["cells"] if c["col"] == 0 and c["row"] == 0][0]
+    with make_user_client(3003, "player") as c:
+        r = c.post(f"/api/pets/cells/{cell['id']}/settle", json={"pet_id": 1})
+        assert r.status_code == 404

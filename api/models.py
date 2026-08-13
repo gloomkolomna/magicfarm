@@ -113,6 +113,7 @@ class StitchReport(Base):
     note = Column(Text, nullable=True)
     context_type = Column(String, nullable=True)
     context_id = Column(Integer, nullable=True)
+    cell_id = Column(Integer, ForeignKey("field_cells.id", ondelete="SET NULL"), nullable=True)
     status = Column(String, nullable=False, default="pending", server_default="pending")
     reviewer_id = Column(Integer, ForeignKey("users.vk_id", ondelete="SET NULL"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
@@ -525,6 +526,7 @@ class BarnyardSlot(Base):
     last_die = Column(Integer, nullable=True)
     drawn_cards_json = Column(Text, nullable=True)
     opening_order = Column(Integer, nullable=True)
+    cell_id = Column(Integer, ForeignKey("field_cells.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     animal = relationship("Animal")
