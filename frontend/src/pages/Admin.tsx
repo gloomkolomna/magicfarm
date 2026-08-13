@@ -1572,7 +1572,7 @@ export default function AdminPage() {
                       ) : (
                         <div style={{ marginTop: 4, fontSize: 12, color: '#f88' }}>Файла нет</div>
                       )}
-                      <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+                      <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
                         <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
                           📁
                           <input type="file" accept="image/*,video/*" style={{ display: 'none' }}
@@ -1945,7 +1945,7 @@ function CatalogTab({
                   </div>
                 )}
                 {onUploadImageYoung ? (
-                  <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
                     <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => onEdit(item)}>✎</button>
                     <label className="fm-btn fm-btn-xs fm-btn-outline" title="Загрузить молодое растение" style={{ cursor: 'pointer' }}>
                       🌱
@@ -1970,7 +1970,7 @@ function CatalogTab({
                     <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => onDelete(item.id)}>✕</button>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
                     <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => onEdit(item)}>✎</button>
                     {!hideMainImage && (
                       <label className="fm-btn fm-btn-xs fm-btn-outline" title="Загрузить изображение" style={{ cursor: 'pointer' }}>

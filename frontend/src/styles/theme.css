@@ -99,6 +99,7 @@ button.fm-card {
   font-family: var(--font-body);
   font-size: 15px;
   font-weight: 600;
+  white-space: nowrap;
   color: #1a2414;
   background: linear-gradient(180deg, var(--leaf) 0%, var(--grass) 100%);
   border: 1px solid var(--grass-deep);
