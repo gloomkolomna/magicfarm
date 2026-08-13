@@ -167,6 +167,7 @@ export default function FieldPage() {
       plant_emoji: pb.plant_emoji ?? null,
       plant_image_young: pb.plant_image_young ?? null,
       plant_image_grown: pb.plant_image_grown ?? null,
+      plant_image_harvested: pb.plant_image_harvested ?? null,
       plot: pb.plot ?? null,
       tent_name: null, tent_image: null, occupant_name: null,
       barnyard: null, pet: null,
@@ -403,7 +404,7 @@ export default function FieldPage() {
                   else if (cell.kind === 'bed' && cell.occupant_user_id == null && field.plant_category !== 'orchard') bg = `center/contain no-repeat url(${plotUrl})`;
                   else if (cell.occupant_user_id != null) bg = cell.plot?.status === 'grown' ? 'rgba(111,174,74,0.30)' : 'rgba(90,143,62,0.20)';
                   const isBed = cell.kind === 'bed';
-                  const grownImg = cell.plot?.status === 'grown' ? cell.plant_image_grown : cell.plant_image_young;
+                  const grownImg = cell.plot?.status === 'grown' ? (cell.plant_image_harvested || cell.plant_image_grown) : cell.plant_image_young;
                   return (
                     <div
                       key={`cell-${c}-${r}`}
@@ -490,7 +491,13 @@ export default function FieldPage() {
                       )}
                       {cell.kind === 'barnyard' && (
                         <>
-                          {cell.barnyard?.animal_id != null && cell.barnyard.animal_emoji ? (
+                          {cell.barnyard?.status === 'ready' && (cell.barnyard.image_harvested_url || cell.barnyard.image_pen_url) ? (
+                            <img
+                              src={mediaUrl((cell.barnyard.image_harvested_url || cell.barnyard.image_pen_url)!)}
+                              alt=""
+                              style={{ maxWidth: '90%', maxHeight: '85%', objectFit: 'contain', pointerEvents: 'none' }}
+                            />
+                          ) : cell.barnyard?.animal_id != null && cell.barnyard.animal_emoji ? (
                             <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.barnyard.animal_emoji}</div>
                           ) : (
                             <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🐄</div>
@@ -573,7 +580,7 @@ export default function FieldPage() {
               const spanCols = pb.col2 - pb.col1 + 1;
               const spanRows = pb.row2 - pb.row1 + 1;
               const occupied = pb.occupant_user_id != null;
-              const grownImg = pb.plot?.status === 'grown' ? pb.plant_image_grown : pb.plant_image_young;
+              const grownImg = pb.plot?.status === 'grown' ? (pb.plant_image_harvested || pb.plant_image_grown) : pb.plant_image_young;
               return (
                 <div
                   key={`bed-${pb.id}`}

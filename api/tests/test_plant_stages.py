@@ -42,6 +42,18 @@ def test_upload_plant_image_grown(admin_client, uploads_tmp):
     assert data["image_grown_url"].startswith("/api/uploads/plant_")
 
 
+def test_upload_plant_image_harvested(admin_client, uploads_tmp):
+    pid = _plant_id(admin_client)
+    res = admin_client.put(
+        f"/api/admin/catalog/plants/{pid}/image-harvested",
+        files={"image": ("h.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["image_harvested_url"] is not None
+    assert data["image_harvested_url"].startswith("/api/uploads/plant_")
+
+
 def test_upload_plant_stage_requires_admin(player_client, uploads_tmp):
     res = player_client.put(
         "/api/admin/catalog/plants/1/image-young",

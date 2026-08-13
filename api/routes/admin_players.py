@@ -224,6 +224,7 @@ class AdminFieldCellOut(BaseModel):
     plant_emoji: str | None
     plant_image_young: str | None
     plant_image_grown: str | None
+    plant_image_harvested: str | None = None
     occupant_user_id: int | None
     tent_id: int | None
     tent_name: str | None
@@ -297,6 +298,7 @@ def get_player_field(
         plant_emoji = None
         plant_image_young = None
         plant_image_grown = None
+        plant_image_harvested = None
         plant_id = None
         occupant_user_id = None
         plot_out = None
@@ -308,6 +310,7 @@ def get_player_field(
             plant_emoji = p.plant.emoji
             plant_image_young = p.plant.image_young_url
             plant_image_grown = p.plant.image_grown_url
+            plant_image_harvested = p.plant.image_harvested_url
             plot_out = PlayerPlotOut(
                 id=p.id, plant_id=p.plant_id, plant_name=p.plant.name,
                 plant_emoji=p.plant.emoji, qty=p.qty or 0, status=p.status,
@@ -329,6 +332,7 @@ def get_player_field(
             plant_id=plant_id, occupant_user_id=occupant_user_id, tent_id=c.tent_id,
             plant_name=plant_name, plant_emoji=plant_emoji,
             plant_image_young=plant_image_young, plant_image_grown=plant_image_grown,
+            plant_image_harvested=plant_image_harvested,
             plot=plot_out, tent_name=tent_name, tent_image=tent_image,
         ))
 

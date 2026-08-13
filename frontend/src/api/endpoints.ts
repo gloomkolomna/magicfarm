@@ -13,6 +13,7 @@ export interface Plant {
   image_url: string | null;
   image_young_url: string | null;
   image_grown_url: string | null;
+  image_harvested_url: string | null;
 }
 
 export interface OrderTemplate {
@@ -123,6 +124,7 @@ export interface Animal {
   image_url: string | null;
   image_empty_pen_url: string | null;
   image_pen_url: string | null;
+  image_harvested_url: string | null;
 }
 
 export interface Pet {
@@ -180,6 +182,7 @@ export interface InventoryItem {
   item_code: string;
   item_name: string;
   item_emoji: string | null;
+  item_image: string | null;
   qty: number;
   ingredient_type: string | null;
   ingredient_icon: string | null;
@@ -302,6 +305,8 @@ export interface BarnyardCell {
   accumulated: number;
   required: number;
   last_die: number | null;
+  image_pen_url: string | null;
+  image_harvested_url: string | null;
 }
 
 export interface PetCell {
@@ -316,6 +321,7 @@ export interface FieldCellDetail extends FieldCell {
   plant_emoji: string | null;
   plant_image_young: string | null;
   plant_image_grown: string | null;
+  plant_image_harvested: string | null;
   plot: Plot | null;
   tent_name: string | null;
   tent_image: string | null;
@@ -357,6 +363,7 @@ export interface PlantBed {
   plant_emoji?: string | null;
   plant_image_young?: string | null;
   plant_image_grown?: string | null;
+  plant_image_harvested?: string | null;
   plot?: Plot | null;
 }
 
@@ -697,6 +704,11 @@ export const api = {
     form.append('image', file);
     return client.put<Plant>(`/admin/catalog/plants/${id}/image-grown`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
+  adminUploadPlantImageHarvested: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Plant>(`/admin/catalog/plants/${id}/image-harvested`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
   adminUploadAnimalImage: (id: number, file: File) => {
     const form = new FormData();
     form.append('image', file);
@@ -711,6 +723,11 @@ export const api = {
     const form = new FormData();
     form.append('image', file);
     return client.put<Animal>(`/admin/catalog/animals/${id}/image-pen`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadAnimalImageHarvested: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Animal>(`/admin/catalog/animals/${id}/image-harvested`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
   adminUploadPetImage: (id: number, file: File) => {
     const form = new FormData();

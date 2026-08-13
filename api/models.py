@@ -137,6 +137,7 @@ class Plant(Base):
     image_url = Column(String, nullable=True)
     image_young_url = Column(String, nullable=True)
     image_grown_url = Column(String, nullable=True)
+    image_harvested_url = Column(String, nullable=True)
 
     plots = relationship("Plot", back_populates="plant")
     products = relationship("Product", back_populates="plant")
@@ -417,6 +418,7 @@ class Animal(Base):
     image_url = Column(String, nullable=True)
     image_empty_pen_url = Column(String, nullable=True)
     image_pen_url = Column(String, nullable=True)
+    image_harvested_url = Column(String, nullable=True)
 
 
 class Pet(Base):

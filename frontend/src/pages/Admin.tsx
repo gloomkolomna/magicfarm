@@ -897,6 +897,12 @@ export default function AdminPage() {
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
+  async function uploadPlantImageHarvested(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadPlantImageHarvested(id, file); await load(); setMsg('✓ Выращенное растение загружено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
   async function uploadAnimalImage(id: number, file: File) {
     setBusy(true); setMsg(null);
     try { await api.adminUploadAnimalImage(id, file); await load(); setMsg('✓ Изображение загружено'); }
@@ -912,6 +918,12 @@ export default function AdminPage() {
   async function uploadAnimalPenImage(id: number, file: File) {
     setBusy(true); setMsg(null);
     try { await api.adminUploadAnimalPenImage(id, file); await load(); setMsg('✓ Загон с животным загружен'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function uploadAnimalImageHarvested(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadAnimalImageHarvested(id, file); await load(); setMsg('✓ Выращенное животное загружено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
@@ -1372,13 +1384,13 @@ export default function AdminPage() {
           )}
 
           {tab === 'plants' && (
-            <CatalogTab title="🌱 Растения" items={plants} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePlant} onDelete={deletePlant} onUploadImage={uploadPlantImage} onUploadImageYoung={uploadPlantImageYoung} onUploadImageGrown={uploadPlantImageGrown} hideMainImage
+            <CatalogTab title="🌱 Растения" items={plants} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePlant} onDelete={deletePlant} onUploadImage={uploadPlantImage} onUploadImageYoung={uploadPlantImageYoung} onUploadImageGrown={uploadPlantImageGrown} onUploadImageHarvested={uploadPlantImageHarvested} hideMainImage
               fields={[{ key: 'name', label: 'Название', ph: 'Джекобоб' }, { key: 'level', label: 'Уровень', ph: '1', type: 'number' }, { key: 'category', label: 'Категория', options: [{ value: 'garden', label: '🌱 Грядка' }, { value: 'orchard', label: '🍎 Сад' }] }, { key: 'description', label: 'Описание', ph: 'Грибы' }, { key: 'stitch_condition', label: 'Условие отшива', ph: 'Вышить на белой канве' }]}
             />
           )}
 
           {tab === 'animals' && (
-            <CatalogTab title="🐄 Животные" items={animals} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveAnimal} onDelete={deleteAnimal} onUploadImage={uploadAnimalImage} onUploadImageEmptyPen={uploadAnimalEmptyPenImage} onUploadImagePen={uploadAnimalPenImage} hideMainImage
+            <CatalogTab title="🐄 Животные" items={animals} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveAnimal} onDelete={deleteAnimal} onUploadImage={uploadAnimalImage} onUploadImageEmptyPen={uploadAnimalEmptyPenImage} onUploadImagePen={uploadAnimalPenImage} onUploadImageHarvested={uploadAnimalImageHarvested} hideMainImage
               fields={[{ key: 'name', label: 'Название', ph: 'Единорог' }, { key: 'product_name', label: 'Продукция', ph: 'Рог единорога' }]}
             />
           )}
@@ -1751,7 +1763,7 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 interface CatField { key: string; label: string; ph?: string; type?: string; options?: { value: string; label: string }[] }
 
 function CatalogTab({
-  title, items, busy, form, formOpen, editingId, onFormChange, onCreate, onEdit, onCancel, onSave, onDelete, onUploadImage, onUploadImageYoung, onUploadImageGrown, onUploadImageEmptyPen, onUploadImagePen, fields, imageLabel = 'Изображение', hideMainImage = false,
+  title, items, busy, form, formOpen, editingId, onFormChange, onCreate, onEdit, onCancel, onSave, onDelete, onUploadImage, onUploadImageYoung, onUploadImageGrown, onUploadImageEmptyPen, onUploadImagePen, onUploadImageHarvested, fields, imageLabel = 'Изображение', hideMainImage = false,
 }: {
   title: string;
   items: any[];
@@ -1770,6 +1782,7 @@ function CatalogTab({
   onUploadImageGrown?: (id: number, file: File) => Promise<void>;
   onUploadImageEmptyPen?: (id: number, file: File) => Promise<void>;
   onUploadImagePen?: (id: number, file: File) => Promise<void>;
+  onUploadImageHarvested?: (id: number, file: File) => Promise<void>;
   fields: CatField[];
   imageLabel?: string;
   hideMainImage?: boolean;
@@ -1851,6 +1864,12 @@ function CatalogTab({
                 <input type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0], onUploadImageGrown!)} />
               </label>
             )}
+            {onUploadImageHarvested && (
+              <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
+                🧺 Выращенное
+                <input type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0], onUploadImageHarvested!)} />
+              </label>
+            )}
             {onUploadImageEmptyPen && (
               <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
                 🏚️ Пустой загон
@@ -1881,8 +1900,8 @@ function CatalogTab({
                 {!hideMainImage && item.image_url && (
                   <img src={mediaUrl(item.image_url)} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: 6 }} />
                 )}
-                {(item.image_young_url || item.image_grown_url) && (
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                {(item.image_young_url || item.image_grown_url || item.image_harvested_url) && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                     <div style={{ textAlign: 'center' }}>
                       {item.image_young_url && (
                         <img src={mediaUrl(item.image_young_url)} alt="молодое" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-sm)', display: 'block' }} />
@@ -1895,10 +1914,16 @@ function CatalogTab({
                       )}
                       <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>созревшее</div>
                     </div>
+                    <div style={{ textAlign: 'center' }}>
+                      {item.image_harvested_url && (
+                        <img src={mediaUrl(item.image_harvested_url)} alt="выращенное" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-sm)', display: 'block' }} />
+                      )}
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>выращенное</div>
+                    </div>
                   </div>
                 )}
-                {(item.image_empty_pen_url || item.image_pen_url) && (
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                {(item.image_empty_pen_url || item.image_pen_url || item.image_harvested_url) && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                     {item.image_empty_pen_url && (
                       <div style={{ textAlign: 'center' }}>
                         <img src={mediaUrl(item.image_empty_pen_url)} alt="пустой загон" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 'var(--radius-sm)' }} />
@@ -1909,6 +1934,12 @@ function CatalogTab({
                       <div style={{ textAlign: 'center' }}>
                         <img src={mediaUrl(item.image_pen_url)} alt="загон с животным" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 'var(--radius-sm)' }} />
                         <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>с животным</div>
+                      </div>
+                    )}
+                    {item.image_harvested_url && (
+                      <div style={{ textAlign: 'center' }}>
+                        <img src={mediaUrl(item.image_harvested_url)} alt="выращенное" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 'var(--radius-sm)' }} />
+                        <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>выращенное</div>
                       </div>
                     )}
                   </div>
@@ -1928,6 +1959,14 @@ function CatalogTab({
                         onChange={async (e) => { const f = e.target.files?.[0]; if (f && onUploadImageGrown) await onUploadImageGrown(item.id, f); }}
                       />
                     </label>
+                    {onUploadImageHarvested && (
+                      <label className="fm-btn fm-btn-xs fm-btn-outline" title="Загрузить выращенное растение" style={{ cursor: 'pointer' }}>
+                        🧺
+                        <input type="file" accept="image/*" style={{ display: 'none' }}
+                          onChange={async (e) => { const f = e.target.files?.[0]; if (f && onUploadImageHarvested) await onUploadImageHarvested(item.id, f); }}
+                        />
+                      </label>
+                    )}
                     <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => onDelete(item.id)}>✕</button>
                   </div>
                 ) : (

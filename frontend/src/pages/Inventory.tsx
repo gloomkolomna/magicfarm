@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type InventoryItem } from '../api/endpoints';
+import { mediaUrl } from '../api/media';
 
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -81,6 +82,9 @@ export default function InventoryPage() {
             <div className="fm-grid">
               {filtered.map((i) => (
                 <div key={`${i.item_kind}-${i.item_id}`} className="fm-card fm-rise">
+                  {i.item_image && (
+                    <img src={mediaUrl(i.item_image)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: 6 }} />
+                  )}
                   <strong>
                     {i.item_emoji} {i.item_name}
                     {i.ingredient_icon && <span style={{ marginLeft: 6, fontSize: 14 }} title={i.ingredient_type || ''}>{i.ingredient_icon}</span>}

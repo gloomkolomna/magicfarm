@@ -93,6 +93,7 @@ class InventoryOut(BaseModel):
     item_code: str
     item_name: str
     item_emoji: str | None
+    item_image: str | None = None
     qty: int
     ingredient_type: str | None
     ingredient_icon: str | None
@@ -105,6 +106,7 @@ def _inv_to_out(inv: Inventory) -> InventoryOut:
         return InventoryOut(
             item_kind="plant", item_id=plant.id, item_code=plant.code,
             item_name=plant.name, item_emoji=plant.emoji, qty=inv.qty,
+            item_image=plant.image_harvested_url or plant.image_grown_url or plant.image_url,
             ingredient_type=ing_type, ingredient_icon=INGREDIENT_ICONS.get(ing_type),
         )
     prod = inv.product
@@ -116,6 +118,7 @@ def _inv_to_out(inv: Inventory) -> InventoryOut:
     return InventoryOut(
         item_kind="product", item_id=prod.id, item_code=prod.code,
         item_name=prod.name, item_emoji=prod.emoji, qty=inv.qty,
+        item_image=prod.image_url,
         ingredient_type=ing_type, ingredient_icon=ing_icon,
     )
 

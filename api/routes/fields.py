@@ -35,6 +35,8 @@ class BarnyardCellOut(BaseModel):
     accumulated: int
     required: int
     last_die: int | None
+    image_pen_url: str | None = None
+    image_harvested_url: str | None = None
 
 
 class PetCellOut(BaseModel):
@@ -49,6 +51,7 @@ class CellDetailOut(CellOut):
     plant_emoji: str | None
     plant_image_young: str | None
     plant_image_grown: str | None
+    plant_image_harvested: str | None = None
     plot: PlotOut | None
     tent_name: str | None
     tent_image: str | None
@@ -71,6 +74,7 @@ class PlantBedDetailOut(BaseModel):
     plant_emoji: str | None
     plant_image_young: str | None
     plant_image_grown: str | None
+    plant_image_harvested: str | None = None
     plot: PlotOut | None
 
 
@@ -95,6 +99,7 @@ def _cell_detail(c: FieldCell, db: Session, user: User, plot: Plot | None = None
     plant_emoji = None
     plant_image_young = None
     plant_image_grown = None
+    plant_image_harvested = None
     occupant_user_id = None
     plant_id = None
     plot_out = None
@@ -110,6 +115,7 @@ def _cell_detail(c: FieldCell, db: Session, user: User, plot: Plot | None = None
                 plant_emoji = plant.emoji
                 plant_image_young = plant.image_young_url
                 plant_image_grown = plant.image_grown_url
+                plant_image_harvested = plant.image_harvested_url
             plot_out = _plot_to_out(plot)
     tent_name = None
     tent_image = None
@@ -130,6 +136,8 @@ def _cell_detail(c: FieldCell, db: Session, user: User, plot: Plot | None = None
                 animal_emoji=slot.animal.emoji if slot.animal else None,
                 status=slot.status, accumulated=slot.accumulated,
                 required=slot.required, last_die=slot.last_die,
+                image_pen_url=slot.animal.image_pen_url if slot.animal else None,
+                image_harvested_url=slot.animal.image_harvested_url if slot.animal else None,
             )
     pet = None
     if c.kind == "pet":
@@ -147,6 +155,7 @@ def _cell_detail(c: FieldCell, db: Session, user: User, plot: Plot | None = None
         plant_id=plant_id, occupant_user_id=occupant_user_id, tent_id=c.tent_id,
         plant_name=plant_name, plant_emoji=plant_emoji,
         plant_image_young=plant_image_young, plant_image_grown=plant_image_grown,
+        plant_image_harvested=plant_image_harvested,
         plot=plot_out, tent_name=tent_name, tent_image=tent_image, occupant_name=occupant_name,
         barnyard=barnyard, pet=pet,
     )
@@ -157,6 +166,7 @@ def _plant_bed_detail(pb: PlantBed, db: Session, user: User, plot: Plot | None =
     plant_emoji = None
     plant_image_young = None
     plant_image_grown = None
+    plant_image_harvested = None
     occupant_user_id = None
     plant_id = None
     plot_out = None
@@ -173,6 +183,7 @@ def _plant_bed_detail(pb: PlantBed, db: Session, user: User, plot: Plot | None =
             plant_emoji = plant.emoji
             plant_image_young = plant.image_young_url
             plant_image_grown = plant.image_grown_url
+            plant_image_harvested = plant.image_harvested_url
         plot_out = _plot_to_out(plot)
     return PlantBedDetailOut(
         id=pb.id, field_id=pb.field_id, col1=pb.col1, row1=pb.row1,
@@ -180,6 +191,7 @@ def _plant_bed_detail(pb: PlantBed, db: Session, user: User, plot: Plot | None =
         plant_id=plant_id, occupant_user_id=occupant_user_id,
         plant_name=plant_name, plant_emoji=plant_emoji,
         plant_image_young=plant_image_young, plant_image_grown=plant_image_grown,
+        plant_image_harvested=plant_image_harvested,
         plot=plot_out,
     )
 
