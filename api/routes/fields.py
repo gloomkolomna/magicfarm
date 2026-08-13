@@ -286,10 +286,16 @@ def plant_on_cell(
             detail=f"Количество растений должно быть от 1 до {MAX_PLOT_QTY}",
         )
 
-    existing = db.query(Plot).filter(
-        Plot.user_id == user.vk_id, Plot.plant_id == req.plant_id, Plot.cell_id.isnot(None)
+    existing = db.query(Plot).join(
+        FieldCell, Plot.cell_id == FieldCell.id
+    ).filter(
+        Plot.user_id == user.vk_id,
+        Plot.plant_id == req.plant_id,
+        FieldCell.field_id == f.id,
+        FieldCell.kind == "bed",
+        Plot.cell_id != cell.id,
     ).first()
-    if existing is not None and existing.cell_id != cell.id:
+    if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Это растение уже посажено на другой грядке",
@@ -463,13 +469,15 @@ def plant_on_bed(
             detail=f"Количество растений должно быть от 1 до {MAX_PLOT_QTY}",
         )
 
-    from sqlalchemy import or_
-    existing = db.query(Plot).filter(
-        Plot.user_id == user.vk_id, Plot.plant_id == req.plant_id
+    existing = db.query(Plot).join(
+        PlantBed, Plot.plant_bed_id == PlantBed.id
     ).filter(
-        or_(Plot.cell_id.isnot(None), Plot.plant_bed_id.isnot(None))
+        Plot.user_id == user.vk_id,
+        Plot.plant_id == req.plant_id,
+        PlantBed.field_id == f.id,
+        Plot.plant_bed_id != pb.id,
     ).first()
-    if existing is not None and existing.plant_bed_id != pb.id:
+    if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Это растение уже посажено в другом месте",

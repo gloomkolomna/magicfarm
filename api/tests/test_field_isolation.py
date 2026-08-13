@@ -81,6 +81,18 @@ def test_two_players_plant_same_cell_independently(admin_client, monkeypatch):
     assert cell_a["occupant_user_id"] == 1001
 
 
+def test_same_plant_allowed_on_different_fields(admin_client, monkeypatch):
+    fid_a, pid = _make_garden_field(admin_client, monkeypatch, name="Поле A")
+    fid_b, _ = _make_garden_field(admin_client, monkeypatch, name="Поле B")
+    with make_user_client(4001, "player") as a:
+        ra = a.post(f"/api/fields/{fid_a}/cells/0/0/plant", json={"plant_id": pid})
+        assert ra.status_code == 201
+        rb = a.post(f"/api/fields/{fid_b}/cells/0/0/plant", json={"plant_id": pid})
+        assert rb.status_code == 201
+        rc = a.post(f"/api/fields/{fid_a}/cells/1/0/plant", json={"plant_id": pid})
+        assert rc.status_code == 409
+
+
 def test_invest_does_not_leak_to_other_player_plot(admin_client, monkeypatch):
     fid, pid = _make_garden_field(admin_client, monkeypatch)
     with make_user_client(1001, "player") as a:
