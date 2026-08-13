@@ -604,3 +604,20 @@ class UserAchievement(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "achievement_id", name="uq_userachieve_user_achieve"),
     )
+
+
+class Log(Base):
+    __tablename__ = "logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(String, nullable=False)
+    level = Column(String, nullable=False, default="info", server_default="info")
+    event = Column(String, nullable=True)
+    method = Column(String, nullable=True)
+    path = Column(String, nullable=True)
+    status_code = Column(Integer, nullable=True)
+    message = Column(Text, nullable=True)
+    details = Column(Text, nullable=True)
+    user_id = Column(Integer, nullable=True)
+    client_ip = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow, index=True)

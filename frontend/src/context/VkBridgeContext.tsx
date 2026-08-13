@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import bridge, { parseURLSearchParamsForGetLaunchParams } from '@vkontakte/vk-bridge';
+import { reportVk } from '../api/vkLogger';
 
 interface VkContextType {
   vkUserId: number | null;
@@ -115,29 +116,36 @@ export function VkBridgeProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // 3. Обязательный запуск приложения в VK (fire-and-forget).
-      bridge.send('VKWebAppInit').catch(() => {});
+    // 3. Обязательный запуск приложения в VK (fire-and-forget).
+    bridge.send('VKWebAppInit').catch((e) => {
+      reportVk('warn', 'vk_init_failed', 'VKWebAppInit rejected', { error: String(e) });
+    });
 
-      // 4. Дополнительный запрос launch params через VK Bridge — не блокирующий.
-      if (!id) {
-        try {
-          const lp = await withTimeout(bridge.send('VKWebAppGetLaunchParams'), 3000);
-          if (lp && lp.vk_user_id) {
-            inVk = true;
-            id = Number(lp.vk_user_id);
-            params = Object.fromEntries(
-              Object.entries(lp).map(([k, v]) => [k, String(v)])
-            );
-          }
-        } catch {
-          // вне VK — метод недоступен
+    // 4. Дополнительный запрос launch params через VK Bridge — не блокирующий.
+    if (!id) {
+      try {
+        const lp = await withTimeout(bridge.send('VKWebAppGetLaunchParams'), 3000);
+        if (lp && lp.vk_user_id) {
+          inVk = true;
+          id = Number(lp.vk_user_id);
+          params = Object.fromEntries(
+            Object.entries(lp).map(([k, v]) => [k, String(v)])
+          );
         }
+      } catch (e) {
+        reportVk('warn', 'launch_params_failed', 'VKWebAppGetLaunchParams unavailable', { error: String(e) });
+        // вне VK — метод недоступен
       }
+    }
 
       if (id) {
         setIsVkWebView(true);
         setVkUserId(id);
         setLaunchParams(params);
+        reportVk('info', 'vk_app_launch', inVk ? 'launched in VK' : 'launched (URL params)', {
+          vk_user_id: id,
+          in_vk: inVk,
+        });
         const cur = getComputedStyle(document.documentElement)
           .getPropertyValue('--vk-inset-top').trim();
         if (!cur || cur === '0px') {

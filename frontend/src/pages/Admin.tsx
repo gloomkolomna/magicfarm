@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type AdminOrder, type Animal, type Achievement, type AchievementKind, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
+import { api, type AdminOrder, type Animal, type Achievement, type AchievementKind, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import CrystalStandardEditor from '../components/CrystalStandardEditor';
@@ -42,7 +42,7 @@ const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
 ];
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'order-templates' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements'>('players');
+  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'order-templates' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs'>('players');
   const [players, setPlayers] = useState<Player[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
@@ -146,6 +146,51 @@ export default function AdminPage() {
   const [levelForm, setLevelForm] = useState({ level: 0, coins_required: 0, plots_required: 0, unlock_type: '' });
   const [levelImage, setLevelImage] = useState<File | null>(null);
   const [levelImageLevel, setLevelImageLevel] = useState(0);
+
+  // ── Логи ──
+  const LOG_PAGE = 100;
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [logFilter, setLogFilter] = useState({ source: '', level: '', q: '', user_id: '' });
+  const [logOffset, setLogOffset] = useState(0);
+  const [logHasMore, setLogHasMore] = useState(false);
+  const [expandedLog, setExpandedLog] = useState<number | null>(null);
+  const logSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function loadLogs(append = false) {
+    try {
+      const off = append ? logOffset : 0;
+      const rows = await api.adminLogs({
+        source: logFilter.source || undefined,
+        level: logFilter.level || undefined,
+        q: logFilter.q.trim() || undefined,
+        user_id: logFilter.user_id.trim() ? Number(logFilter.user_id) : undefined,
+        limit: LOG_PAGE,
+        offset: off,
+      });
+      setLogs((prev) => (append ? [...prev, ...rows] : rows));
+      setLogOffset(off + rows.length);
+      setLogHasMore(rows.length === LOG_PAGE);
+    } catch { /* ignore */ }
+  }
+
+  async function clearLogs() {
+    if (!confirm('Удалить ВСЕ логи безвозвратно?')) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminClearLogs();
+      setLogs([]); setLogOffset(0); setLogHasMore(false); setExpandedLog(null);
+      setMsg('✓ Логи очищены');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  useEffect(() => {
+    if (tab !== 'logs') return;
+    if (logSearchTimer.current) clearTimeout(logSearchTimer.current);
+    logSearchTimer.current = setTimeout(() => { loadLogs(false); }, 300);
+    return () => { if (logSearchTimer.current) clearTimeout(logSearchTimer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, logFilter]);
 
   // ── Рецепты зелий ──
   const [potionRecipes, setPotionRecipes] = useState<PotionRecipe[]>([]);
@@ -983,6 +1028,7 @@ export default function AdminPage() {
         <TabBtn active={tab === 'media'} onClick={() => setTab('media')}>🎬 Медиа</TabBtn>
         <TabBtn active={tab === 'crystal-cards'} onClick={() => setTab('crystal-cards')}>🃏 Карты</TabBtn>
         <TabBtn active={tab === 'achievements'} onClick={() => { setTab('achievements'); loadAchievements(); }}>🏆 Достижения</TabBtn>
+        <TabBtn active={tab === 'logs'} onClick={() => setTab('logs')}>📜 Логи</TabBtn>
       </div>
 
       {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
@@ -1584,6 +1630,61 @@ export default function AdminPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {tab === 'logs' && (
+            <div>
+              <h2 style={{ marginTop: 0 }}>📜 Логи фермы</h2>
+              <div className="fm-card" style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <select className="fm-input" value={logFilter.source} onChange={(e) => setLogFilter({ ...logFilter, source: e.target.value })} style={{ width: 130 }}>
+                  <option value="">Источник: все</option>
+                  <option value="server">🖥 Сервер</option>
+                  <option value="vk">🟢 ВК</option>
+                </select>
+                <select className="fm-input" value={logFilter.level} onChange={(e) => setLogFilter({ ...logFilter, level: e.target.value })} style={{ width: 140 }}>
+                  <option value="">Уровень: все</option>
+                  <option value="error">Ошибка</option>
+                  <option value="warn">Предупреждение</option>
+                  <option value="info">Инфо</option>
+                </select>
+                <input className="fm-input" placeholder="user_id" value={logFilter.user_id} onChange={(e) => setLogFilter({ ...logFilter, user_id: e.target.value })} style={{ width: 90 }} />
+                <input className="fm-input" placeholder="Поиск (путь / событие / текст)" value={logFilter.q} onChange={(e) => setLogFilter({ ...logFilter, q: e.target.value })} style={{ flex: 1, minWidth: 180 }} />
+                <button className="fm-btn" disabled={busy} onClick={() => { setLogOffset(0); loadLogs(false); }}>🔄 Обновить</button>
+                <button className="fm-btn fm-btn-danger" disabled={busy} onClick={clearLogs}>🗑 Очистить</button>
+              </div>
+
+              {logs.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Логов пока нет.</div>}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {logs.map((l) => {
+                  const lvlColor = l.level === 'error' ? '#e55' : l.level === 'warn' ? '#e90' : 'var(--text-muted)';
+                  const srcColor = l.source === 'vk' ? '#3a7a4f' : '#3a5a7a';
+                  return (
+                    <div key={l.id} className="fm-card" style={{ padding: 10, fontSize: 13, cursor: l.details ? 'pointer' : 'default' }} onClick={() => l.details && setExpandedLog(expandedLog === l.id ? null : l.id)}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{new Date(l.created_at).toLocaleString()}</span>
+                        <span style={{ background: srcColor, color: '#fff', borderRadius: 4, padding: '1px 6px', fontSize: 11 }}>{l.source === 'vk' ? 'VK' : 'СЕРВ'}</span>
+                        <span style={{ color: lvlColor, fontWeight: 600, fontSize: 11 }}>{l.level.toUpperCase()}</span>
+                        {l.status_code != null && <span style={{ fontSize: 11, fontFamily: 'monospace' }}>{l.status_code}</span>}
+                        <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{l.method} {l.path}</span>
+                        {l.event && <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>· {l.event}</span>}
+                        {l.user_id != null && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· u{l.user_id}</span>}
+                      </div>
+                      {l.message && <div style={{ marginTop: 4, color: 'var(--text-secondary)' }}>{l.message}</div>}
+                      {expandedLog === l.id && l.details && (
+                        <pre style={{ marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 11, background: 'rgba(0,0,0,0.25)', padding: 8, borderRadius: 6 }}>{l.details}</pre>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {logHasMore && (
+                <div style={{ textAlign: 'center', marginTop: 10 }}>
+                  <button className="fm-btn fm-btn-outline" disabled={busy} onClick={() => loadLogs(true)}>Показать ещё</button>
+                </div>
+              )}
             </div>
           )}
         </>

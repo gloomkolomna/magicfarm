@@ -1,10 +1,11 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useVkBridge } from './context/VkBridgeContext';
 import { useSession } from './context/SessionContext';
 import Background from './components/Background';
 import MiniAppShell from './components/MiniAppShell';
 import { isAdminAllowed } from './auth/adminGate';
+import { installGlobalErrorReporters } from './api/vkLogger';
 
 const OrdersPage = lazy(() => import('./pages/Orders'));
 const ProfilePage = lazy(() => import('./pages/Profile'));
@@ -54,6 +55,8 @@ function StubPage() {
 function App() {
   const { vkUserId, loading } = useVkBridge();
   const { user, loading: sessionLoading } = useSession();
+
+  useEffect(() => { installGlobalErrorReporters(); }, []);
 
   if (loading) return <><Background /><Skeleton /></>;
   if (!isAdminAllowed(vkUserId)) return <><Background /><StubPage /></>;

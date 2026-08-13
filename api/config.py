@@ -46,6 +46,9 @@ VK_APP_SECRET = os.getenv("VK_APP_SECRET", "")
 VK_SERVICE_TOKEN = os.getenv("VK_SERVICE_TOKEN", "")
 ADMIN_VK_IDS = _env_list_int("ADMIN_VK_IDS")
 
+# ── Логи ──
+LOG_RETENTION_DAYS = _env_int("LOG_RETENTION_DAYS", 30)
+
 
 # ── Загрузки (фото вышивки) ──
 UPLOADS_DIR = os.getenv("UPLOADS_DIR", os.path.join(API_DIR, "uploads"))

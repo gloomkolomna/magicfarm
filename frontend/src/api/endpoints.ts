@@ -410,6 +410,30 @@ export interface AchievementKind {
   hint?: string;
 }
 
+export interface LogEntry {
+  id: number;
+  source: string;
+  level: string;
+  event: string | null;
+  method: string | null;
+  path: string | null;
+  status_code: number | null;
+  message: string | null;
+  details: string | null;
+  user_id: number | null;
+  client_ip: string | null;
+  created_at: string;
+}
+
+export interface LogsQuery {
+  source?: string;
+  level?: string;
+  q?: string;
+  user_id?: number;
+  limit?: number;
+  offset?: number;
+}
+
 export const api = {
   // ── Производства / склад ──
   investPlot: (plot_id: number, amount: number) =>
@@ -839,4 +863,11 @@ export const api = {
     form.append('image', file);
     return client.put<Achievement>(`/admin/achievements/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
+
+  // ── Логи ──
+  adminLogs: (params: LogsQuery = {}) =>
+    client.get<LogEntry[]>('/admin/logs', { params }).then((r) => r.data),
+  adminClearLogs: () => client.delete('/admin/logs').then((r) => r.data),
+  vkLogReport: (payload: { level?: string; event?: string; message?: string; details?: unknown }) =>
+    client.post('/logs/vk', payload).then((r) => r.data),
 };
