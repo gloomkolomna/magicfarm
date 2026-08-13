@@ -34,14 +34,7 @@ export default function ProfilePage() {
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <div className="fm-card fm-rise" style={{ marginBottom: 14, textAlign: 'center' }}>
-        <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>Вышивальщица</div>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>
-          {user.display_name || `Игрок #${user.vk_id}`}
-        </div>
-      </div>
-
-      <div className="fm-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', marginBottom: 14 }}>
+      <div className="fm-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 14 }}>
         <div className="fm-card" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 24 }}>🧵</div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>{user.crosses_total}</div>
