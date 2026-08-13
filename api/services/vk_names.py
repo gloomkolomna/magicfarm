@@ -18,7 +18,7 @@ def resolve_vk_names(vk_ids: list[int]) -> dict[int, dict]:
         users = None
         for attempt in (1, 2):
             try:
-                users = vk.users.get(user_ids=ids_str, fields="first_name,last_name")
+                users = vk.users.get(user_ids=ids_str, fields="first_name,last_name", lang="ru")
                 break
             except Exception as e:
                 record_log(
