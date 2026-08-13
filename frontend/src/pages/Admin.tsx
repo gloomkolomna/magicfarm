@@ -19,6 +19,12 @@ const CARDS_DRAW_OPTIONS = [
   { value: '5', label: '5 карт' },
 ];
 
+function fmtMsk(iso: string): string {
+  const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(iso);
+  const d = new Date(hasZone ? iso : iso + 'Z');
+  return d.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+}
+
 const SURCHARGE_OPTIONS = [
   { value: '30', label: '30 монет' },
   { value: '35', label: '35 монет' },
@@ -1695,7 +1701,7 @@ export default function AdminPage() {
                   return (
                     <div key={l.id} className="fm-card" style={{ padding: 10, fontSize: 13, cursor: l.details ? 'pointer' : 'default' }} onClick={() => l.details && setExpandedLog(expandedLog === l.id ? null : l.id)}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{new Date(l.created_at).toLocaleString()}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{fmtMsk(l.created_at)}</span>
                         <span style={{ background: srcColor, color: '#fff', borderRadius: 4, padding: '1px 6px', fontSize: 11 }}>{l.source === 'vk' ? 'VK' : 'СЕРВ'}</span>
                         <span style={{ color: lvlColor, fontWeight: 600, fontSize: 11 }}>{l.level.toUpperCase()}</span>
                         {l.status_code != null && <span style={{ fontSize: 11, fontFamily: 'monospace' }}>{l.status_code}</span>}
