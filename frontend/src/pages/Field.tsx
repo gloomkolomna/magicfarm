@@ -41,6 +41,7 @@ export default function FieldPage() {
   const [stitchPhotoBefore, setStitchPhotoBefore] = useState<File | null>(null);
   const [stitchPhoto, setStitchPhoto] = useState<File | null>(null);
   const [stitchNote, setStitchNote] = useState('');
+  const [stitchSending, setStitchSending] = useState(false);
 
   // Модалка шатра.
   const [tentModal, setTentModal] = useState<Tent | null>(null);
@@ -214,7 +215,7 @@ export default function FieldPage() {
 
   async function doStitchReport() {
     if (!stitchAmount || !stitchPhoto || !stitchPhotoBefore) return;
-    setBusy(true); setMsg(null);
+    setBusy(true); setStitchSending(true); setMsg(null);
     try {
       await api.createStitchReport(
         Number(stitchAmount), stitchPhotoBefore, stitchPhoto, stitchNote || undefined,
@@ -226,7 +227,7 @@ export default function FieldPage() {
       await load(); await refresh();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setStitchSending(false); }
   }
 
   async function doHarvest(cell: FieldCellDetail) {
@@ -901,8 +902,8 @@ export default function FieldPage() {
                   {stitchPhoto && <div style={{ fontSize: 11, color: '#5f8', marginTop: 2 }}>✓ {stitchPhoto.name}</div>}
                   <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Заметка (необязательно)</label>
                   <input className="fm-input" value={stitchNote} onChange={(e) => setStitchNote(e.target.value)} placeholder="что вышили" />
-                  <button className="fm-btn fm-btn-outline" style={{ width: '100%', marginTop: 12 }} disabled={busy || !stitchAmount || !stitchPhotoBefore || !stitchPhoto} onClick={doStitchReport}>
-                    Отправить отчёт
+                  <button className="fm-btn fm-btn-outline" style={{ width: '100%', marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} disabled={busy || !stitchAmount || !stitchPhotoBefore || !stitchPhoto} onClick={doStitchReport}>
+                    {stitchSending ? (<><span className="fm-spinner" /> Отправка отчёта…</>) : 'Отправить отчёт'}
                   </button>
                 </div>
               )}
