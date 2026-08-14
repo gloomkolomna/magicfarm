@@ -369,6 +369,8 @@ def sell_surplus(
     reward = int(full_price * ratio)
 
     inv.qty = (inv.qty or 0) - req.qty
+    if inv.qty <= 0:
+        db.delete(inv)
     u = db.query(User).filter(User.vk_id == user.vk_id).first()
     u.coins = (u.coins or 0) + reward
 

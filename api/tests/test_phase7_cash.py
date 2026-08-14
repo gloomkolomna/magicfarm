@@ -55,6 +55,18 @@ def test_sell_plant_surplus(admin_client):
         assert inv[0]["qty"] == 3
 
 
+def test_sell_all_removes_inventory(admin_client):
+    _seed_product_inventory(123, 1, 5)
+    with make_user_client(123, "player") as c:
+        r = c.post("/api/farm/sell-surplus", json={
+            "item_kind": "product", "item_id": 1, "qty": 5,
+        })
+        assert r.status_code == 200
+
+        inv = c.get("/api/farm/inventory?item_kind=product").json()
+        assert inv == []
+
+
 def test_sell_insufficient(admin_client):
     _seed_product_inventory(123, 1, 2)
     with make_user_client(123, "player") as c:
