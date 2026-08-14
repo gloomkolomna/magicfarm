@@ -161,17 +161,17 @@ class TestProductPlantUniqueness:
     def test_different_plants_ok(self, admin_client):
         plants = admin_client.get("/api/admin/catalog/plants").json()
         r1 = admin_client.post("/api/admin/catalog/products", json={
-            "name": "Товар А", "plant_id": plants[0]["id"], "stars": 1,
+            "name": "Товар А", "plant_id": plants[0]["id"], "stars": 1, "production_kind": "alchemy",
         })
         assert r1.status_code == 201
         r2 = admin_client.post("/api/admin/catalog/products", json={
-            "name": "Товар Б", "plant_id": plants[1]["id"], "stars": 1,
+            "name": "Товар Б", "plant_id": plants[1]["id"], "stars": 1, "production_kind": "sewing",
         })
         assert r2.status_code == 201
 
     def test_product_without_plant_ok(self, admin_client):
         r = admin_client.post("/api/admin/catalog/products", json={
-            "name": "Без растения", "stars": 1,
+            "name": "Без растения", "stars": 1, "production_kind": "workshop",
         })
         assert r.status_code == 201
 

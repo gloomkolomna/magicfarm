@@ -128,7 +128,13 @@ export default function AdminPage() {
     if (tab === 'plants' && !r.has('plants')) { r.add('plants'); api.plants().then(setPlants).catch(() => {}); }
     if (tab === 'animals' && !r.has('animals')) { r.add('animals'); api.adminAnimals().then(setAnimals).catch(() => {}); }
     if (tab === 'pets' && !r.has('pets')) { r.add('pets'); api.adminPets().then(setPets).catch(() => {}); }
-    if (tab === 'products' && !r.has('products')) { r.add('products'); api.adminProducts().then(setCatalogProducts).catch(() => {}); }
+    if (tab === 'products' && !r.has('products')) {
+      r.add('products');
+      Promise.all([
+        api.adminProducts().catch(() => [] as Product[]),
+        api.adminProductionTemplates().catch(() => [] as ProductionTemplate[]),
+      ]).then(([prods, tpls]) => { setCatalogProducts(prods); setProdTemplates(tpls); });
+    }
     if (tab === 'productions' && !r.has('productions')) { r.add('productions'); api.adminProductionTemplates().then(setProdTemplates).catch(() => {}); }
     if (tab === 'media' && !r.has('media')) { r.add('media'); api.adminGameMedia().then(setGameMedia).catch(() => {}); }
     if (tab === 'crystal-cards' && !r.has('crystal-cards')) { r.add('crystal-cards'); api.adminCrystalCards().then(setCrystalCards).catch(() => {}); }
@@ -560,6 +566,7 @@ export default function AdminPage() {
 
   async function saveProduct() {
     if (!catForm.name?.trim()) return;
+    if (!catForm.production_kind) { setMsg('✗ Укажите производство'); return; }
     setBusy(true); setMsg(null);
     try {
       const data: Record<string, any> = { ...catForm };
