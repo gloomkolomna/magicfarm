@@ -137,6 +137,12 @@ export default function FieldPage() {
 
   useEffect(() => { if (!sessionLoading) load(); }, [load, sessionLoading]);
 
+  useEffect(() => {
+    if (!msg) return;
+    const t = setTimeout(() => setMsg(null), 4000);
+    return () => clearTimeout(t);
+  }, [msg]);
+
   const cellsGrid = useMemo(() => {
     if (!field) return [];
     const grid: (FieldCellDetail | null)[][] = [];
@@ -392,8 +398,8 @@ export default function FieldPage() {
       <div
         ref={scrollRef}
         style={{
-          position: 'fixed', inset: 0, top: 'calc(54px + var(--vk-inset-top, 0px))', zIndex: 0, overflow: 'auto',
-          WebkitOverflowScrolling: 'touch', backgroundColor: '#1a2414',
+            position: 'fixed', inset: 0, top: 'calc(54px + var(--vk-inset-top, 0px))', zIndex: 0, overflow: 'auto',
+            overscrollBehavior: 'contain', backgroundColor: '#1a2414',
         }}
       >
         {field.map_url ? (
@@ -443,13 +449,17 @@ export default function FieldPage() {
                         } else {
                           setShowVideo(false);
                           setCardResult(null);
-                          const [fd, prs] = await Promise.all([api.fieldDetail(fieldId), api.products()]);
-                          const freshCell = fd.cells.find((x: FieldCellDetail) => x.col === c && x.row === r);
-                          setField(fd);
-                          setProducts(prs);
-                          if (freshCell) {
-                            setCareCell(freshCell);
-                            setInvestAmount(freshCell.plot ? String(freshCell.plot.required - freshCell.plot.accumulated) : '');
+                          try {
+                            const [fd, prs] = await Promise.all([api.fieldDetail(fieldId), api.products()]);
+                            const freshCell = fd.cells.find((x: FieldCellDetail) => x.col === c && x.row === r);
+                            setField(fd);
+                            setProducts(prs);
+                            if (freshCell) {
+                              setCareCell(freshCell);
+                              setInvestAmount(freshCell.plot ? String(freshCell.plot.required - freshCell.plot.accumulated) : '');
+                            }
+                          } catch (e: any) {
+                            setMsg('✗ ' + (e?.response?.data?.detail || 'Не удалось загрузить грядку. Попробуйте ещё раз.'));
                           }
                         }
                       }}
@@ -459,6 +469,7 @@ export default function FieldPage() {
                         boxShadow: 'inset 0 0 0 0.5px rgba(255,255,255,0.05)',
                         background: bg,
                         cursor: isBed || cell.kind === 'barnyard' || cell.kind === 'pet' ? 'pointer' : 'default',
+                        touchAction: isBed || cell.kind === 'barnyard' || cell.kind === 'pet' ? 'manipulation' : 'auto',
                         position: 'relative',
                         display: 'flex', flexDirection: 'column',
                         alignItems: 'center', justifyContent: 'center',
@@ -561,6 +572,7 @@ export default function FieldPage() {
                       borderRadius: 6,
                       background: t.build_status === 'planted' ? 'rgba(224,168,62,0.10)' : 'transparent',
                       cursor: 'pointer',
+                      touchAction: 'manipulation',
                       pointerEvents: 'auto',
                     }}
                   >
@@ -637,6 +649,7 @@ export default function FieldPage() {
                         ? (pb.plot.status === 'grown' ? 'rgba(111,174,74,0.25)' : 'rgba(90,143,62,0.15)')
                         : 'transparent',
                       cursor: 'pointer',
+                      touchAction: 'manipulation',
                       pointerEvents: 'auto',
                       position: 'relative',
                     }}
