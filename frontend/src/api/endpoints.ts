@@ -505,7 +505,9 @@ export const api = {
     if (contextType) form.append('context_type', contextType);
     if (contextId != null) form.append('context_id', String(contextId));
     if (cellId != null) form.append('cell_id', String(cellId));
-    const r = await client.post<StitchReport>('/stitches/reports', form);
+    const r = await client.post<StitchReport>('/stitches/reports', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return r.data;
   },
   stitchReports: (status?: string, mine = true) =>

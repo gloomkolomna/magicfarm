@@ -42,7 +42,7 @@ describe('api.createStitchReport — client-side compression', () => {
     expect(form.get('photo_after')).toBe(afterC);
 
     const opts = postMock.mock.calls[0][2];
-    expect(opts?.headers?.['Content-Type']).toBeUndefined();
+    expect(opts?.headers?.['Content-Type']).toBe('multipart/form-data');
   });
 
   it('falls back to the original file when compression fails', async () => {

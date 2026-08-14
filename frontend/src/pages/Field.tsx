@@ -398,7 +398,7 @@ export default function FieldPage() {
       <div
         ref={scrollRef}
         style={{
-            position: 'fixed', inset: 0, top: 'calc(54px + var(--vk-inset-top, 0px))', zIndex: 0, overflow: 'auto',
+            position: 'fixed', inset: 0, top: '38px', zIndex: 0, overflow: 'auto',
             overscrollBehavior: 'contain', backgroundColor: '#1a2414',
         }}
       >
@@ -719,7 +719,7 @@ export default function FieldPage() {
       </div>
 
       {msg && (
-        <div className="fm-card" style={{ position: 'fixed', top: 'calc(54px + var(--vk-inset-top, 0px))', left: 12, right: 12, zIndex: 20, fontSize: 14, background: 'rgba(15,22,12,0.85)' }}>
+        <div className="fm-card" style={{ position: 'fixed', top: '38px', left: 12, right: 12, zIndex: 20, fontSize: 14, background: 'rgba(15,22,12,0.85)' }}>
           {msg}
         </div>
       )}
