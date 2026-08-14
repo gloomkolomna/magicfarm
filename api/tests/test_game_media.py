@@ -171,7 +171,7 @@ class TestProductPlantUniqueness:
 
     def test_product_without_plant_ok(self, admin_client):
         r = admin_client.post("/api/admin/catalog/products", json={
-            "name": "Без растения", "stars": 1, "production_kind": "workshop",
+            "name": "Без растения", "stars": 1, "production_kind": "workshop", "animal_id": 1,
         })
         assert r.status_code == 201
 

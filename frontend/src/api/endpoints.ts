@@ -1,4 +1,5 @@
 import client from './client';
+import { compressImage } from './media';
 
 export interface Plant {
   id: number;
@@ -491,20 +492,21 @@ export const api = {
       .then((r) => r.data),
 
   // ── Фото-отчёты по вышивке ──
-  createStitchReport: (amount: number, photoBefore: File, photoAfter: File, note?: string, contextType?: string, contextId?: number, cellId?: number) => {
+  createStitchReport: async (amount: number, photoBefore: File, photoAfter: File, note?: string, contextType?: string, contextId?: number, cellId?: number) => {
+    const [cb, ca] = await Promise.all([
+      compressImage(photoBefore, 1280, 0.85).catch(() => photoBefore),
+      compressImage(photoAfter, 1280, 0.85).catch(() => photoAfter),
+    ]);
     const form = new FormData();
     form.append('amount', String(amount));
     if (note) form.append('note', note);
-    form.append('photo_before', photoBefore);
-    form.append('photo_after', photoAfter);
+    form.append('photo_before', cb);
+    form.append('photo_after', ca);
     if (contextType) form.append('context_type', contextType);
     if (contextId != null) form.append('context_id', String(contextId));
     if (cellId != null) form.append('cell_id', String(cellId));
-    return client
-      .post<StitchReport>('/stitches/reports', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((r) => r.data);
+    const r = await client.post<StitchReport>('/stitches/reports', form);
+    return r.data;
   },
   stitchReports: (status?: string, mine = true) =>
     client

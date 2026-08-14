@@ -51,7 +51,7 @@ function MiniAppShell({ children }: Props) {
           alignItems: 'center',
           gap: 10,
           padding: '6px 12px',
-          paddingTop: 'calc(6px + var(--vk-inset-top, 0px))',
+          paddingTop: '6px',
           position: 'sticky',
           top: 0,
           zIndex: 20,

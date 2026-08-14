@@ -480,6 +480,8 @@ def create_product(
     if not req.name.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название обязательно")
     _validate_product_source(req.plant_id, req.animal_id, req.pet_id, db)
+    if req.plant_id is None and req.animal_id is None and req.pet_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Укажите растение, животное или питомца")
     production_kind = _validate_production_kind(req.production_kind, db)
     code = _unique_code(_auto_code(req.name, "product"), Product, db)
     if req.plant_id is not None:

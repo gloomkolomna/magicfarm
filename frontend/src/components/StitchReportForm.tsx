@@ -21,10 +21,12 @@ export default function StitchReportForm({
   const [after, setAfter] = useState<File | null>(null);
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   async function submit() {
     if (!amount || !before || !after) return;
     setSubmitting(true);
+    setErr(null);
     try {
       await api.createStitchReport(
         Number(amount), before, after, note || undefined,
@@ -32,6 +34,8 @@ export default function StitchReportForm({
       );
       setAmount(''); setBefore(null); setAfter(null); setNote('');
       await onDone();
+    } catch (e: any) {
+      setErr(e?.response?.data?.detail || 'Не удалось отправить отчёт. Попробуйте ещё раз.');
     } finally {
       setSubmitting(false);
     }
@@ -58,6 +62,7 @@ export default function StitchReportForm({
       <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} disabled={busy || submitting || !amount || !before || !after} onClick={submit}>
         Отправить отчёт
       </button>
+      {err && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{err}</div>}
     </div>
   );
 }

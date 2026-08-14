@@ -133,7 +133,16 @@ export default function AdminPage() {
       Promise.all([
         api.adminProducts().catch(() => [] as Product[]),
         api.adminProductionTemplates().catch(() => [] as ProductionTemplate[]),
-      ]).then(([prods, tpls]) => { setCatalogProducts(prods); setProdTemplates(tpls); });
+        api.plants().catch(() => [] as Plant[]),
+        api.adminAnimals().catch(() => [] as Animal[]),
+        api.adminPets().catch(() => [] as Pet[]),
+      ]).then(([prods, tpls, pls, anm, pts]) => {
+        setCatalogProducts(prods);
+        setProdTemplates(tpls);
+        setPlants(pls);
+        setAnimals(anm);
+        setPets(pts);
+      });
     }
     if (tab === 'productions' && !r.has('productions')) { r.add('productions'); api.adminProductionTemplates().then(setProdTemplates).catch(() => {}); }
     if (tab === 'media' && !r.has('media')) { r.add('media'); api.adminGameMedia().then(setGameMedia).catch(() => {}); }
@@ -567,6 +576,7 @@ export default function AdminPage() {
   async function saveProduct() {
     if (!catForm.name?.trim()) return;
     if (!catForm.production_kind) { setMsg('✗ Укажите производство'); return; }
+    if (!catForm.plant_id && !catForm.animal_id && !catForm.pet_id) { setMsg('✗ Укажите растение, животное или питомца'); return; }
     setBusy(true); setMsg(null);
     try {
       const data: Record<string, any> = { ...catForm };

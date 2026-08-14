@@ -220,7 +220,7 @@ def test_list_products_admin(admin_client):
 def test_create_product(admin_client):
     res = admin_client.post(
         "/api/admin/catalog/products",
-        json={"name": "Зелье здоровья", "emoji": "🧪", "stars": 2, "production_kind": "alchemy"},
+        json={"name": "Зелье здоровья", "emoji": "🧪", "stars": 2, "production_kind": "alchemy", "plant_id": 1},
     )
     assert res.status_code == 201
     data = res.json()
@@ -266,8 +266,8 @@ def test_create_product_invalid_pet(admin_client):
 
 
 def test_create_product_duplicate_code(admin_client):
-    c1 = admin_client.post("/api/admin/catalog/products", json={"name": "Товар", "production_kind": "alchemy"}).json()["code"]
-    c2 = admin_client.post("/api/admin/catalog/products", json={"name": "Товар", "production_kind": "alchemy"}).json()["code"]
+    c1 = admin_client.post("/api/admin/catalog/products", json={"name": "Товар", "production_kind": "alchemy", "animal_id": 1}).json()["code"]
+    c2 = admin_client.post("/api/admin/catalog/products", json={"name": "Товар", "production_kind": "alchemy", "animal_id": 1}).json()["code"]
     assert c1 != c2
 
 
@@ -295,10 +295,18 @@ def test_create_product_unknown_production(admin_client):
     assert res.status_code == 400
 
 
+def test_create_product_missing_source(admin_client):
+    res = admin_client.post(
+        "/api/admin/catalog/products",
+        json={"name": "Без источника", "stars": 1, "production_kind": "alchemy"},
+    )
+    assert res.status_code == 400
+
+
 def test_update_product(admin_client):
     res = admin_client.post(
         "/api/admin/catalog/products",
-        json={"name": "Исходное", "stars": 1, "production_kind": "alchemy"},
+        json={"name": "Исходное", "stars": 1, "production_kind": "alchemy", "plant_id": 1},
     )
     pid = res.json()["id"]
     res2 = admin_client.put(
@@ -313,7 +321,7 @@ def test_update_product(admin_client):
 def test_update_product_unknown_production(admin_client):
     res = admin_client.post(
         "/api/admin/catalog/products",
-        json={"name": "Исходное", "stars": 1, "production_kind": "alchemy"},
+        json={"name": "Исходное", "stars": 1, "production_kind": "alchemy", "plant_id": 1},
     )
     pid = res.json()["id"]
     res2 = admin_client.put(
@@ -331,7 +339,7 @@ def test_update_product_not_found(admin_client):
 def test_delete_product(admin_client):
     res = admin_client.post(
         "/api/admin/catalog/products",
-        json={"name": "Удаляемый", "production_kind": "alchemy"},
+        json={"name": "Удаляемый", "production_kind": "alchemy", "plant_id": 1},
     )
     pid = res.json()["id"]
     del_res = admin_client.delete(f"/api/admin/catalog/products/{pid}")

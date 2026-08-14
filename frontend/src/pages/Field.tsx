@@ -704,7 +704,7 @@ export default function FieldPage() {
         style={{
           position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20,
           display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
-          paddingTop: 'calc(6px + var(--vk-inset-top, 0px))',
+          paddingTop: '6px',
           background: 'linear-gradient(180deg, rgba(10,16,8,0.92) 0%, rgba(10,16,8,0.78) 100%)',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
