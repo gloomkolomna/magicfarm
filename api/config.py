@@ -33,7 +33,7 @@ def _env_bool(name: str, default: bool) -> bool:
 # ── Общие ──
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = _env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 43200)
+ACCESS_TOKEN_EXPIRE_MINUTES = _env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 259200)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///farm.db")
 APP_ENV = os.getenv("APP_ENV", "production").strip().lower()
 DEV_LOGIN_ENABLED = APP_ENV == "dev"

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import bridge, { parseURLSearchParamsForGetLaunchParams } from '@vkontakte/vk-bridge';
 import { reportVk } from '../api/vkLogger';
+import { setVkLaunchInfo } from '../api/client';
 
 interface VkContextType {
   vkUserId: number | null;
@@ -162,6 +163,10 @@ export function VkBridgeProvider({ children }: { children: ReactNode }) {
     init();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    setVkLaunchInfo(vkUserId, launchParams);
+  }, [vkUserId, launchParams]);
 
   return (
     <VkBridgeContext.Provider value={{ vkUserId, isVkWebView, isDemo, launchParams, loading }}>

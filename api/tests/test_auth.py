@@ -99,3 +99,29 @@ def test_session_real_sign_missing(client, monkeypatch):
     params = {"vk_app_id": "54712760", "vk_user_id": "400977"}
     res = client.post("/api/auth/session", json={"params": params})
     assert res.status_code == 401
+
+
+def test_access_token_default_lifetime_is_180_days():
+    import config
+
+    assert config.ACCESS_TOKEN_EXPIRE_MINUTES == 180 * 24 * 60
+
+
+def test_access_token_expiry_matches_config():
+    import time
+    from jose import jwt as jose_jwt
+
+    import config
+    from services.auth import create_access_token
+
+    before = int(time.time())
+    token = create_access_token(123456)
+    after = int(time.time())
+
+    payload = jose_jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
+    assert payload["sub"] == "123456"
+
+    exp = int(payload["exp"])
+    expected_min = before + config.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    expected_max = after + config.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    assert expected_min <= exp <= expected_max
