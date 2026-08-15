@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_role
-from models import Animal, CrystalCard, Pet, Plant, Product, ProductionTemplate, User
+from models import Animal, CrystalCard, Pet, Plant, Product, ProductionTemplate, Recipe, User
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/admin/catalog", tags=["admin-catalog"])
@@ -136,6 +136,29 @@ class PetOut(BaseModel):
     bonus_kind: str | None
     bonus_description: str | None
     image_url: str | None
+
+
+class RecipeCreate(BaseModel):
+    plant_id: int
+    product_id: int
+    level: int = 1
+
+
+class RecipeUpdate(BaseModel):
+    plant_id: int | None = None
+    product_id: int | None = None
+    level: int | None = None
+
+
+class RecipeOut(BaseModel):
+    id: int
+    plant_id: int
+    plant_name: str
+    plant_emoji: str | None
+    product_id: int
+    product_name: str
+    product_emoji: str | None
+    level: int
 
 
 # ── Helpers ──
@@ -397,6 +420,97 @@ def delete_pet(
     if p is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Питомец не найден")
     db.delete(p)
+    db.commit()
+    return None
+
+
+# ── Recipes CRUD ──
+
+def _recipe_out(r: Recipe) -> RecipeOut:
+    return RecipeOut(
+        id=r.id, plant_id=r.plant_id, plant_name=r.plant.name,
+        plant_emoji=r.plant.emoji, product_id=r.product_id,
+        product_name=r.product.name, product_emoji=r.product.emoji,
+        level=r.level,
+    )
+
+
+def _validate_recipe_fields(
+    plant_id: int | None,
+    product_id: int | None,
+    level: int | None,
+    db: Session,
+) -> None:
+    if level is not None and level not in (1, 2, 3):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Уровень должен быть 1, 2 или 3")
+    if plant_id is not None:
+        if db.query(Plant).filter(Plant.id == plant_id).first() is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Растение не найдено")
+    if product_id is not None:
+        if db.query(Product).filter(Product.id == product_id).first() is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Товар не найден")
+
+
+@router.get("/recipes", response_model=list[RecipeOut])
+def list_recipes(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    return [_recipe_out(r) for r in db.query(Recipe).order_by(Recipe.level.asc(), Recipe.id.asc()).all()]
+
+
+@router.post("/recipes", response_model=RecipeOut, status_code=status.HTTP_201_CREATED)
+def create_recipe(
+    req: RecipeCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    _validate_recipe_fields(req.plant_id, req.product_id, req.level, db)
+    if db.query(Recipe).filter(Recipe.plant_id == req.plant_id).first() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="У этого растения уже есть рецепт")
+    r = Recipe(plant_id=req.plant_id, product_id=req.product_id, level=req.level)
+    db.add(r)
+    db.commit()
+    db.refresh(r)
+    return _recipe_out(r)
+
+
+@router.put("/recipes/{recipe_id}", response_model=RecipeOut)
+def update_recipe(
+    recipe_id: int,
+    req: RecipeUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    r = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if r is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
+    _validate_recipe_fields(req.plant_id, req.product_id, req.level, db)
+    plant_id = req.plant_id if req.plant_id is not None else r.plant_id
+    if plant_id != r.plant_id:
+        if db.query(Recipe).filter(Recipe.plant_id == plant_id, Recipe.id != r.id).first() is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="У этого растения уже есть рецепт")
+    if req.plant_id is not None:
+        r.plant_id = req.plant_id
+    if req.product_id is not None:
+        r.product_id = req.product_id
+    if req.level is not None:
+        r.level = req.level
+    db.commit()
+    db.refresh(r)
+    return _recipe_out(r)
+
+
+@router.delete("/recipes/{recipe_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_recipe(
+    recipe_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    r = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if r is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
+    db.delete(r)
     db.commit()
     return None
 

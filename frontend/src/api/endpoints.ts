@@ -242,6 +242,23 @@ export interface Product {
   image_url: string | null;
 }
 
+export interface AdminRecipe {
+  id: number;
+  plant_id: number;
+  plant_name: string;
+  plant_emoji: string | null;
+  product_id: number;
+  product_name: string;
+  product_emoji: string | null;
+  level: number;
+}
+
+export interface AdminRecipeCreate {
+  plant_id: number;
+  product_id: number;
+  level: number;
+}
+
 export interface PlayerDetail extends Player {
   plots: Plot[];
   productions: Production[];
@@ -727,6 +744,14 @@ export const api = {
     client.put<ProductionTemplate>(`/admin/catalog/production-templates/${id}`, data).then((r) => r.data),
   adminDeleteProductionTemplate: (id: number) =>
     client.delete(`/admin/catalog/production-templates/${id}`).then((r) => r.data),
+
+  adminRecipes: () => client.get<AdminRecipe[]>('/admin/catalog/recipes').then((r) => r.data),
+  adminCreateRecipe: (data: AdminRecipeCreate) =>
+    client.post<AdminRecipe>('/admin/catalog/recipes', data).then((r) => r.data),
+  adminUpdateRecipe: (id: number, data: Partial<AdminRecipeCreate>) =>
+    client.put<AdminRecipe>(`/admin/catalog/recipes/${id}`, data).then((r) => r.data),
+  adminDeleteRecipe: (id: number) =>
+    client.delete(`/admin/catalog/recipes/${id}`).then((r) => r.data),
 
   adminUploadPlantImage: (id: number, file: File) => {
     const form = new FormData();

@@ -420,3 +420,120 @@ def test_delete_production_template(admin_client):
 def test_production_template_requires_admin(player_client):
     res = player_client.get("/api/admin/catalog/production-templates")
     assert res.status_code == 403
+
+
+# ── Recipes CRUD ──
+
+def _plant_id_by_code(admin_client, code: str) -> int:
+    plants = admin_client.get("/api/admin/catalog/plants").json()
+    return next(p["id"] for p in plants if p["code"] == code)
+
+
+def _make_product(admin_client, plant_code: str, name: str) -> int:
+    pid = _plant_id_by_code(admin_client, plant_code)
+    r = admin_client.post("/api/admin/catalog/products", json={
+        "name": name, "plant_id": pid, "production_kind": "alchemy",
+    })
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_list_recipes_contains_seed(admin_client):
+    res = admin_client.get("/api/admin/catalog/recipes")
+    assert res.status_code == 200
+    assert any(r["plant_name"] == "Ядовитые грибы" for r in res.json())
+
+
+def test_create_recipe(admin_client):
+    plant_id = _plant_id_by_code(admin_client, "khlebozlak")
+    product_id = _make_product(admin_client, "khlebozlak", "Исцеляющий хлеб")
+    res = admin_client.post("/api/admin/catalog/recipes", json={
+        "plant_id": plant_id, "product_id": product_id, "level": 2,
+    })
+    assert res.status_code == 201, res.text
+    d = res.json()
+    assert d["plant_name"] == "Хлебозлак"
+    assert d["product_name"] == "Исцеляющий хлеб"
+    assert d["level"] == 2
+
+
+def test_create_recipe_duplicate_plant(admin_client):
+    plant_id = _plant_id_by_code(admin_client, "poison_mush")
+    product_id = _make_product(admin_client, "morels", "Грибной отвар")
+    res = admin_client.post("/api/admin/catalog/recipes", json={
+        "plant_id": plant_id, "product_id": product_id, "level": 1,
+    })
+    assert res.status_code == 409
+
+
+def test_create_recipe_invalid_level(admin_client):
+    plant_id = _plant_id_by_code(admin_client, "jackobob")
+    product_id = _make_product(admin_client, "jackobob", "Бобовый суп")
+    res = admin_client.post("/api/admin/catalog/recipes", json={
+        "plant_id": plant_id, "product_id": product_id, "level": 4,
+    })
+    assert res.status_code == 400
+
+
+def test_create_recipe_plant_not_found(admin_client):
+    product_id = _make_product(admin_client, "jackobob", "Бобовое пюре")
+    res = admin_client.post("/api/admin/catalog/recipes", json={
+        "plant_id": 9999, "product_id": product_id, "level": 1,
+    })
+    assert res.status_code == 400
+
+
+def test_create_recipe_product_not_found(admin_client):
+    plant_id = _plant_id_by_code(admin_client, "jackobob")
+    res = admin_client.post("/api/admin/catalog/recipes", json={
+        "plant_id": plant_id, "product_id": 9999, "level": 1,
+    })
+    assert res.status_code == 400
+
+
+def test_update_recipe_level(admin_client):
+    plant_id = _plant_id_by_code(admin_client, "jackobob")
+    product_id = _make_product(admin_client, "jackobob", "Бобовый торт")
+    rid = admin_client.post("/api/admin/catalog/recipes", json={
+        "plant_id": plant_id, "product_id": product_id, "level": 1,
+    }).json()["id"]
+    res = admin_client.put(f"/api/admin/catalog/recipes/{rid}", json={"level": 3})
+    assert res.status_code == 200
+    assert res.json()["level"] == 3
+
+
+def test_update_recipe_to_occupied_plant(admin_client):
+    poison_plant = _plant_id_by_code(admin_client, "poison_mush")
+    plant_id = _plant_id_by_code(admin_client, "jackobob")
+    product_id = _make_product(admin_client, "jackobob", "Бобовый кисель")
+    rid = admin_client.post("/api/admin/catalog/recipes", json={
+        "plant_id": plant_id, "product_id": product_id, "level": 1,
+    }).json()["id"]
+    res = admin_client.put(f"/api/admin/catalog/recipes/{rid}", json={"plant_id": poison_plant})
+    assert res.status_code == 409
+
+
+def test_update_recipe_not_found(admin_client):
+    res = admin_client.put("/api/admin/catalog/recipes/9999", json={"level": 2})
+    assert res.status_code == 404
+
+
+def test_delete_recipe(admin_client):
+    plant_id = _plant_id_by_code(admin_client, "jackobob")
+    product_id = _make_product(admin_client, "jackobob", "Бобовый квас")
+    rid = admin_client.post("/api/admin/catalog/recipes", json={
+        "plant_id": plant_id, "product_id": product_id, "level": 1,
+    }).json()["id"]
+    assert admin_client.delete(f"/api/admin/catalog/recipes/{rid}").status_code == 204
+    assert not any(r["id"] == rid for r in admin_client.get("/api/admin/catalog/recipes").json())
+
+
+def test_delete_recipe_not_found(admin_client):
+    assert admin_client.delete("/api/admin/catalog/recipes/9999").status_code == 404
+
+
+def test_recipe_requires_admin(player_client):
+    assert player_client.get("/api/admin/catalog/recipes").status_code == 403
+    assert player_client.post("/api/admin/catalog/recipes", json={
+        "plant_id": 1, "product_id": 1, "level": 1,
+    }).status_code == 403

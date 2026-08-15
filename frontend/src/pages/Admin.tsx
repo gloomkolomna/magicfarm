@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type AdminOrder, type Animal, type Achievement, type AchievementKind, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
+import { api, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import CrystalStandardEditor from '../components/CrystalStandardEditor';
@@ -48,7 +48,7 @@ const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
 ];
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'order-templates' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs'>('players');
+  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'order-templates' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs'>('players');
   const [players, setPlayers] = useState<Player[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
@@ -218,6 +218,11 @@ export default function AdminPage() {
   const [potionForm, setPotionForm] = useState<PotionRecipeCreate>({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100 });
   const [potionEditingId, setPotionEditingId] = useState<number | null>(null);
   const [potionSlotInput, setPotionSlotInput] = useState('');
+
+  // ── Рецепты библиотеки ──
+  const [recipes, setRecipes] = useState<AdminRecipe[]>([]);
+  const [recipeForm, setRecipeForm] = useState({ plant_id: '', product_id: '', level: '1' });
+  const [recipeEditingId, setRecipeEditingId] = useState<number | null>(null);
 
   const MEDIA_TYPES: { code: string; kind: string; label: string }[] = [
     { code: 'card_shuffle', kind: 'video', label: '🎴 Видео перетасовки карт' },
@@ -890,6 +895,95 @@ export default function AdminPage() {
     );
   }
 
+  // ── Рецепты библиотеки ──
+  async function loadRecipes() {
+    try {
+      const [rcs, pls, prods] = await Promise.all([
+        api.adminRecipes().catch(() => [] as AdminRecipe[]),
+        api.plants().catch(() => [] as Plant[]),
+        api.adminProducts().catch(() => [] as Product[]),
+      ]);
+      setRecipes(rcs);
+      setPlants(pls);
+      setCatalogProducts(prods);
+    } catch { /* ignore */ }
+  }
+  async function saveRecipe() {
+    const plantId = Number(recipeForm.plant_id);
+    const productId = Number(recipeForm.product_id);
+    if (!plantId) { setMsg('✗ Выберите растение'); return; }
+    if (!productId) { setMsg('✗ Выберите товар'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const data = { plant_id: plantId, product_id: productId, level: Number(recipeForm.level) };
+      if (recipeEditingId) { await api.adminUpdateRecipe(recipeEditingId, data); }
+      else { await api.adminCreateRecipe(data); }
+      await loadRecipes();
+      setRecipeForm({ plant_id: '', product_id: '', level: '1' });
+      setRecipeEditingId(null);
+      setMsg('✓ Сохранено');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function deleteRecipe(id: number) {
+    if (!confirm('Удалить рецепт?')) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeleteRecipe(id); await loadRecipes(); setMsg('✓ Удалено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  function renderRecipes() {
+    const recipePlants = plants.filter((p) => !recipes.some((r) => r.plant_id === p.id) || String(p.id) === recipeForm.plant_id);
+    return (
+      <div>
+        <h2>📚 Рецепты библиотеки</h2>
+        <div className="fm-card" style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <select className="fm-input" value={recipeForm.plant_id} onChange={(e) => setRecipeForm({ ...recipeForm, plant_id: e.target.value })}>
+              <option value="">— растение —</option>
+              {(recipeEditingId ? plants : recipePlants).map((p) => (
+                <option key={p.id} value={String(p.id)}>{p.emoji || '🌱'} {p.name}</option>
+              ))}
+            </select>
+            <select className="fm-input" value={recipeForm.product_id} onChange={(e) => setRecipeForm({ ...recipeForm, product_id: e.target.value })}>
+              <option value="">— товар —</option>
+              {catalogProducts.map((p) => (
+                <option key={p.id} value={String(p.id)}>{p.emoji || '📦'} {p.name}</option>
+              ))}
+            </select>
+            <select className="fm-input" value={recipeForm.level} onChange={(e) => setRecipeForm({ ...recipeForm, level: e.target.value })}>
+              <option value="1">1 уровень</option>
+              <option value="2">2 уровень</option>
+              <option value="3">3 уровень</option>
+            </select>
+          </div>
+          <button className="fm-btn" disabled={busy} onClick={saveRecipe}>
+            {recipeEditingId ? '✎ Сохранить' : '➕ Создать'}
+          </button>
+          {recipeEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setRecipeEditingId(null); setRecipeForm({ plant_id: '', product_id: '', level: '1' }); }}>Отмена</button>}
+        </div>
+        <table className="fm-table" style={{ width: '100%' }}>
+          <thead><tr><th>ID</th><th>Растение</th><th>Товар</th><th>Уровень</th><th></th></tr></thead>
+          <tbody>
+            {recipes.map((r) => (
+              <tr key={r.id}>
+                <td>{r.id}</td>
+                <td>{r.plant_emoji || '🌱'} {r.plant_name}</td>
+                <td>{r.product_emoji || '📦'} {r.product_name}</td>
+                <td>{r.level}</td>
+                <td>
+                  <button className="fm-btn fm-btn-sm" onClick={() => { setRecipeEditingId(r.id); setRecipeForm({ plant_id: String(r.plant_id), product_id: String(r.product_id), level: String(r.level) }); }}>✎</button>
+                  <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteRecipe(r.id)}>🗑</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
   // ── Фон ──
   async function loadBg() {
     try { const data = await api.getBackground(); setBgUrl(data.url); setBgInput(data.url); }
@@ -1064,6 +1158,7 @@ export default function AdminPage() {
         <TabBtn active={tab === 'pets'} onClick={() => setTab('pets')}>🐾 Питомцы</TabBtn>
         <TabBtn active={tab === 'products'} onClick={() => setTab('products')}>📦 Товары</TabBtn>
         <TabBtn active={tab === 'productions'} onClick={() => setTab('productions')}>🏭 Производства</TabBtn>
+        <TabBtn active={tab === 'recipes'} onClick={() => { setTab('recipes'); loadRecipes(); }}>📚 Рецепты</TabBtn>
         <TabBtn active={tab === 'order-templates'} onClick={() => { setTab('order-templates'); loadOrderTemplates(); }}>📋 Шаблоны заказов</TabBtn>
         <TabBtn active={tab === 'levels'} onClick={() => { setTab('levels'); loadLevels(); }}>📊 Уровни</TabBtn>
         <TabBtn active={tab === 'potion-recipes'} onClick={() => { setTab('potion-recipes'); loadPotionRecipes(); }}>🧪 Рецепты зелий</TabBtn>
@@ -1448,6 +1543,7 @@ export default function AdminPage() {
             />
           )}
 
+          {tab === 'recipes' && renderRecipes()}
           {tab === 'order-templates' && renderOrderTemplates()}
           {tab === 'levels' && renderLevels()}
           {tab === 'potion-recipes' && renderPotionRecipes()}
@@ -1945,7 +2041,7 @@ function CatalogTab({
                     </div>
                   </div>
                 )}
-                {(item.image_empty_pen_url || item.image_pen_url || item.image_harvested_url) && (
+                {(item.image_empty_pen_url || item.image_pen_url) && (
                   <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                     {item.image_empty_pen_url && (
                       <div style={{ textAlign: 'center' }}>
