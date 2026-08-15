@@ -25,7 +25,20 @@ CARD_DRAW_RULES = {
 CONTEXT_TYPES = (
     "plant_grow", "recipe_study", "production",
     "animal_build", "animal_produce", "tent_build", "pet_settle",
+    "house_material", "house_build",
 )
+
+WITCH_HOUSE_KIND = "witch_house"
+HOUSE_MATERIALS = ("glass", "wood", "nails", "pipes", "bricks", "paint")
+HOUSE_MATERIAL_NAMES = {
+    "glass": "Стекло",
+    "wood": "Древесина",
+    "nails": "Гвозди",
+    "pipes": "Трубы",
+    "bricks": "Кирпичи",
+    "paint": "Краска",
+}
+HOUSE_CARDS_TO_DRAW = 5
 
 
 class ProductionTemplate(Base):
@@ -372,6 +385,26 @@ class TentBuild(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "tent_id", name="uq_tentbuild_user_tent"),
+    )
+
+
+class HouseBuild(Base):
+    __tablename__ = "house_builds"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    tent_id = Column(Integer, ForeignKey("tents.id", ondelete="CASCADE"), nullable=False)
+    phase = Column(String, nullable=False, default="materials", server_default="materials")
+    current_material = Column(String, nullable=True)
+    current_die = Column(Integer, nullable=True)
+    current_required = Column(Integer, nullable=True)
+    collected_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    cards_json = Column(Text, nullable=True)
+    required = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "tent_id", name="uq_housebuild_user_tent"),
     )
 
 

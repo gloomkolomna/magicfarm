@@ -43,6 +43,7 @@ const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: 'study_norm_lvl2', label: 'Норма изучения ур.2', hint: 'Крестиков на изучение рецепта 2 уровня' },
   { key: 'study_norm_lvl3', label: 'Норма изучения ур.3', hint: 'Крестиков на изучение рецепта 3 уровня' },
   { key: 'animal_production_norm', label: 'Норма продукции животного', hint: 'За 1 ед. продукции (умножается на кубик)' },
+  { key: 'house_material_norm', label: 'Базовая норма стройматериала дома', hint: 'За 1 материал (умножается на кубик)' },
   { key: 'sale_price_ratio', label: 'Коэфф. продажи излишков (0.01–1.0)', hint: 'Доля от полной цены (0.5 = ½)' },
   { key: 'crystal_rate_variant', label: 'Вариант таблицы норм (1–8)', hint: 'Пресет для глобальных норм кристаллов' },
 ];

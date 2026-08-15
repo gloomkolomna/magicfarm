@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_onboarding
-from models import BarnyardSlot, Field, FieldCell, FieldPlant, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, TentBuild, User, UserPet, MAX_PLOT_QTY, CARD_DRAW_RULES
+from models import BarnyardSlot, Field, FieldCell, FieldPlant, HouseBuild, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, TentBuild, User, UserPet, MAX_PLOT_QTY, CARD_DRAW_RULES, WITCH_HOUSE_KIND
 from routes.admin_fields import (
     CellOut, FieldOut, PlantOut, TentOut,
     _field_to_out, _get_field_or_404, _plant_to_out,
@@ -196,7 +196,17 @@ def _plant_bed_detail(pb: PlantBed, db: Session, user: User, plot: Plot | None =
     )
 
 
-def _tent_to_out_for_user(t: Tent, tb: TentBuild | None) -> TentOut:
+def _tent_to_out_for_user(t: Tent, tb: TentBuild | None, house: HouseBuild | None = None) -> TentOut:
+    if t.kind == WITCH_HOUSE_KIND:
+        built = house is not None and house.phase == "built"
+        return TentOut(
+            id=t.id, name=t.name, image_url=t.image_url, kind=t.kind,
+            col1=t.col1, row1=t.row1, col2=t.col2, row2=t.row2,
+            builder_user_id=house.user_id if built else None,
+            build_status="built" if built else "slot",
+            accumulated=0, required=0,
+            crystal_color=None, crystal_count=None, drawn_cards_json=None,
+        )
     if tb is not None:
         return TentOut(
             id=t.id, name=t.name, image_url=t.image_url, kind=t.kind,
@@ -251,10 +261,19 @@ def get_field(
                 TentBuild.user_id == user.vk_id, TentBuild.tent_id.in_(tent_ids)
             ).all()
         }
+    witch_ids = [t.id for t in f.tents if t.kind == WITCH_HOUSE_KIND]
+    houses: dict[int, HouseBuild] = {}
+    if witch_ids:
+        houses = {
+            hb.tent_id: hb
+            for hb in db.query(HouseBuild).filter(
+                HouseBuild.user_id == user.vk_id, HouseBuild.tent_id.in_(witch_ids)
+            ).all()
+        }
 
     cells = [_cell_detail(c, db, user, cell_plots.get(c.id)) for c in f.cells]
     plants = [_plant_to_out(fp.plant) for fp in f.plants]
-    tents = [_tent_to_out_for_user(t, builds.get(t.id)) for t in f.tents]
+    tents = [_tent_to_out_for_user(t, builds.get(t.id), houses.get(t.id)) for t in f.tents]
     plant_beds = [_plant_bed_detail(pb, db, user, bed_plots.get(pb.id)) for pb in f.plant_beds]
     return FieldDetailPublic(
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
@@ -726,6 +745,11 @@ def start_tent_build(
 ):
     _get_field_or_404(field_id, db)
     t = _get_tent_on_field(tent_id, field_id, db)
+    if t.kind == WITCH_HOUSE_KIND:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Это дом ведьмы — стройка идёт через сбор материалов",
+        )
 
     tb = db.query(TentBuild).filter(
         TentBuild.user_id == user.vk_id, TentBuild.tent_id == t.id

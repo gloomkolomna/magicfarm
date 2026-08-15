@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { api, type Animal, type CraftInfo, type CraftSessionInfo, type CrystalCard, type FieldCellDetail, type FieldDetail, type Pet, type PlantBed, type Product, type Tent } from '../api/endpoints';
+import { api, type Animal, type CraftInfo, type CraftSessionInfo, type CrystalCard, type FieldCellDetail, type FieldDetail, type HouseState, type Pet, type PlantBed, type Product, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import StitchReportForm from '../components/StitchReportForm';
 import plotUrl from '../assets/plot.png';
 
 const COLOR_LABEL: Record<string, string> = { green: '🟢', blue: '🔵', violet: '🟣' };
 const CARD_IMAGE: Record<string, string> = { green: '🟢', blue: '🔵', violet: '🟣', treasure_green: '💎', treasure_blue: '💎', treasure_violet: '💎' };
+
+const HOUSE_MATERIALS: { code: string; name: string; emoji: string }[] = [
+  { code: 'glass', name: 'Стекло', emoji: '🪟' },
+  { code: 'wood', name: 'Древесина', emoji: '🪵' },
+  { code: 'nails', name: 'Гвозди', emoji: '🔩' },
+  { code: 'pipes', name: 'Трубы', emoji: '🚰' },
+  { code: 'bricks', name: 'Кирпичи', emoji: '🧱' },
+  { code: 'paint', name: 'Краска', emoji: '🎨' },
+];
+const DICE_FACE_EMOJI = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 4;
@@ -50,6 +60,17 @@ export default function FieldPage() {
   // Модалка шатра.
   const [tentModal, setTentModal] = useState<Tent | null>(null);
   const [buildInvestAmount, setBuildInvestAmount] = useState('');
+
+  // Модалка дома ведьмы.
+  const [houseModal, setHouseModal] = useState<Tent | null>(null);
+  const [houseState, setHouseState] = useState<HouseState | null>(null);
+  const [houseShowDice, setHouseShowDice] = useState(false);
+  const [houseShowCards, setHouseShowCards] = useState(false);
+  const [houseDone, setHouseDone] = useState<'video' | 'success' | null>(null);
+  const [diceVideoUrl, setDiceVideoUrl] = useState<string | null>(null);
+  const [diceFaceUrls, setDiceFaceUrls] = useState<(string | null)[]>([null, null, null, null, null, null, null]);
+  const [houseMaterialUrls, setHouseMaterialUrls] = useState<Record<string, string | null>>({});
+  const [houseBuildVideoUrl, setHouseBuildVideoUrl] = useState<string | null>(null);
 
   // Модалка крафта (в построенном шатре).
   const [craftProduct, setCraftProduct] = useState<number | null>(null);
@@ -112,16 +133,26 @@ export default function FieldPage() {
 
   const loadVideo = useCallback(async () => {
     try {
-      const [gm, cards, animals, pets] = await Promise.all([
+      const [gm, cards, animals, pets, diceV, houseV, faces, mats] = await Promise.all([
         api.gameMediaByCode('card_shuffle').catch(() => null),
         api.crystalCards().catch(() => [] as CrystalCard[]),
         api.animalsAvailable().catch(() => [] as Animal[]),
         api.petsCatalog().catch(() => [] as Pet[]),
+        api.gameMediaByCode('dice_roll').catch(() => null),
+        api.gameMediaByCode('house_build_video').catch(() => null),
+        Promise.all(Array.from({ length: 6 }, (_, i) =>
+          api.gameMediaByCode(`dice_face_${i + 1}`).catch(() => null))),
+        Promise.all(HOUSE_MATERIALS.map((m) =>
+          api.gameMediaByCode(`house_material_${m.code}`).catch(() => null))),
       ]);
       if (gm?.url) setCardVideoUrl(mediaUrl(gm.url));
       setCrystalCards(cards || []);
       setBarnyardAnimals(animals || []);
       setPetCatalog(pets || []);
+      if (diceV?.url) setDiceVideoUrl(mediaUrl(diceV.url));
+      if (houseV?.url) setHouseBuildVideoUrl(mediaUrl(houseV.url));
+      setDiceFaceUrls([null, ...faces.map((f) => (f?.url ? mediaUrl(f.url) : null))]);
+      setHouseMaterialUrls(Object.fromEntries(HOUSE_MATERIALS.map((m, i) => [m.code, mats[i]?.url ? mediaUrl(mats[i]!.url!) : null])));
     } catch {}
   }, []);
 
@@ -456,7 +487,50 @@ export default function FieldPage() {
   if (loading) return <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}><div className="fm-card">Загрузка поля…</div></div>;
   if (!field) return <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}><div className="fm-card">Поле не найдено.</div></div>;
 
+  async function reloadHouseState(tentId: number) {
+    try {
+      const st = await api.houseState(fieldId, tentId);
+      setHouseState(st);
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    }
+  }
+
+  async function doHouseRequestMaterial() {
+    if (!houseModal) return;
+    setBusy(true); setMsg(null);
+    try {
+      const st = await api.houseRequestMaterial(fieldId, houseModal.id);
+      setHouseState(st);
+      setHouseShowDice(!!diceVideoUrl);
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  async function doHouseBuild() {
+    if (!houseModal) return;
+    setBusy(true); setMsg(null);
+    try {
+      const st = await api.houseBuild(fieldId, houseModal.id);
+      setHouseState(st);
+      setHouseShowCards(true);
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
   function openTent(t: Tent) {
+    if (t.kind === 'witch_house') {
+      if (t.build_status === 'built') return;
+      setHouseModal(t);
+      setHouseState(null);
+      setHouseShowDice(false);
+      setHouseShowCards(false);
+      setHouseDone(null);
+      void reloadHouseState(t.id);
+      return;
+    }
     setTentModal(t);
     setBuildInvestAmount(t.build_status === 'planted' ? String(Math.max(0, t.required - t.accumulated)) : '');
     setCraftQty('1');
@@ -643,42 +717,42 @@ export default function FieldPage() {
                     gridTemplateRows: `repeat(${field.rows}, 1fr)`,
                   }}
                 >
-                  <div
-                    onClick={() => openTent(t)}
-                    style={{
-                      gridColumn: `${t.col1 + 1} / span ${spanCols}`,
-                      gridRow: `${t.row1 + 1} / span ${spanRows}`,
-                      display: 'flex', flexDirection: 'column',
-                      alignItems: 'center', justifyContent: 'center', gap: 4,
-                      padding: 6, overflow: 'hidden',
-                      border: t.build_status === 'slot' ? '2px dashed rgba(224,168,62,0.7)' : 'none',
-                      borderRadius: 6,
-                      background: t.build_status === 'planted' ? 'rgba(224,168,62,0.10)' : 'transparent',
-                      cursor: 'pointer',
-                      touchAction: 'manipulation',
-                      pointerEvents: 'auto',
-                    }}
-                  >
-                    {t.build_status === 'built' && t.image_url && (
-                      <img
-                        src={mediaUrl(t.image_url)}
-                        alt=""
-                        style={{ maxWidth: '85%', maxHeight: '52%', objectFit: 'contain', pointerEvents: 'none' }}
-                      />
-                    )}
-                    {t.build_status === 'built' && (
-                      <div style={{ fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', lineHeight: 1.1, fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        ⛺ {t.name}
-                      </div>
-                    )}
+                <div
+                  onClick={() => openTent(t)}
+                  style={{
+                    gridColumn: `${t.col1 + 1} / span ${spanCols}`,
+                    gridRow: `${t.row1 + 1} / span ${spanRows}`,
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', gap: 4,
+                    padding: 6, overflow: 'hidden',
+                    border: t.build_status === 'slot' ? '2px dashed rgba(224,168,62,0.7)' : 'none',
+                    borderRadius: 6,
+                    background: t.build_status === 'planted' ? 'rgba(224,168,62,0.10)' : 'transparent',
+                    cursor: t.kind === 'witch_house' && t.build_status === 'built' ? 'default' : 'pointer',
+                    touchAction: 'manipulation',
+                    pointerEvents: 'auto',
+                  }}
+                >
+                  {t.build_status === 'built' && t.image_url && (
+                    <img
+                      src={mediaUrl(t.image_url)}
+                      alt=""
+                      style={{ maxWidth: '85%', maxHeight: '52%', objectFit: 'contain', pointerEvents: 'none' }}
+                    />
+                  )}
+                  {t.build_status === 'built' && (
+                    <div style={{ fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', lineHeight: 1.1, fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {t.kind === 'witch_house' ? '🏠' : '⛺'} {t.name}
+                    </div>
+                  )}
                     {t.build_status === 'slot' && (
                       <div style={{ fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600, lineHeight: 1.15, maxWidth: '100%' }}>
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🏗️ {t.name}</div>
-                        <div style={{ fontSize: 9, opacity: 0.85 }}>свободный слот</div>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.kind === 'witch_house' ? '🏚️' : '🏗️'} {t.name}</div>
+                        <div style={{ fontSize: 9, opacity: 0.85 }}>{t.kind === 'witch_house' ? 'дом ведьмы' : 'свободный слот'}</div>
                       </div>
                     )}
                     {t.build_status === 'planted' && (
-                      <div style={{ fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', lineHeight: 1.15, fontWeight: 600, maxWidth: '100%' }}>
+                      <div style={{ fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600, lineHeight: 1.15, maxWidth: '100%' }}>
                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🔨 {t.name}</div>
                         <div style={{ fontSize: 10 }}>{t.accumulated}/{t.required}</div>
                       </div>
@@ -1193,6 +1267,205 @@ export default function FieldPage() {
               >
                 Выдать норму
               </button>
+            </>
+          )}
+        </Modal>
+      )}
+
+      {/* Модалка дома ведьмы */}
+      {houseModal && (
+        <Modal title={`🏠 ${houseModal.name}`} onClose={() => setHouseModal(null)} wide>
+          {!houseState ? (
+            <p style={{ fontSize: 14, color: 'var(--text-muted)', textAlign: 'center' }}>Загрузка…</p>
+          ) : houseState.phase === 'built' || houseDone !== null ? (
+            houseDone === 'video' && houseBuildVideoUrl ? (
+              <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                <video
+                  ref={videoRef}
+                  src={houseBuildVideoUrl}
+                  autoPlay
+                  muted
+                  playsInline
+                  style={{ width: '100%', maxHeight: '60vh', borderRadius: 8 }}
+                  onEnded={() => setHouseDone('success')}
+                  onError={() => setHouseDone('success')}
+                />
+                <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ marginTop: 6 }} onClick={() => setHouseDone('success')}>
+                  Пропустить видео
+                </button>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 10 }}>🏠🎉</div>
+                <p style={{ fontSize: 15, color: 'var(--success)', fontWeight: 700, marginBottom: 8 }}>Дом ведьмы построен!</p>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>
+                  В подарок начислено на склад: 5 штук растения 1 уровня и 5 штук товара 1 уровня.
+                </p>
+                <button className="fm-btn" style={{ width: '100%' }} onClick={() => { setHouseModal(null); setHouseDone(null); }}>
+                  Ура!
+                </button>
+              </div>
+            )
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
+                {HOUSE_MATERIALS.map((m) => {
+                  const got = houseState.collected.includes(m.code);
+                  const active = houseState.current_material === m.code;
+                  return (
+                    <div key={m.code} style={{ textAlign: 'center', padding: 8, borderRadius: 10, border: `1px solid ${active ? 'var(--text-accent)' : 'var(--border)'}`, background: got ? 'rgba(111,174,74,0.15)' : 'var(--bg-secondary)' }}>
+                      {houseMaterialUrls[m.code] ? (
+                        <img src={houseMaterialUrls[m.code]!} alt="" style={{ width: '100%', maxWidth: 64, height: 'auto', objectFit: 'contain' }} />
+                      ) : (
+                        <div style={{ fontSize: 32, lineHeight: 1.2 }}>{m.emoji}</div>
+                      )}
+                      <div style={{ fontSize: 11, marginTop: 4 }}>{m.name}</div>
+                      <div style={{ fontSize: 10, color: got ? 'var(--success)' : 'var(--text-muted)' }}>
+                        {got ? '✓ собран' : active ? 'выпал' : '—'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {houseState.current_material && (
+                houseShowDice && diceVideoUrl ? (
+                  <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                    <video
+                      ref={videoRef}
+                      src={diceVideoUrl}
+                      autoPlay
+                      muted
+                      playsInline
+                      style={{ width: '100%', maxHeight: '50vh', borderRadius: 8 }}
+                      onEnded={() => setHouseShowDice(false)}
+                      onError={() => setHouseShowDice(false)}
+                    />
+                    <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ marginTop: 6 }} onClick={() => setHouseShowDice(false)}>
+                      Пропустить видео
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ textAlign: 'center', margin: '6px 0 10px' }}>
+                      {diceFaceUrls[houseState.current_die ?? 1] ? (
+                        <img src={diceFaceUrls[houseState.current_die ?? 1]!} alt="" style={{ width: '30vw', maxWidth: 140, height: 'auto' }} />
+                      ) : (
+                        <div style={{ fontSize: 56, lineHeight: 1.1 }}>{DICE_FACE_EMOJI[houseState.current_die ?? 1]}</div>
+                      )}
+                    </div>
+                    <p style={{ fontSize: 14, textAlign: 'center', margin: '0 0 8px' }}>
+                      Выпал материал:{' '}
+                      <strong>
+                        {HOUSE_MATERIALS.find((m) => m.code === houseState.current_material)?.name}
+                      </strong>{' '}
+                      · норма {houseState.current_required} ✝️
+                    </p>
+                    <StitchReportForm
+                      contextType="house_material"
+                      contextId={houseState.id}
+                      required={houseState.current_required}
+                      busy={busy}
+                      onDone={async () => {
+                        setMsg('✓ Стройматериал получен на склад!');
+                        setHouseShowDice(false);
+                        await reloadHouseState(houseModal.id);
+                        await load();
+                        await refresh();
+                      }}
+                    />
+                  </>
+                )
+              )}
+
+              {!houseState.current_material && houseState.collected.length < HOUSE_MATERIALS.length && (
+                <>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                    Собрано {houseState.collected.length} из {HOUSE_MATERIALS.length} стройматериалов.
+                  </p>
+                  <button className="fm-btn" style={{ width: '100%' }} disabled={busy} onClick={doHouseRequestMaterial}>
+                    🎲 Собрать стройматериалы
+                  </button>
+                </>
+              )}
+
+              {!houseState.current_material && houseState.collected.length === HOUSE_MATERIALS.length && houseState.required === 0 && (
+                <button className="fm-btn" style={{ width: '100%' }} disabled={busy} onClick={doHouseBuild}>
+                  🏠 Построить дом
+                </button>
+              )}
+
+              {houseState.required > 0 && (
+                houseShowCards && cardVideoUrl ? (
+                  <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                    <video
+                      ref={videoRef}
+                      src={cardVideoUrl}
+                      autoPlay
+                      muted
+                      playsInline
+                      style={{ width: '100%', maxHeight: '50vh', borderRadius: 8 }}
+                      onEnded={() => setHouseShowCards(false)}
+                      onError={() => setHouseShowCards(false)}
+                    />
+                    <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ marginTop: 6 }} onClick={() => setHouseShowCards(false)}>
+                      Пропустить видео
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {(() => {
+                      let cards: { color: string; value: number; is_treasure: boolean }[] = [];
+                      try { cards = houseState.cards_json ? JSON.parse(houseState.cards_json) : []; } catch {}
+                      return (
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                          {cards.map((c, i) => {
+                            const cardImg = crystalCards.find(
+                              (cc) => cc.color === c.color && cc.value === c.value && cc.is_treasure === c.is_treasure
+                            )?.image_url;
+                            return (
+                              <div key={i} style={{ textAlign: 'center', padding: 6, borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border)', minWidth: 100 }}>
+                                {cardImg ? (
+                                  <img
+                                    src={mediaUrl(cardImg)}
+                                    alt=""
+                                    style={{ width: '30vw', maxWidth: 160, height: 'auto', objectFit: 'contain', marginBottom: 4, cursor: 'pointer' }}
+                                    onClick={(e) => { e.stopPropagation(); setZoomedImg(mediaUrl(cardImg)); }}
+                                  />
+                                ) : (
+                                  <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 4 }}>
+                                    {c.is_treasure ? '💎' : c.color === 'green' ? '🟢' : c.color === 'blue' ? '🔵' : '🟣'}
+                                  </div>
+                                )}
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                  {c.is_treasure ? 'Сокровище' : `${c.value}`}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                    <p style={{ fontSize: 16, fontWeight: 700, textAlign: 'center', margin: '8px 0', color: 'var(--text-accent)' }}>
+                      Норма на постройку дома: {houseState.required} ✝️
+                    </p>
+                    <StitchReportForm
+                      contextType="house_build"
+                      contextId={houseState.id}
+                      required={houseState.required}
+                      buttonText="Построить дом"
+                      busy={busy}
+                      onDone={async () => {
+                        await reloadHouseState(houseModal.id);
+                        setHouseShowCards(false);
+                        setHouseDone(houseBuildVideoUrl ? 'video' : 'success');
+                        await load();
+                        await refresh();
+                      }}
+                    />
+                  </>
+                )
+              )}
             </>
           )}
         </Modal>

@@ -410,6 +410,18 @@ export interface Tent {
   norm_revealed: boolean;
 }
 
+export interface HouseState {
+  id: number | null;
+  tent_id: number;
+  phase: 'materials' | 'built';
+  current_material: string | null;
+  current_die: number | null;
+  current_required: number | null;
+  collected: string[];
+  cards_json: string | null;
+  required: number;
+}
+
 export interface PlantBed {
   id: number;
   field_id: number;
@@ -951,6 +963,13 @@ export const api = {
     client.post<Tent>(`/fields/${fieldId}/tents/${tentId}/build-invest`, { amount }).then((r) => r.data),
   revealTentNorm: (fieldId: number, tentId: number) =>
     client.post<Tent>(`/fields/${fieldId}/tents/${tentId}/reveal-norm`).then((r) => r.data),
+
+  houseState: (fieldId: number, tentId: number) =>
+    client.get<HouseState>(`/fields/${fieldId}/house/${tentId}`).then((r) => r.data),
+  houseRequestMaterial: (fieldId: number, tentId: number) =>
+    client.post<HouseState>(`/fields/${fieldId}/house/${tentId}/request-material`).then((r) => r.data),
+  houseBuild: (fieldId: number, tentId: number) =>
+    client.post<HouseState>(`/fields/${fieldId}/house/${tentId}/build`).then((r) => r.data),
 
   sellSurplus: (itemKind: string, itemId: number, qty: number) =>
     client.post<{ coins_earned: number }>('/farm/sell-surplus', { item_kind: itemKind, item_id: itemId, qty }).then((r) => r.data),

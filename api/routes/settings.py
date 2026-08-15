@@ -59,6 +59,9 @@ ANIMAL_PRODUCTION_NORM_KEY = "animal_production_norm"
 DEFAULT_ANIMAL_BUILD = 1000
 DEFAULT_ANIMAL_PROD = 200
 
+HOUSE_MATERIAL_NORM_KEY = "house_material_norm"
+DEFAULT_HOUSE_MATERIAL_NORM = 200
+
 SALE_PRICE_RATIO_KEY = "sale_price_ratio"
 DEFAULT_SALE_RATIO = 0.5
 
@@ -286,6 +289,16 @@ def get_animal_production_norm(db: Session) -> int:
         return DEFAULT_ANIMAL_PROD
 
 
+def get_house_material_norm(db: Session) -> int:
+    s = db.query(Setting).filter(Setting.key == HOUSE_MATERIAL_NORM_KEY).first()
+    if s is None:
+        return DEFAULT_HOUSE_MATERIAL_NORM
+    try:
+        return max(1, min(100000, int(s.value)))
+    except (TypeError, ValueError):
+        return DEFAULT_HOUSE_MATERIAL_NORM
+
+
 def get_sale_price_ratio(db: Session) -> float:
     s = db.query(Setting).filter(Setting.key == SALE_PRICE_RATIO_KEY).first()
     if s is None:
@@ -360,6 +373,7 @@ _SETTING_META = {
     STUDY_NORM_L3_KEY: (MIN_STUDY_NORM, MAX_STUDY_NORM, DEFAULT_STUDY_NORM_L3),
     ANIMAL_BUILD_NORM_KEY: (1, 100000, DEFAULT_ANIMAL_BUILD),
     ANIMAL_PRODUCTION_NORM_KEY: (1, 100000, DEFAULT_ANIMAL_PROD),
+    HOUSE_MATERIAL_NORM_KEY: (1, 100000, DEFAULT_HOUSE_MATERIAL_NORM),
 }
 
 
@@ -396,6 +410,8 @@ def get_setting(key: str, db: Session = Depends(get_db), user: User = Depends(ge
         return SettingOut(key=key, value=str(get_study_norm(db, 3)))
     if key == ANIMAL_PRODUCTION_NORM_KEY:
         return SettingOut(key=key, value=str(get_animal_production_norm(db)))
+    if key == HOUSE_MATERIAL_NORM_KEY:
+        return SettingOut(key=key, value=str(get_house_material_norm(db)))
     if key == SALE_PRICE_RATIO_KEY:
         return SettingOut(key=key, value=str(get_sale_price_ratio(db)))
     s = _get_setting_or_404(key, db)

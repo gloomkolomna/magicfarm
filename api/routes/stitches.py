@@ -103,6 +103,12 @@ def _process_context(report: "StitchReport", db: Session) -> None:
                         ))
             db.commit()
             check_and_award(report.user_id, "tents_count", db)
+    elif report.context_type == "house_material" and report.context_id is not None:
+        from routes.house import complete_material
+        complete_material(report.user_id, report.context_id, db)
+    elif report.context_type == "house_build" and report.context_id is not None:
+        from routes.house import complete_build
+        complete_build(report.user_id, report.context_id, db)
     elif report.context_type == "animal_build" and report.context_id is not None:
         from models import BarnyardSlot
         slot = db.query(BarnyardSlot).filter(
@@ -198,9 +204,46 @@ def create_report(
                 detail=f"Недостаточно крестиков. Норма крафта: {cs.required}, вы указали {amount}",
             )
 
+    if context_type == "house_material" and context_id is not None:
+        from models import HouseBuild
+        hb = db.query(HouseBuild).filter(
+            HouseBuild.id == context_id, HouseBuild.user_id == user.vk_id
+        ).first()
+        if hb is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Стройка дома не найдена")
+        if hb.phase != "materials" or hb.current_material is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Нет стройматериала, ожидающего вышивки",
+            )
+        if amount < (hb.current_required or 0):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Недостаточно крестиков. Норма материала: {hb.current_required}, вы указали {amount}",
+            )
+
+    if context_type == "house_build" and context_id is not None:
+        from models import HouseBuild
+        hb = db.query(HouseBuild).filter(
+            HouseBuild.id == context_id, HouseBuild.user_id == user.vk_id
+        ).first()
+        if hb is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Стройка дома не найдена")
+        if hb.phase != "materials" or (hb.required or 0) <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Норма на постройку дома ещё не назначена",
+            )
+        if amount < (hb.required or 0):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Недостаточно крестиков. Норма на дом: {hb.required}, вы указали {amount}",
+            )
+
     if context_type is not None and context_type not in (
         "plant_grow", "recipe_study", "production",
         "animal_build", "animal_produce", "tent_build", "pet_settle",
+        "house_material", "house_build",
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

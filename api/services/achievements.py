@@ -12,6 +12,7 @@ ACHIEVEMENT_KINDS = [
     {"kind": "pets_count", "label": "Питомцы", "hint": "питомцев у игрока"},
     {"kind": "potions_count", "label": "Зелья", "hint": "зелий у игрока"},
     {"kind": "tents_count", "label": "Шатры", "hint": "построено шатров"},
+    {"kind": "house_built", "label": "Дом ведьмы", "hint": "построен дом ведьмы"},
     {"kind": "level_reached", "label": "Уровень", "hint": "достигнут уровень"},
 ]
 
@@ -77,6 +78,12 @@ def _meets_condition(user_id: int, a: Achievement, db: Session) -> bool:
         if a.production_code:
             q = q.filter(Tent.kind == a.production_code)
         return q.count() >= a.condition_value
+    if a.condition_kind == "house_built":
+        from models import HouseBuild
+        count = db.query(HouseBuild).filter(
+            HouseBuild.user_id == user_id, HouseBuild.phase == "built"
+        ).count()
+        return count >= a.condition_value
     if a.condition_kind == "level_reached":
         from models import User
         u = db.query(User).filter(User.vk_id == user_id).first()

@@ -20,6 +20,7 @@ from routes.admin_fields import router as admin_fields_router
 from routes.admin_catalog import router as admin_catalog_router, public_router as crystal_cards_public_router
 from routes.admin_players import router as admin_players_router
 from routes.fields import router as fields_router
+from routes.house import router as house_router
 from routes.crystal_norms import router as crystal_norms_router
 from routes.library import router as library_router
 from routes.levels import router as levels_router, admin_router as admin_levels_router
@@ -66,6 +67,7 @@ app.include_router(admin_fields_router)
 app.include_router(admin_catalog_router)
 app.include_router(admin_players_router)
 app.include_router(fields_router)
+app.include_router(house_router)
 app.include_router(crystal_norms_router)
 app.include_router(library_router)
 app.include_router(levels_router)

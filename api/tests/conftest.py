@@ -70,6 +70,7 @@ def seed_farm():
             "('study_norm_lvl3', '1500'), "
             "('animal_build_norm', '1000'), "
             "('animal_production_norm', '200'), "
+            "('house_material_norm', '200'), "
             "('sale_price_ratio', '0.5')"
         ))
         conn.execute(text(

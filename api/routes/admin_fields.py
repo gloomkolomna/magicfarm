@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_role
-from models import Animal, Field, FieldAnimal, FieldCell, FieldPet, FieldPlant, Pet, PetZone, Plant, PlantBed, ProductionTemplate, Tent, User
+from models import Animal, Field, FieldAnimal, FieldCell, FieldPet, FieldPlant, Pet, PetZone, Plant, PlantBed, ProductionTemplate, Tent, User, WITCH_HOUSE_KIND
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/admin/fields", tags=["admin-fields"])
@@ -478,13 +478,15 @@ def create_tent(
     user: User = Depends(require_role("admin")),
 ):
     f = _get_field_or_404(field_id, db)
-    tmpl = db.query(ProductionTemplate).filter(ProductionTemplate.code == kind).first()
-    if tmpl is None:
-        all_kinds = [pt.code for pt in db.query(ProductionTemplate).all()]
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Тип шатра должен быть одним из: {', '.join(sorted(all_kinds))}",
-        )
+    tmpl = None
+    if kind != WITCH_HOUSE_KIND:
+        tmpl = db.query(ProductionTemplate).filter(ProductionTemplate.code == kind).first()
+        if tmpl is None:
+            all_kinds = [pt.code for pt in db.query(ProductionTemplate).all()] + [WITCH_HOUSE_KIND]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Тип шатра должен быть одним из: {', '.join(sorted(all_kinds))}",
+            )
     nm = name.strip()
     if not nm:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название шатра обязательно")
@@ -508,7 +510,7 @@ def create_tent(
     t = Tent(
         field_id=f.id, name=nm, image_url=image_url, kind=kind,
         col1=c1, row1=r1, col2=c2, row2=r2,
-        build_status="slot", accumulated=0, required=tmpl.required,
+        build_status="slot", accumulated=0, required=tmpl.required if tmpl else 0,
     )
     db.add(t)
     db.flush()  # нужен t.id
