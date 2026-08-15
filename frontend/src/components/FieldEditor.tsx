@@ -312,6 +312,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const sz = cellSize();
   const W = field.cols * sz;
   const H = field.rows * sz;
+  const isPlantField = !field.field_kind || field.field_kind === 'garden_beds' || field.field_kind === 'orchard' || !!field.plant_category;
 
   return (
     <Overlay onClose={onClose} wide>
@@ -645,7 +646,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             ))}
           </div>
         </>
-      ) : (
+      ) : isPlantField ? (
         <>
           <h3>🌱 Растения локации</h3>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
@@ -668,7 +669,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
               ))}
           </div>
         </>
-      )}
+      ) : null}
 
       {/* Модалка создания мульти-зоны */}
       {multiModal && (
