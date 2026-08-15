@@ -684,15 +684,15 @@ export default function FieldPage() {
                             <img
                               src={mediaUrl((cell.barnyard.image_harvested_url || cell.barnyard.image_pen_url)!)}
                               alt=""
-                              style={{ maxWidth: '90%', maxHeight: '85%', objectFit: 'contain', pointerEvents: 'none' }}
+                              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
                             />
                           ) : cell.barnyard?.animal_id != null && cell.barnyard.animal_emoji ? (
-                            <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.barnyard.animal_emoji}</div>
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.barnyard.animal_emoji}</div>
                           ) : (
-                            <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🐄</div>
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🐄</div>
                           )}
                           {cell.barnyard?.animal_id != null && cell.barnyard.status === 'building' && (
-                            <div style={{ fontSize: 9, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>
+                            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 2, textAlign: 'center', fontSize: 9, color: '#fff', textShadow: '0 1px 2px #000', background: 'rgba(10,16,8,0.45)', pointerEvents: 'none' }}>
                               {cell.barnyard.accumulated}/{cell.barnyard.required}
                             </div>
                           )}
@@ -818,24 +818,24 @@ export default function FieldPage() {
                     }}
                   >
                     {occupied && grownImg && (
-                      <img src={mediaUrl(grownImg)} alt="" style={{ maxWidth: '70%', maxHeight: '55%', objectFit: 'contain', pointerEvents: 'none' }} />
+                      <img src={mediaUrl(grownImg)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none', padding: 3, boxSizing: 'border-box' }} />
                     )}
                     {occupied && !grownImg && pb.plant_emoji && (
-                      <div style={{ fontSize: '8vw', lineHeight: 1, pointerEvents: 'none' }}>{pb.plant_emoji}</div>
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9vw', lineHeight: 1, pointerEvents: 'none' }}>{pb.plant_emoji}</div>
                     )}
                     {occupied && pb.plot && pb.plot.status === 'planted' && (
-                      <div style={{ fontSize: 11, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>
+                      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 2, textAlign: 'center', fontSize: 11, color: '#fff', textShadow: '0 1px 2px #000', background: 'rgba(10,16,8,0.45)', pointerEvents: 'none' }}>
                         {pb.plot.accumulated}/{pb.plot.required}
                       </div>
                     )}
                     {occupied && pb.plot && pb.plot.status === 'grown' && (
-                      <div style={{ fontSize: 20, color: '#7fff7f', pointerEvents: 'none' }}>✓</div>
+                      <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 20, color: '#7fff7f', pointerEvents: 'none' }}>✓</div>
                     )}
                     {occupied && pb.plot && pb.plot.status === 'await_replant' && (
-                      <div style={{ fontSize: 18, pointerEvents: 'none' }}>🔁</div>
+                      <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 18, pointerEvents: 'none' }}>🔁</div>
                     )}
                     {occupied && pb.plot && (
-                      <div style={{ position: 'absolute', bottom: 6, left: 6, fontSize: 13, color: '#fff', textShadow: '0 1px 2px #000', fontWeight: 700, pointerEvents: 'none' }}>
+                      <div style={{ position: 'absolute', top: 2, left: 3, fontSize: 13, color: '#fff', textShadow: '0 1px 2px #000', fontWeight: 700, pointerEvents: 'none' }}>
                         ×{pb.plot.qty}
                       </div>
                     )}

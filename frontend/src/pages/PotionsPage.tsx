@@ -3,18 +3,24 @@ import { useSession } from '../context/SessionContext';
 import { api, potionBonusLabel, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type InventoryItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 
-function ingredientSummary(slots: string[]): string {
+function ingredientIcons(slots: string[]): string {
   const counts = new Map<string, number>();
   for (const s of slots) counts.set(s, (counts.get(s) || 0) + 1);
   return Array.from(counts.entries())
-    .map(([s, n]) => `${INGREDIENT_ICON[s] || '❓'} ${INGREDIENT_LABEL[s] || s}${n > 1 ? ` ×${n}` : ''}`)
-    .join(' · ');
+    .map(([s, n]) => `${INGREDIENT_ICON[s] || '❓'}${n > 1 ? `×${n}` : ''}`)
+    .join(' ');
 }
 
 const LEVEL_LABELS: Record<string, string> = {
   green: '🟢 Простые',
   blue: '🔵 Средние',
   violet: '🟣 Сложные',
+};
+
+const CAULDRON_STATUS: Record<string, { label: string; color: string }> = {
+  empty: { label: 'Ждёт ингредиенты', color: 'var(--text-muted)' },
+  filling: { label: 'Наполняется', color: 'var(--accent-warm)' },
+  done: { label: 'Готов', color: 'var(--success)' },
 };
 
 export default function PotionsPage() {
@@ -163,6 +169,7 @@ export default function PotionsPage() {
   const currentLevel = sortedLevels[safeLevelPage];
 
   const cauldronMaterial = cauldron?.material === 'tin' ? 'олово' : cauldron?.material === 'silver' ? 'серебро' : cauldron?.material === 'gold' ? 'золото' : '';
+  const cauldronStatus = cauldron ? CAULDRON_STATUS[cauldron.status] || { label: cauldron.status, color: 'var(--text-muted)' } : null;
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
@@ -176,9 +183,14 @@ export default function PotionsPage() {
         <>
           {cauldron ? (
             <div className="fm-card fm-rise" style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <strong>{cauldron.recipe_name}</strong>
-                <span className="fm-chip">{cauldron.status}</span>
+                {cauldronStatus && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap', color: cauldronStatus.color }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: cauldronStatus.color, flexShrink: 0 }} />
+                    {cauldronStatus.label}
+                  </span>
+                )}
               </div>
 
               <div className="fm-grid" style={{ gridTemplateColumns: `repeat(${cauldron.capacity}, 1fr)` }}>
@@ -249,31 +261,39 @@ export default function PotionsPage() {
             <div style={{ marginBottom: 14 }}>
               <div className="fm-grid">
                 {groupedByLevel[currentLevel].map((r) => (
-                  <div key={r.id} className="fm-card fm-rise">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <strong>{r.name}</strong>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                          {ingredientSummary(r.ingredient_slots)} · {r.ingredient_slots.length} слота
-                        </div>
-                        {r.bonus_code && (
-                          <div className="fm-chip" style={{ background: 'rgba(160,120,220,0.18)', marginTop: 4 }}>
-                            ⚡ {potionBonusLabel(r.bonus_code)}
-                          </div>
-                        )}
-                        <div className="fm-chip" style={{ background: 'rgba(224,168,62,0.18)', marginTop: 2 }}>
-                          🪙 {r.reward_coins} монет
-                        </div>
-                      </div>
-                      {r.image_url && (
-                        <img
-                          src={mediaUrl(r.image_url)}
-                          alt=""
-                          style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, marginLeft: 8 }}
-                          onClick={() => setZoomedImg(mediaUrl(r.image_url!))}
-                        />
-                      )}
+                  <div key={r.id} className="fm-card fm-rise" style={{ textAlign: 'center' }}>
+                    {r.image_url && (
+                      <SpritePedestal url={mediaUrl(r.image_url)} height={120} onZoom={setZoomedImg} />
+                    )}
+                    <strong style={{ display: 'block', marginBottom: 8 }}>{r.name}</strong>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 8,
+                        fontSize: 13,
+                        borderTop: '1px solid var(--border)',
+                        paddingTop: 8,
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-muted)' }}>{ingredientIcons(r.ingredient_slots)}</span>
+                      <span style={{ color: 'var(--accent-warm)', fontWeight: 600, whiteSpace: 'nowrap' }}>🪙 {r.reward_coins}</span>
                     </div>
+                    {r.bonus_code && (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          fontSize: 13,
+                          textAlign: 'left',
+                          borderLeft: '3px solid #a078dc',
+                          paddingLeft: 8,
+                          color: '#c9a6f2',
+                        }}
+                      >
+                        ⚡ {potionBonusLabel(r.bonus_code)}
+                      </div>
+                    )}
                     {r.description && (
                       <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
                         {r.description}
@@ -298,20 +318,45 @@ export default function PotionsPage() {
               <h2 style={{ fontSize: 16, margin: '18px 0 10px' }}>Мои зелья</h2>
               <div className="fm-grid">
                 {userPotions.map((p) => (
-                  <div key={p.id} className="fm-card" style={{ opacity: p.activated ? 0.7 : 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <strong>{p.potion_name}</strong>
-                        {(p.bonus_description || p.bonus_code) && (
-                          <div className="fm-chip" style={{ background: 'rgba(160,120,220,0.18)', marginTop: 4 }}>
-                            ⚡ {p.bonus_description || p.bonus_code}
-                          </div>
-                        )}
+                  <div key={p.id} className="fm-card" style={{ textAlign: 'center', opacity: p.activated ? 0.7 : 1 }}>
+                    {p.image_url && (
+                      <SpritePedestal url={mediaUrl(p.image_url)} height={96} onZoom={setZoomedImg} />
+                    )}
+                    <strong style={{ display: 'block', marginBottom: 8 }}>{p.potion_name}</strong>
+                    {(p.bonus_description || p.bonus_code) && (
+                      <div
+                        style={{
+                          fontSize: 13,
+                          textAlign: 'left',
+                          borderLeft: '3px solid #a078dc',
+                          paddingLeft: 8,
+                          color: '#c9a6f2',
+                        }}
+                      >
+                        ⚡ {p.bonus_description || p.bonus_code}
                       </div>
-                      {p.image_url && (
-                        <img src={mediaUrl(p.image_url)} alt="" style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 8, marginLeft: 8 }} />
-                      )}
-                      <span className="fm-chip" style={{ marginLeft: 6 }}>{p.activated ? 'Активно' : 'Неактивно'}</span>
+                    )}
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: 13,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        color: p.activated ? 'var(--success)' : 'var(--text-muted)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: p.activated ? 'var(--success)' : 'var(--text-muted)',
+                          flexShrink: 0,
+                        }}
+                      />
+                      {p.activated ? 'Активно' : 'Неактивно'}
                     </div>
                     {p.description && (
                       <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
@@ -370,6 +415,27 @@ export default function PotionsPage() {
           )}
         </Modal>
       )}
+    </div>
+  );
+}
+
+function SpritePedestal({ url, height, onZoom }: { url: string; height: number; onZoom: (u: string) => void }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--surface-strong)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-md)',
+        padding: '10px 8px',
+        marginBottom: 10,
+        cursor: 'zoom-in',
+      }}
+      onClick={() => onZoom(url)}
+    >
+      <img src={url} alt="" style={{ height, maxWidth: '100%', objectFit: 'contain' }} />
     </div>
   );
 }
