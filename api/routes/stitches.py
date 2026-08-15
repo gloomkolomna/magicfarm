@@ -170,6 +170,21 @@ def create_report(
                 detail=f"Недостаточно крестиков. Норма грядки: {plot.required - plot.accumulated}, вы указали {amount}",
             )
 
+    if context_type == "production" and context_id is not None:
+        from models import CraftSession
+        cs = db.query(CraftSession).filter(
+            CraftSession.id == context_id, CraftSession.user_id == user.vk_id
+        ).first()
+        if cs is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Крафт не найден")
+        if cs.status != "pending":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Крафт уже завершён")
+        if amount < (cs.required or 0):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Недостаточно крестиков. Норма крафта: {cs.required}, вы указали {amount}",
+            )
+
     if context_type is not None and context_type not in (
         "plant_grow", "recipe_study", "production",
         "animal_build", "animal_produce", "tent_build", "pet_settle",

@@ -10,7 +10,7 @@ def _real_img():
     return buf.getvalue()
 
 
-def _field_with_bed(admin_client, name="СкладТест", code="wh_test"):
+def _field_with_bed(admin_client, name="СкладТест", code="wh_test", plant_ids=(1,)):
     r = admin_client.post("/api/admin/fields", json={
         "name": name, "code": code, "cols": 3, "rows": 2,
     })
@@ -20,7 +20,7 @@ def _field_with_bed(admin_client, name="СкладТест", code="wh_test"):
         "cells": [{"col": 1, "row": 1}], "kind": "bed",
     })
     admin_client.put(f"/api/admin/fields/{fid}/plants", json={
-        "plant_ids": [1],
+        "plant_ids": list(plant_ids),
     })
     return fid
 
@@ -195,15 +195,19 @@ def test_recipe_study_completes_on_report_accept(admin_client):
 
 
 def test_craft_creates_session_and_fulfills_on_report(admin_client):
-    fid = _field_with_bed(admin_client)
-    prod_id = None
-    plant_id = 1
-
     r = admin_client.get("/api/admin/catalog/products").json()
     prod_id = r[0]["id"]
 
-    from models import Recipe, UserRecipe, Inventory, CraftSession
+    from models import Product, Recipe, UserRecipe, Inventory, CraftSession
     from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        plant_id = s.query(Product).filter(Product.id == prod_id).first().plant_id
+    finally:
+        s.close()
+
+    fid = _field_with_bed(admin_client, plant_ids=(plant_id,))
+
     s = TestingSessionLocal()
     try:
         rcp = s.query(Recipe).filter(Recipe.plant_id == plant_id, Recipe.product_id == prod_id).first()
@@ -241,7 +245,7 @@ def test_craft_creates_session_and_fulfills_on_report(admin_client):
 
         pr_id = _make_prod(123)
         r = c.post(f"/api/farm/productions/{pr_id}/craft", json={
-            "plant_id": plant_id, "product_id": prod_id, "qty": 2,
+            "product_id": prod_id, "qty": 2,
         })
         assert r.status_code == 200
         cs_id = r.json()["craft_session_id"]

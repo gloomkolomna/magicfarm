@@ -21,6 +21,16 @@ def _credit(client, monkeypatch, amount):
     )
 
 
+def _report(client, monkeypatch, amount, context_type, context_id):
+    tmp = __import__("tempfile").mkdtemp(prefix="farm_craft_")
+    monkeypatch.setattr(config, "UPLOADS_DIR", tmp)
+    return client.post(
+        "/api/stitches/reports",
+        data={"amount": str(amount), "context_type": context_type, "context_id": str(context_id)},
+        files={"photo_after": ("r.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+
+
 def _product_id(client, code="poison"):
     for p in client.get("/api/farm/products").json():
         if p["code"] == code:
@@ -28,11 +38,11 @@ def _product_id(client, code="poison"):
     raise AssertionError(f"product {code} not seeded")
 
 
-def _plant_id_from_code(client, code="khlebozlak"):
-    for p in client.get("/api/plants").json():
-        if p["code"] == code:
-            return p["id"]
-    raise AssertionError(f"plant {code} not seeded")
+def _plant_id_of_product(client, code="poison"):
+    prod_id = _product_id(client, code)
+    info = client.get(f"/api/farm/products/{prod_id}/craft-info")
+    assert info.status_code == 200
+    return info.json()["plant_id"]
 
 
 def _make_production(vk_id: int, kind: str = "alchemy", required: int = 500):
@@ -94,6 +104,17 @@ def _seed_product_inventory(vk_id: int, product_id: int, qty: int):
         s.close()
 
 
+def _make_craft_session(client, qty=3):
+    pr_id = _make_production(PLAYER_VK, "alchemy")
+    prod_id = _product_id(client)
+    plant_id = _plant_id_of_product(client)
+    _seed_plant_inventory(PLAYER_VK, plant_id, 10)
+    _seed_studied_recipe(PLAYER_VK, plant_id, prod_id)
+    r = client.post(f"/api/farm/productions/{pr_id}/craft", json={"product_id": prod_id, "qty": qty})
+    assert r.status_code == 200
+    return r.json()["craft_session_id"], prod_id, plant_id
+
+
 PLAYER_VK = 123
 
 
@@ -111,16 +132,43 @@ def test_list_inventory_empty(player_client):
     assert player_client.get("/api/farm/inventory").json() == []
 
 
+def test_craft_info_returns_stock_and_norm(player_client):
+    prod_id = _product_id(player_client)
+    plant_id = _plant_id_of_product(player_client)
+    _seed_plant_inventory(PLAYER_VK, plant_id, 5)
+
+    res = player_client.get(f"/api/farm/products/{prod_id}/craft-info")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["plant_id"] == plant_id
+    assert data["plant_name"]
+    assert data["stock_qty"] == 5
+    assert data["norm_per_unit"] == 100
+
+
+def test_craft_info_empty_stock(player_client):
+    prod_id = _product_id(player_client)
+
+    res = player_client.get(f"/api/farm/products/{prod_id}/craft-info")
+    assert res.status_code == 200
+    assert res.json()["stock_qty"] == 0
+
+
+def test_craft_info_unknown_product(player_client):
+    res = player_client.get("/api/farm/products/9999/craft-info")
+    assert res.status_code == 404
+
+
 def test_craft_produces_product(player_client, monkeypatch):
     pr_id = _make_production(PLAYER_VK, "alchemy")
     prod_id = _product_id(player_client)
-    plant_id = _plant_id_from_code(player_client)
+    plant_id = _plant_id_of_product(player_client)
     _seed_plant_inventory(PLAYER_VK, plant_id, 5)
     _seed_studied_recipe(PLAYER_VK, plant_id, prod_id)
 
     res = player_client.post(
         f"/api/farm/productions/{pr_id}/craft",
-        json={"plant_id": plant_id, "product_id": prod_id, "qty": 3},
+        json={"product_id": prod_id, "qty": 3},
     )
     assert res.status_code == 200
     data = res.json()
@@ -131,13 +179,13 @@ def test_craft_produces_product(player_client, monkeypatch):
 def test_craft_insufficient_plants(player_client, monkeypatch):
     pr_id = _make_production(PLAYER_VK, "alchemy")
     prod_id = _product_id(player_client)
-    plant_id = _plant_id_from_code(player_client)
+    plant_id = _plant_id_of_product(player_client)
     _seed_plant_inventory(PLAYER_VK, plant_id, 1)
     _seed_studied_recipe(PLAYER_VK, plant_id, prod_id)
 
     res = player_client.post(
         f"/api/farm/productions/{pr_id}/craft",
-        json={"plant_id": plant_id, "product_id": prod_id, "qty": 3},
+        json={"product_id": prod_id, "qty": 3},
     )
     assert res.status_code == 400
 
@@ -145,12 +193,12 @@ def test_craft_insufficient_plants(player_client, monkeypatch):
 def test_craft_recipe_not_studied(player_client, monkeypatch):
     pr_id = _make_production(PLAYER_VK, "alchemy")
     prod_id = _product_id(player_client)
-    plant_id = _plant_id_from_code(player_client)
+    plant_id = _plant_id_of_product(player_client)
     _seed_plant_inventory(PLAYER_VK, plant_id, 5)
 
     res = player_client.post(
         f"/api/farm/productions/{pr_id}/craft",
-        json={"plant_id": plant_id, "product_id": prod_id, "qty": 1},
+        json={"product_id": prod_id, "qty": 1},
     )
     assert res.status_code == 400
 
@@ -158,25 +206,45 @@ def test_craft_recipe_not_studied(player_client, monkeypatch):
 def test_craft_wrong_production_kind(player_client, monkeypatch):
     pr_id = _make_production(PLAYER_VK, "sewing")
     prod_id = _product_id(player_client)
-    plant_id = _plant_id_from_code(player_client)
+    plant_id = _plant_id_of_product(player_client)
     _seed_plant_inventory(PLAYER_VK, plant_id, 5)
     _seed_studied_recipe(PLAYER_VK, plant_id, prod_id)
 
     res = player_client.post(
         f"/api/farm/productions/{pr_id}/craft",
-        json={"plant_id": plant_id, "product_id": prod_id, "qty": 1},
+        json={"product_id": prod_id, "qty": 1},
     )
+    assert res.status_code == 400
+
+
+def test_craft_product_without_plant(player_client, monkeypatch):
+    from models import Product
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        s.add(Product(code="no_plant_prod", name="Товар без растения", emoji="📦", stars=1, production_kind="alchemy"))
+        s.commit()
+        prod_id = s.query(Product).filter(Product.code == "no_plant_prod").first().id
+    finally:
+        s.close()
+
+    pr_id = _make_production(PLAYER_VK, "alchemy")
+    res = player_client.post(
+        f"/api/farm/productions/{pr_id}/craft",
+        json={"product_id": prod_id, "qty": 1},
+    )
+    assert res.status_code == 400
+
+    res = player_client.get(f"/api/farm/products/{prod_id}/craft-info")
     assert res.status_code == 400
 
 
 def test_craft_unknown_product(player_client, monkeypatch):
     pr_id = _make_production(PLAYER_VK, "alchemy")
-    plant_id = _plant_id_from_code(player_client)
-    _seed_plant_inventory(PLAYER_VK, plant_id, 5)
 
     res = player_client.post(
         f"/api/farm/productions/{pr_id}/craft",
-        json={"plant_id": plant_id, "product_id": 9999, "qty": 1},
+        json={"product_id": 9999, "qty": 1},
     )
     assert res.status_code == 404
 
@@ -184,23 +252,135 @@ def test_craft_unknown_product(player_client, monkeypatch):
 def test_craft_other_user_production(player_client, monkeypatch):
     pr_id = _make_production(999, "alchemy")
     prod_id = _product_id(player_client)
-    plant_id = _plant_id_from_code(player_client)
+    plant_id = _plant_id_of_product(player_client)
     _seed_plant_inventory(PLAYER_VK, plant_id, 5)
     _seed_studied_recipe(PLAYER_VK, plant_id, prod_id)
 
     res = player_client.post(
         f"/api/farm/productions/{pr_id}/craft",
-        json={"plant_id": plant_id, "product_id": prod_id, "qty": 1},
+        json={"product_id": prod_id, "qty": 1},
     )
     assert res.status_code == 403
 
 
 def test_craft_not_found(player_client):
     prod_id = _product_id(player_client)
-    plant_id = _plant_id_from_code(player_client)
 
     res = player_client.post(
         "/api/farm/productions/9999/craft",
-        json={"plant_id": plant_id, "product_id": prod_id, "qty": 1},
+        json={"product_id": prod_id, "qty": 1},
     )
     assert res.status_code == 404
+
+
+def test_craft_sessions_empty(player_client):
+    assert player_client.get("/api/farm/craft-sessions").json() == []
+
+
+def test_craft_sessions_list_pending(player_client, monkeypatch):
+    cs_id, prod_id, plant_id = _make_craft_session(player_client, qty=2)
+
+    rows = player_client.get("/api/farm/craft-sessions").json()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["id"] == cs_id
+    assert row["product_id"] == prod_id
+    assert row["product_name"] == "Яд"
+    assert row["plant_name"]
+    assert row["qty"] == 2
+    assert row["required"] == 200
+    assert row["production_kind"] == "alchemy"
+    assert row["status"] == "pending"
+
+
+def test_craft_sessions_completed_not_in_pending(player_client, monkeypatch):
+    cs_id, _, _ = _make_craft_session(player_client, qty=1)
+
+    res = _report(player_client, monkeypatch, 100, "production", cs_id)
+    assert res.status_code == 201
+
+    rows = player_client.get("/api/farm/craft-sessions").json()
+    assert rows == []
+
+    rows_all = player_client.get("/api/farm/craft-sessions?status=all").json()
+    assert len(rows_all) == 1
+    assert rows_all[0]["status"] == "completed"
+
+
+def test_craft_sessions_bad_status_filter(player_client):
+    res = player_client.get("/api/farm/craft-sessions?status=wat")
+    assert res.status_code == 400
+
+
+def test_cancel_craft_session(player_client, monkeypatch):
+    cs_id, _, _ = _make_craft_session(player_client, qty=2)
+
+    res = player_client.delete(f"/api/farm/craft-sessions/{cs_id}")
+    assert res.status_code == 200
+    assert player_client.get("/api/farm/craft-sessions").json() == []
+
+
+def test_cancel_craft_session_unknown(player_client):
+    res = player_client.delete("/api/farm/craft-sessions/9999")
+    assert res.status_code == 404
+
+
+def test_cancel_craft_session_foreign(player_client, monkeypatch):
+    cs_id, _, _ = _make_craft_session(player_client, qty=2)
+
+    from tests.conftest import make_user_client
+    with make_user_client(124, "player") as other:
+        res = other.delete(f"/api/farm/craft-sessions/{cs_id}")
+    assert res.status_code == 403
+
+
+def test_cancel_craft_session_completed(player_client, monkeypatch):
+    cs_id, _, _ = _make_craft_session(player_client, qty=1)
+    res = _report(player_client, monkeypatch, 100, "production", cs_id)
+    assert res.status_code == 201
+
+    res = player_client.delete(f"/api/farm/craft-sessions/{cs_id}")
+    assert res.status_code == 409
+
+
+def test_report_below_norm_rejected(player_client, monkeypatch):
+    cs_id, _, _ = _make_craft_session(player_client, qty=3)
+
+    res = _report(player_client, monkeypatch, 299, "production", cs_id)
+    assert res.status_code == 400
+    assert "Недостаточно крестиков" in res.json()["detail"]
+
+    rows = player_client.get("/api/farm/craft-sessions").json()
+    assert len(rows) == 1
+
+
+def test_report_unknown_session(player_client, monkeypatch):
+    res = _report(player_client, monkeypatch, 500, "production", 9999)
+    assert res.status_code == 404
+
+
+def test_report_completed_session_rejected(player_client, monkeypatch):
+    cs_id, _, _ = _make_craft_session(player_client, qty=1)
+    res = _report(player_client, monkeypatch, 100, "production", cs_id)
+    assert res.status_code == 201
+
+    res = _report(player_client, monkeypatch, 150, "production", cs_id)
+    assert res.status_code == 409
+
+
+def test_report_full_norm_completes_and_credits(player_client, monkeypatch):
+    cs_id, prod_id, plant_id = _make_craft_session(player_client, qty=3)
+
+    res = _report(player_client, monkeypatch, 300, "production", cs_id)
+    assert res.status_code == 201
+
+    inv = player_client.get("/api/farm/inventory").json()
+    products = [i for i in inv if i["item_kind"] == "product" and i["item_id"] == prod_id]
+    assert len(products) == 1
+    assert products[0]["qty"] == 3
+
+    plants = [i for i in inv if i["item_kind"] == "plant" and i["item_id"] == plant_id]
+    assert len(plants) == 1
+    assert plants[0]["qty"] == 7
+
+    assert player_client.get("/api/farm/craft-sessions").json() == []

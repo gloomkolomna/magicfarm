@@ -8,6 +8,7 @@ export default function StitchReportForm({
   required,
   busy,
   onDone,
+  buttonText,
 }: {
   contextType: string;
   contextId: number | null | undefined;
@@ -15,6 +16,7 @@ export default function StitchReportForm({
   required?: number | null;
   busy: boolean;
   onDone: () => Promise<void>;
+  buttonText?: string;
 }) {
   const [amount, setAmount] = useState('');
   const [before, setBefore] = useState<File | null>(null);
@@ -60,7 +62,7 @@ export default function StitchReportForm({
       <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Заметка (необязательно)</label>
       <input className="fm-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="что вышили" />
       <button className="fm-btn" style={{ width: '100%', marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} disabled={busy || submitting || !amount || !before || !after} onClick={submit}>
-        {submitting ? (<><span className="fm-spinner" /> Отправка отчёта…</>) : 'Отправить отчёт'}
+        {submitting ? (<><span className="fm-spinner" /> Отправка отчёта…</>) : buttonText ?? 'Отправить отчёт'}
       </button>
       {err && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{err}</div>}
     </div>

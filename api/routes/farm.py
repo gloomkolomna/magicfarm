@@ -1,13 +1,13 @@
 from __future__ import annotations
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user
-from models import Inventory, Plant, Plot, Production, Product, User, Recipe
+from models import CraftSession, Inventory, Plant, Plot, Production, Product, User, Recipe, UserRecipe
 
 router = APIRouter(prefix="/api/farm", tags=["farm"])
 
@@ -196,9 +196,46 @@ def _get_user_production(production_id: int, user: User, db: Session) -> Product
 
 
 class CraftRequest(BaseModel):
-    plant_id: int
     product_id: int
     qty: int = 1
+
+
+class CraftInfoOut(BaseModel):
+    plant_id: int
+    plant_name: str
+    plant_emoji: str | None
+    stock_qty: int
+    norm_per_unit: int
+
+
+@router.get("/products/{product_id}/craft-info", response_model=CraftInfoOut)
+def product_craft_info(
+    product_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+    if product.plant_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У товара нет растения")
+
+    plant_obj = db.query(Plant).filter(Plant.id == product.plant_id).first()
+    if plant_obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Растение не найдено")
+
+    inv = db.query(Inventory).filter(
+        Inventory.user_id == user.vk_id, Inventory.plant_id == product.plant_id
+    ).first()
+
+    from routes.settings import get_production_norm
+    return CraftInfoOut(
+        plant_id=plant_obj.id,
+        plant_name=plant_obj.name,
+        plant_emoji=plant_obj.emoji,
+        stock_qty=(inv.qty or 0) if inv else 0,
+        norm_per_unit=get_production_norm(db, plant_obj.level),
+    )
 
 
 @router.post("/productions/{production_id}/craft", response_model=dict)
@@ -212,6 +249,8 @@ def craft_product(
     product = db.query(Product).filter(Product.id == req.product_id).first()
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+    if product.plant_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У товара нет растения")
     if product.production_kind is not None and product.production_kind != pr.kind:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -220,8 +259,12 @@ def craft_product(
     if req.qty < 1:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Количество товара должно быть ≥ 1")
 
+    plant_obj = db.query(Plant).filter(Plant.id == product.plant_id).first()
+    if plant_obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Растение не найдено")
+
     plant_inv = db.query(Inventory).filter(
-        Inventory.user_id == user.vk_id, Inventory.plant_id == req.plant_id
+        Inventory.user_id == user.vk_id, Inventory.plant_id == product.plant_id
     ).first()
     if plant_inv is None or (plant_inv.qty or 0) < req.qty:
         raise HTTPException(
@@ -229,17 +272,12 @@ def craft_product(
             detail="Недостаточно растений на складе",
         )
 
-    from models import Plant as PlantModel, UserRecipe
-    plant_obj = db.query(PlantModel).filter(PlantModel.id == req.plant_id).first()
-    if plant_obj is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Растение не найдено")
-
     recipe = db.query(UserRecipe).join(
         Recipe, UserRecipe.recipe_id == Recipe.id
     ).filter(
         UserRecipe.user_id == user.vk_id,
         UserRecipe.status == "studied",
-        Recipe.plant_id == req.plant_id,
+        Recipe.plant_id == product.plant_id,
         Recipe.product_id == req.product_id,
     ).first()
     if recipe is None:
@@ -252,9 +290,8 @@ def craft_product(
     norm_per_unit = get_production_norm(db, plant_obj.level)
     required = norm_per_unit * req.qty
 
-    from models import CraftSession
     cs = CraftSession(
-        user_id=user.vk_id, plant_id=req.plant_id, qty=req.qty,
+        user_id=user.vk_id, plant_id=product.plant_id, qty=req.qty,
         product_id=req.product_id, required=required,
     )
     db.add(cs)
@@ -268,6 +305,69 @@ def craft_product(
         "product_name": product.name,
         "qty": req.qty,
     }
+
+
+class CraftSessionOut(BaseModel):
+    id: int
+    product_id: int
+    product_name: str
+    product_emoji: str | None
+    plant_name: str
+    qty: int
+    required: int
+    production_kind: str | None
+    status: str
+    created_at: datetime.datetime | None
+
+
+def _cs_to_out(cs: CraftSession, db: Session) -> CraftSessionOut:
+    product = db.query(Product).filter(Product.id == cs.product_id).first()
+    plant = db.query(Plant).filter(Plant.id == cs.plant_id).first()
+    return CraftSessionOut(
+        id=cs.id,
+        product_id=cs.product_id,
+        product_name=product.name if product else "",
+        product_emoji=product.emoji if product else None,
+        plant_name=plant.name if plant else "",
+        qty=cs.qty,
+        required=cs.required,
+        production_kind=product.production_kind if product else None,
+        status=cs.status,
+        created_at=cs.created_at,
+    )
+
+
+@router.get("/craft-sessions", response_model=list[CraftSessionOut])
+def list_craft_sessions(
+    status_filter: str = Query(default="pending", alias="status"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if status_filter not in ("pending", "all"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status: pending или all")
+    q = db.query(CraftSession).filter(CraftSession.user_id == user.vk_id)
+    if status_filter == "pending":
+        q = q.filter(CraftSession.status == "pending")
+    rows = q.order_by(CraftSession.created_at.desc()).all()
+    return [_cs_to_out(cs, db) for cs in rows]
+
+
+@router.delete("/craft-sessions/{session_id}", response_model=dict)
+def cancel_craft_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    cs = db.query(CraftSession).filter(CraftSession.id == session_id).first()
+    if cs is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Крафт не найден")
+    if cs.user_id != user.vk_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Это не ваш крафт")
+    if cs.status != "pending":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Крафт уже завершён")
+    db.delete(cs)
+    db.commit()
+    return {"cancelled": True}
 
 
 @router.get("/productions", response_model=list[ProductionOut])

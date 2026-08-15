@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { api, type Animal, type CrystalCard, type FieldCellDetail, type FieldDetail, type Pet, type PlantBed, type Product, type Tent } from '../api/endpoints';
+import { api, type Animal, type CraftInfo, type CraftSessionInfo, type CrystalCard, type FieldCellDetail, type FieldDetail, type Pet, type PlantBed, type Product, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import StitchReportForm from '../components/StitchReportForm';
 import plotUrl from '../assets/plot.png';
@@ -49,8 +49,10 @@ export default function FieldPage() {
 
   // Модалка крафта (в построенном шатре).
   const [craftProduct, setCraftProduct] = useState<number | null>(null);
-  const [craftAmount, setCraftAmount] = useState('');
+  const [craftInfo, setCraftInfo] = useState<CraftInfo | null>(null);
   const [craftQty, setCraftQty] = useState('1');
+  const [craftSessions, setCraftSessions] = useState<CraftSessionInfo[]>([]);
+  const [activeCraft, setActiveCraft] = useState<CraftSessionInfo | null>(null);
 
   // Модалка загона скотного двора.
   const [barnyardCell, setBarnyardCell] = useState<FieldCellDetail | null>(null);
@@ -295,16 +297,58 @@ export default function FieldPage() {
 
   // ── Крафт в построенном шатре ──
 
-  async function doCraft() {
-    if (!tentModal || !craftProduct || !craftAmount) return;
+  async function reloadCraftSessions() {
+    try {
+      setCraftSessions(await api.craftSessions());
+    } catch {}
+  }
+
+  async function selectCraftProduct(id: number | null) {
+    setCraftProduct(id);
+    setCraftInfo(null);
+    if (id == null) return;
+    try {
+      setCraftInfo(await api.productCraftInfo(id));
+    } catch {}
+  }
+
+  async function doIssueNorm() {
+    if (!tentModal || !craftProduct) return;
     const prod = (await api.productions()).find((p) => p.kind === tentModal.kind);
-    if (!prod) { setMsg('✓ Производство не найдено'); return; }
+    if (!prod) { setMsg('✗ Производство не найдено'); return; }
     setBusy(true); setMsg(null);
     try {
-      await api.craftProduct(prod.id, Number(craftAmount), craftProduct, Number(craftQty));
-      setMsg('✓ Товар скрафчен!');
-      setCraftAmount('');
+      const res = await api.craftProduct(prod.id, craftProduct, Number(craftQty) || 1);
+      setMsg('✓ Норма выдана!');
+      setCraftQty('1');
+      setCraftInfo(await api.productCraftInfo(craftProduct));
       await load(); await refresh();
+      await reloadCraftSessions();
+      const p = products.find((x) => x.id === craftProduct);
+      setActiveCraft({
+        id: res.craft_session_id,
+        product_id: craftProduct,
+        product_name: res.product_name,
+        product_emoji: p?.emoji ?? null,
+        plant_name: res.plant_name,
+        qty: res.qty,
+        required: res.required,
+        production_kind: tentModal.kind,
+        status: 'pending',
+        created_at: null,
+      });
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  async function doCancelCraft(id: number) {
+    setBusy(true); setMsg(null);
+    try {
+      await api.cancelCraftSession(id);
+      setMsg('✓ Крафт отменён');
+      if (activeCraft?.id === id) setActiveCraft(null);
+      await reloadCraftSessions();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally { setBusy(false); }
@@ -382,15 +426,16 @@ export default function FieldPage() {
   function openTent(t: Tent) {
     setTentModal(t);
     setBuildInvestAmount(t.build_status === 'planted' ? String(Math.max(0, t.required - t.accumulated)) : '');
-    setCraftAmount('');
     setCraftQty('1');
     setTentCardResult(null);
     setTentShowVideo(false);
     if (t.build_status === 'built') {
       const first = products.find((x) => x.production_kind === t.kind);
-      setCraftProduct(first ? first.id : null);
+      void selectCraftProduct(first ? first.id : null);
+      void reloadCraftSessions();
     } else {
       setCraftProduct(null);
+      setCraftInfo(null);
     }
   }
 
@@ -1010,22 +1055,94 @@ export default function FieldPage() {
           {tentModal.build_status === 'built' && (
             <>
               <p style={{ fontSize: 14, color: 'var(--success)', marginBottom: 10 }}>✓ Шатёр построен! Можно крафтить товары.</p>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Товар</label>
-              <select className="fm-input" value={craftProduct ?? ''} onChange={(e) => setCraftProduct(Number(e.target.value))}>
+              {craftSessions.filter((cs) => cs.production_kind === tentModal.kind).length > 0 && (
+                <>
+                  <label style={{ display: 'block', margin: '0 0 6px', fontSize: 14 }}>Текущие крафты</label>
+                  {craftSessions.filter((cs) => cs.production_kind === tentModal.kind).map((cs) => (
+                    <div key={cs.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8 }}>
+                      <div style={{ flex: 1, fontSize: 13 }}>
+                        <div>{cs.product_emoji} {cs.product_name} × {cs.qty}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>норма: {cs.required} ✝️</div>
+                      </div>
+                      <button className="fm-btn" style={{ padding: '6px 10px', fontSize: 12 }} disabled={busy} onClick={() => setActiveCraft(cs)}>Продолжить</button>
+                      <button className="fm-btn" style={{ padding: '6px 10px', fontSize: 12 }} disabled={busy} onClick={() => void doCancelCraft(cs.id)}>Отменить</button>
+                    </div>
+                  ))}
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '10px 0' }} />
+                </>
+              )}
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Новый крафт</label>
+              <select className="fm-input" value={craftProduct ?? ''} onChange={(e) => void selectCraftProduct(Number(e.target.value))}>
                 <option value="">— выберите —</option>
                 {products.filter((p) => p.production_kind === tentModal.kind).map((p) => (
                   <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>
                 ))}
               </select>
-              <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Сколько крестиков вложить</label>
-              <input className="fm-input" type="number" min={1} value={craftAmount} onChange={(e) => setCraftAmount(e.target.value)} placeholder="кратное норме цикла" />
-              <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Товаров за цикл</label>
-              <input className="fm-input" type="number" min={1} value={craftQty} onChange={(e) => setCraftQty(e.target.value)} />
-              <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || !craftProduct || !craftAmount} onClick={doCraft}>
-                Скрафтить
+              {craftInfo && (
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', margin: '10px 0' }}>
+                  <div style={{ marginBottom: 4 }}>
+                    {craftInfo.plant_emoji} {craftInfo.plant_name} · на складе: {craftInfo.stock_qty} шт
+                  </div>
+                  <div style={{ marginBottom: 4 }}>Норма за 1 товар: {craftInfo.norm_per_unit} ✝️</div>
+                  <div style={{ color: 'var(--text-accent)', fontWeight: 700 }}>
+                    Итого за {Math.max(0, Number(craftQty) || 0)} шт: {craftInfo.norm_per_unit * Math.max(0, Number(craftQty) || 0)} ✝️
+                  </div>
+                </div>
+              )}
+              <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Количество товара</label>
+              <input
+                className="fm-input"
+                type="number"
+                min={1}
+                max={craftInfo ? craftInfo.stock_qty : undefined}
+                value={craftQty}
+                onChange={(e) => setCraftQty(e.target.value)}
+              />
+              {craftInfo && (Number(craftQty) || 0) > craftInfo.stock_qty && (
+                <div style={{ fontSize: 12, color: 'var(--danger, #e5484d)', marginTop: 6 }}>
+                  На складе только {craftInfo.stock_qty} шт растения
+                </div>
+              )}
+              <button
+                className="fm-btn"
+                style={{ width: '100%', marginTop: 14 }}
+                disabled={busy || !craftProduct || (Number(craftQty) || 0) < 1 || (craftInfo ? (Number(craftQty) || 0) > craftInfo.stock_qty : true)}
+                onClick={doIssueNorm}
+              >
+                Выдать норму
               </button>
             </>
           )}
+        </Modal>
+      )}
+
+      {/* Модалка крафт-сессии: норма + отчёт о вышивке */}
+      {activeCraft && (
+        <Modal title="⚙️ Крафт товара" onClose={() => setActiveCraft(null)}>
+          <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 10, fontSize: 13 }}>
+            <div style={{ marginBottom: 4 }}>
+              {activeCraft.product_emoji} {activeCraft.product_name} × {activeCraft.qty} · из {activeCraft.plant_name}
+            </div>
+            <div style={{ color: 'var(--text-accent)', fontWeight: 700 }}>
+              Выданная норма: {activeCraft.required} ✝️
+            </div>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Вышейте норму целиком, сделайте фото и нажмите «Скрафтить». Можно закрыть окно и вернуться позже — крафт сохранится.
+          </p>
+          <StitchReportForm
+            contextType="production"
+            contextId={activeCraft.id}
+            required={activeCraft.required}
+            buttonText="Скрафтить"
+            busy={busy}
+            onDone={async () => {
+              setMsg('✓ Товар получен!');
+              setActiveCraft(null);
+              await load(); await refresh();
+              await reloadCraftSessions();
+            }}
+          />
         </Modal>
       )}
 

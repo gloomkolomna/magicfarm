@@ -87,7 +87,7 @@ def seed_farm():
         ))
         conn.execute(text(
             "INSERT INTO recipes (plant_id, product_id, level) VALUES "
-            "((SELECT id FROM plants WHERE code='khlebozlak'), "
+            "((SELECT id FROM plants WHERE code='poison_mush'), "
             "(SELECT id FROM products WHERE code='poison'), 1)"
         ))
         for color in ("green", "blue", "violet"):

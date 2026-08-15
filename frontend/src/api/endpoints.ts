@@ -189,6 +189,35 @@ export interface InventoryItem {
   ingredient_icon: string | null;
 }
 
+export interface CraftInfo {
+  plant_id: number;
+  plant_name: string;
+  plant_emoji: string | null;
+  stock_qty: number;
+  norm_per_unit: number;
+}
+
+export interface CraftStart {
+  craft_session_id: number;
+  required: number;
+  plant_name: string;
+  product_name: string;
+  qty: number;
+}
+
+export interface CraftSessionInfo {
+  id: number;
+  product_id: number;
+  product_name: string;
+  product_emoji: string | null;
+  plant_name: string;
+  qty: number;
+  required: number;
+  production_kind: string | null;
+  status: string;
+  created_at: string | null;
+}
+
 export interface ProductionTemplate {
   id: number;
   code: string;
@@ -476,10 +505,16 @@ export const api = {
     client.post<Plot>(`/farm/plots/${plot_id}/invest`, { amount }).then((r) => r.data),
   revealNorm: (plot_id: number) =>
     client.post<Plot>(`/farm/plots/${plot_id}/reveal-norm`).then((r) => r.data),
-  craftProduct: (production_id: number, amount: number, product_id: number, qty = 1) =>
+  craftProduct: (production_id: number, product_id: number, qty = 1) =>
     client
-      .post<Production>(`/farm/productions/${production_id}/craft`, { amount, product_id, qty })
+      .post<CraftStart>(`/farm/productions/${production_id}/craft`, { product_id, qty })
       .then((r) => r.data),
+  productCraftInfo: (product_id: number) =>
+    client.get<CraftInfo>(`/farm/products/${product_id}/craft-info`).then((r) => r.data),
+  craftSessions: () =>
+    client.get<CraftSessionInfo[]>('/farm/craft-sessions', { params: { status: 'pending' } }).then((r) => r.data),
+  cancelCraftSession: (id: number) =>
+    client.delete(`/farm/craft-sessions/${id}`).then((r) => r.data),
   productions: () => client.get<Production[]>('/farm/productions').then((r) => r.data),
   inventory: (itemKind?: string) =>
     client.get<InventoryItem[]>('/farm/inventory', { params: itemKind ? { item_kind: itemKind } : {} }).then((r) => r.data),
