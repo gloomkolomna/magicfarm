@@ -234,6 +234,13 @@ export default function AdminPage() {
     { code: 'dice_face_4', kind: 'image', label: '⚃ Грань кубика 4' },
     { code: 'dice_face_5', kind: 'image', label: '⚄ Грань кубика 5' },
     { code: 'dice_face_6', kind: 'image', label: '⚅ Грань кубика 6' },
+    { code: 'house_build_video', kind: 'video', label: '🏠 Видео постройки дома ведьмы' },
+    { code: 'house_material_glass', kind: 'image', label: '🪟 Стройматериал: стекло' },
+    { code: 'house_material_wood', kind: 'image', label: '🪵 Стройматериал: древесина' },
+    { code: 'house_material_nails', kind: 'image', label: '🔩 Стройматериал: гвозди' },
+    { code: 'house_material_pipes', kind: 'image', label: '🚰 Стройматериал: трубы' },
+    { code: 'house_material_bricks', kind: 'image', label: '🧱 Стройматериал: кирпичи' },
+    { code: 'house_material_paint', kind: 'image', label: '🎨 Стройматериал: краска' },
   ];
 
   const [gameMedia, setGameMedia] = useState<GameMedia[]>([]);

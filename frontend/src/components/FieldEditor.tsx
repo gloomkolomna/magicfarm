@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type Animal, type FieldCell, type FieldDetail, type Pet, type Plant, type PlantBed, type PetZone, type ProductionTemplate, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 
-type Brush = 'bed' | 'pet' | 'tent' | 'barnyard';
+type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house';
+
+function isTentBrush(b: Brush) {
+  return b === 'tent' || b === 'house';
+}
 
 interface Props {
   fieldId: number;
@@ -20,6 +24,7 @@ const KIND_FILL: Record<string, string> = {
 const TENT_KIND_LABEL: Record<string, string> = {};
 
 function kindLabel(code: string, templates: ProductionTemplate[]) {
+  if (code === 'witch_house') return '🏠 Дом ведьмы';
   return templates.find((pt) => pt.code === code)?.name || code;
 }
 
@@ -102,7 +107,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     const key = `${c},${r}`;
     const cell = cellIndex.get(key);
     if (cell?.kind === 'tent') return;
-    if (brush === 'tent' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) {
+    if (isTentBrush(brush) || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) {
       setMultiDraft((prev) => {
         const next = new Set(prev);
         if (next.has(key)) next.delete(key); else next.add(key);
@@ -174,8 +179,13 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         return;
       }
     }
-    setTentName('');
-    setTentKind(prodTemplates[0]?.code || 'alchemy');
+    if (brush === 'house') {
+      setTentName('Дом ведьмы');
+      setTentKind('witch_house');
+    } else {
+      setTentName('');
+      setTentKind(prodTemplates[0]?.code || 'alchemy');
+    }
     setTentImage(null);
     setMultiModal({ c1, r1, c2, r2 });
   }
@@ -194,10 +204,10 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       } else {
         await api.adminCreateTent(
           fieldId,
-          { name: tentName, kind: tentKind, col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2 },
+          { name: tentName, kind: brush === 'house' ? 'witch_house' : tentKind, col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2 },
           tentImage || undefined,
         );
-        setMsg('✓ Шатёр размещён');
+        setMsg(brush === 'house' ? '✓ Дом ведьмы размещён' : '✓ Шатёр размещён');
       }
       setMultiModal(null);
       setMultiDraft(new Set());
@@ -397,8 +407,9 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         }
         if (kind === 'house') {
           return (
-            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
               <BrushBtn active={brush === 'tent'} onClick={() => setBrush('tent')}>⛺ Производство</BrushBtn>
+              <BrushBtn active={brush === 'house'} onClick={() => setBrush('house')}>🏠 Дом ведьмы</BrushBtn>
             </div>
           );
         }
@@ -422,12 +433,15 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             <BrushBtn active={brush === 'pet'} onClick={() => setBrush('pet')}>🐾 Питомец</BrushBtn>
             <BrushBtn active={brush === 'barnyard'} onClick={() => setBrush('barnyard')}>🐄 Скотный двор</BrushBtn>
             <BrushBtn active={brush === 'tent'} onClick={() => setBrush('tent')}>⛺ Производство</BrushBtn>
+            <BrushBtn active={brush === 'house'} onClick={() => setBrush('house')}>🏠 Дом ведьмы</BrushBtn>
           </div>
         );
       })()}
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
         {brush === 'tent'
           ? 'Тапайте по клеткам для шатра, затем «Разместить шатёр».'
+          : brush === 'house'
+          ? 'Тапайте по клеткам под дом ведьмы (2×2), затем «Разместить дом».'
           : brush === 'bed' && field?.plant_category === 'orchard'
           ? 'Тапайте по клеткам под слот дерева (1…N), затем «Разместить слот дерева».'
           : brush === 'pet' && field?.field_kind === 'lawn'
@@ -452,7 +466,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             if (c.kind === 'tent') {
               fill = KIND_FILL.tent;
             } else {
-              const isMultiCell = (brush === 'tent' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && multiDraft.has(key);
+              const isMultiCell = (isTentBrush(brush) || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && multiDraft.has(key);
               if (isMultiCell) fill = KIND_FILL.tent;
               else fill = KIND_FILL[c.kind] ?? 'transparent';
             }
@@ -531,7 +545,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 width={sz}
                 height={sz}
                 fill="transparent"
-                style={{ cursor: (brush === 'tent' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) ? 'crosshair' : 'pointer' }}
+                style={{ cursor: (isTentBrush(brush) || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) ? 'crosshair' : 'pointer' }}
                 onClick={() => onCellClick(c, r)}
               />
             )),
@@ -539,9 +553,9 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         </svg>
       </div>
 
-      {(brush === 'tent' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && (
-        <button className="fm-btn" style={{ width: '100%', marginBottom: 14 }} disabled={busy || multiDraft.size === 0} onClick={openMultiModal}>
-          {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'bed' ? '🌳 Разместить слот дерева' : '🐾 Разместить зону'} ({multiDraft.size})
+      {(isTentBrush(brush) || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && (
+        <button className="fm-btn fm-btn-sm" style={{ marginBottom: 10 }} disabled={busy || multiDraft.size === 0} onClick={openMultiModal}>
+          {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом' : brush === 'bed' ? '🌳 Разместить слот дерева' : '🐾 Разместить зону'} ({multiDraft.size})
         </button>
       )}
 
@@ -663,17 +677,17 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'calc(var(--shell-max-width) * 0.7)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <h3 style={{ margin: 0 }}>
-                {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'bed' ? '🌳 Разместить слот дерева' : '🐾 Разместить зону питомца'}
+                {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом ведьмы' : brush === 'bed' ? '🌳 Разместить слот дерева' : '🐾 Разместить зону питомца'}
               </h3>
               <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setMultiModal(null)}>✕</button>
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               Область: {multiModal.c2 - multiModal.c1 + 1}×{multiModal.r2 - multiModal.r1 + 1} клеток
             </p>
-            {brush === 'tent' ? (
+            {isTentBrush(brush) ? (
               <>
                 <label style={lbl}>Название</label>
-                <input className="fm-input" value={tentName} onChange={(e) => setTentName(e.target.value)} placeholder="Стол зельеварения" />
+                <input className="fm-input" value={tentName} onChange={(e) => setTentName(e.target.value)} placeholder={brush === 'house' ? 'Дом ведьмы' : 'Стол зельеварения'} />
                 <label style={lbl}>Тип</label>
                 <select className="fm-input" value={tentKind} onChange={(e) => setTentKind(e.target.value)}>
                   {prodTemplates.map((pt) => (
@@ -689,7 +703,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 {brush === 'bed' ? 'Слот садового дерева: игрок сажает сюда 1 дерево (на весь прямоугольник).' : 'Мульти-клеточная зона для питомца.'}
               </p>
             )}
-            <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || (brush === 'tent' && !tentName.trim())} onClick={saveMulti}>
+            <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || (isTentBrush(brush) && !tentName.trim())} onClick={saveMulti}>
               Разместить
             </button>
           </div>
