@@ -725,6 +725,7 @@ export default function FieldPage() {
                   style={{
                     gridColumn: `${t.col1 + 1} / span ${spanCols}`,
                     gridRow: `${t.row1 + 1} / span ${spanRows}`,
+                    position: 'relative',
                     display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center', gap: 4,
                     padding: 6, overflow: 'hidden',
@@ -740,11 +741,11 @@ export default function FieldPage() {
                     <img
                       src={mediaUrl(t.image_url)}
                       alt=""
-                      style={{ maxWidth: '85%', maxHeight: '52%', objectFit: 'contain', pointerEvents: 'none' }}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
                     />
                   )}
                   {t.build_status === 'built' && (
-                    <div style={{ fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', lineHeight: 1.1, fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ position: 'absolute', left: 2, right: 2, bottom: 1, fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', lineHeight: 1.2, fontWeight: 600, background: 'rgba(10,16,8,0.45)', borderRadius: 4, padding: '0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {t.kind === 'witch_house' ? '🏠' : '⛺'} {t.name}
                     </div>
                   )}
