@@ -362,7 +362,8 @@ export default function FieldPage() {
         product_id: craftProduct,
         product_name: res.product_name,
         product_emoji: p?.emoji ?? null,
-        plant_name: res.plant_name,
+        plant_name: res.plant_name ?? res.source_product_name ?? null,
+        source_product_name: null,
         qty: res.qty,
         required: res.required,
         production_kind: tentModal.kind,
@@ -1160,7 +1161,9 @@ export default function FieldPage() {
               {craftInfo && (
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', margin: '10px 0' }}>
                   <div style={{ marginBottom: 4 }}>
-                    {craftInfo.plant_emoji} {craftInfo.plant_name} · на складе: {craftInfo.stock_qty} шт
+                    {craftInfo.source_kind === 'animal_product'
+                      ? <>{craftInfo.source_product_emoji || '🥚'} {craftInfo.source_product_name}</>
+                      : <>{craftInfo.plant_emoji} {craftInfo.plant_name}</>} · на складе: {craftInfo.stock_qty} шт
                   </div>
                   <div style={{ marginBottom: 4 }}>Норма за 1 товар: {craftInfo.norm_per_unit} ✝️</div>
                   <div style={{ color: 'var(--text-accent)', fontWeight: 700 }}>
@@ -1179,7 +1182,7 @@ export default function FieldPage() {
               />
               {craftInfo && (Number(craftQty) || 0) > craftInfo.stock_qty && (
                 <div style={{ fontSize: 12, color: 'var(--danger, #e5484d)', marginTop: 6 }}>
-                  На складе только {craftInfo.stock_qty} шт растения
+                  На складе только {craftInfo.stock_qty} шт {craftInfo.source_kind === 'animal_product' ? 'продукции' : 'растений'}
                 </div>
               )}
               <button

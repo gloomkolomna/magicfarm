@@ -12,9 +12,13 @@ router = APIRouter(prefix="/api/library", tags=["library"])
 
 class RecipeOut(BaseModel):
     id: int
-    plant_id: int
-    plant_name: str
+    source_kind: str
+    plant_id: int | None
+    plant_name: str | None
     plant_emoji: str | None
+    source_product_id: int | None
+    source_product_name: str | None
+    source_product_emoji: str | None
     product_id: int
     product_name: str
     product_emoji: str | None
@@ -28,8 +32,15 @@ def _recipe_to_out(r: Recipe, user_id: int, db: Session) -> RecipeOut:
     ).first()
     status_val = ur.status if ur else "locked"
     return RecipeOut(
-        id=r.id, plant_id=r.plant_id, plant_name=r.plant.name,
-        plant_emoji=r.plant.emoji, product_id=r.product_id,
+        id=r.id,
+        source_kind="animal_product" if r.source_product_id is not None else "plant",
+        plant_id=r.plant_id,
+        plant_name=r.plant.name if r.plant else None,
+        plant_emoji=r.plant.emoji if r.plant else None,
+        source_product_id=r.source_product_id,
+        source_product_name=r.source_product.name if r.source_product else None,
+        source_product_emoji=r.source_product.emoji if r.source_product else None,
+        product_id=r.product_id,
         product_name=r.product.name, product_emoji=r.product.emoji,
         level=r.level, status=status_val,
     )

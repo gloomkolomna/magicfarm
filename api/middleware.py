@@ -104,10 +104,4 @@ async def log_failed_requests(request: Request, call_next):
                 message=message, details=details or None,
                 user_id=user_id, client_ip=client_ip, session_factory=session_factory,
             )
-        else:
-            record_log(
-                source="server", level="info", event="http_request",
-                method=request.method, path=path, status_code=status_code,
-                user_id=user_id, client_ip=client_ip, session_factory=session_factory,
-            )
     return response

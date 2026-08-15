@@ -159,6 +159,7 @@ INGREDIENT_TYPE_TO_INVENTORY = {
     "workshop": "product",
     "sewing": "product",
     "alchemy": "product",
+    "barnyard": "product",
 }
 
 
@@ -194,7 +195,7 @@ def slot_warehouse(
         inv = inv.filter(Inventory.product_id.isnot(None))
         from models import Product as ProductModel
         rows = inv.all()
-        kind_map = {"workshop": "workshop", "sewing": "sewing", "alchemy": "alchemy"}
+        kind_map = {"workshop": "workshop", "sewing": "sewing", "alchemy": "alchemy", "barnyard": "barnyard"}
         target_kind = kind_map.get(slot.item_type)
         if target_kind:
             rows = [i for i in rows if i.product and i.product.production_kind == target_kind]

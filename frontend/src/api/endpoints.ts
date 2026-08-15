@@ -167,9 +167,13 @@ export interface Production {
 
 export interface LibraryRecipe {
   id: number;
-  plant_id: number;
-  plant_name: string;
+  source_kind: string;
+  plant_id: number | null;
+  plant_name: string | null;
   plant_emoji: string | null;
+  source_product_id: number | null;
+  source_product_name: string | null;
+  source_product_emoji: string | null;
   product_id: number;
   product_name: string;
   product_emoji: string | null;
@@ -190,9 +194,13 @@ export interface InventoryItem {
 }
 
 export interface CraftInfo {
-  plant_id: number;
-  plant_name: string;
+  source_kind: string;
+  plant_id: number | null;
+  plant_name: string | null;
   plant_emoji: string | null;
+  source_product_id: number | null;
+  source_product_name: string | null;
+  source_product_emoji: string | null;
   stock_qty: number;
   norm_per_unit: number;
 }
@@ -200,7 +208,8 @@ export interface CraftInfo {
 export interface CraftStart {
   craft_session_id: number;
   required: number;
-  plant_name: string;
+  plant_name?: string;
+  source_product_name?: string;
   product_name: string;
   qty: number;
 }
@@ -210,7 +219,8 @@ export interface CraftSessionInfo {
   product_id: number;
   product_name: string;
   product_emoji: string | null;
-  plant_name: string;
+  plant_name: string | null;
+  source_product_name: string | null;
   qty: number;
   required: number;
   production_kind: string | null;
@@ -244,9 +254,12 @@ export interface Product {
 
 export interface AdminRecipe {
   id: number;
-  plant_id: number;
-  plant_name: string;
+  plant_id: number | null;
+  plant_name: string | null;
   plant_emoji: string | null;
+  source_product_id: number | null;
+  source_product_name: string | null;
+  source_product_emoji: string | null;
   product_id: number;
   product_name: string;
   product_emoji: string | null;
@@ -254,7 +267,8 @@ export interface AdminRecipe {
 }
 
 export interface AdminRecipeCreate {
-  plant_id: number;
+  plant_id: number | null;
+  source_product_id: number | null;
   product_id: number;
   level: number;
 }

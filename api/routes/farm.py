@@ -84,6 +84,7 @@ INGREDIENT_ICONS = {
     "tent_workshop": "🔨",
     "tent_sewing": "🧵",
     "tent_alchemy": "⚗️",
+    "tent_barnyard": "🏚️",
 }
 
 
@@ -177,8 +178,8 @@ def invest_plot(
 
 # ===== Производства (шатры) =====
 
-PRODUCTION_KINDS = ("alchemy", "sewing", "workshop")
-PRODUCTION_NAMES = {"alchemy": "Стол зельеварения", "sewing": "Шатёр портнихи", "workshop": "Мастерская"}
+PRODUCTION_KINDS = ("alchemy", "sewing", "workshop", "barnyard")
+PRODUCTION_NAMES = {"alchemy": "Стол зельеварения", "sewing": "Шатёр портнихи", "workshop": "Мастерская", "barnyard": "Шатёр скотного двора"}
 
 
 def _get_production_or_404(production_id: int, db: Session) -> Production:
@@ -201,9 +202,13 @@ class CraftRequest(BaseModel):
 
 
 class CraftInfoOut(BaseModel):
-    plant_id: int
-    plant_name: str
+    source_kind: str
+    plant_id: int | None
+    plant_name: str | None
     plant_emoji: str | None
+    source_product_id: int | None
+    source_product_name: str | None
+    source_product_emoji: str | None
     stock_qty: int
     norm_per_unit: int
 
@@ -217,24 +222,51 @@ def product_craft_info(
     product = db.query(Product).filter(Product.id == product_id).first()
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
-    if product.plant_id is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У товара нет растения")
-
-    plant_obj = db.query(Plant).filter(Plant.id == product.plant_id).first()
-    if plant_obj is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Растение не найдено")
-
-    inv = db.query(Inventory).filter(
-        Inventory.user_id == user.vk_id, Inventory.plant_id == product.plant_id
-    ).first()
 
     from routes.settings import get_production_norm
+
+    if product.plant_id is not None:
+        plant_obj = db.query(Plant).filter(Plant.id == product.plant_id).first()
+        if plant_obj is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Растение не найдено")
+
+        inv = db.query(Inventory).filter(
+            Inventory.user_id == user.vk_id, Inventory.plant_id == product.plant_id
+        ).first()
+
+        return CraftInfoOut(
+            source_kind="plant",
+            plant_id=plant_obj.id,
+            plant_name=plant_obj.name,
+            plant_emoji=plant_obj.emoji,
+            source_product_id=None,
+            source_product_name=None,
+            source_product_emoji=None,
+            stock_qty=(inv.qty or 0) if inv else 0,
+            norm_per_unit=get_production_norm(db, plant_obj.level),
+        )
+
+    from models import Recipe
+    recipe = db.query(Recipe).filter(
+        Recipe.product_id == product.id, Recipe.source_product_id.isnot(None)
+    ).first()
+    if recipe is None or recipe.source_product is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У товара нет источника для крафта")
+
+    inv = db.query(Inventory).filter(
+        Inventory.user_id == user.vk_id, Inventory.product_id == recipe.source_product_id
+    ).first()
+
     return CraftInfoOut(
-        plant_id=plant_obj.id,
-        plant_name=plant_obj.name,
-        plant_emoji=plant_obj.emoji,
+        source_kind="animal_product",
+        plant_id=None,
+        plant_name=None,
+        plant_emoji=None,
+        source_product_id=recipe.source_product_id,
+        source_product_name=recipe.source_product.name,
+        source_product_emoji=recipe.source_product.emoji,
         stock_qty=(inv.qty or 0) if inv else 0,
-        norm_per_unit=get_production_norm(db, plant_obj.level),
+        norm_per_unit=get_production_norm(db, recipe.level),
     )
 
 
@@ -249,8 +281,6 @@ def craft_product(
     product = db.query(Product).filter(Product.id == req.product_id).first()
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
-    if product.plant_id is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У товара нет растения")
     if product.production_kind is not None and product.production_kind != pr.kind:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -259,40 +289,90 @@ def craft_product(
     if req.qty < 1:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Количество товара должно быть ≥ 1")
 
-    plant_obj = db.query(Plant).filter(Plant.id == product.plant_id).first()
-    if plant_obj is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Растение не найдено")
+    from models import Recipe
+    from routes.settings import get_production_norm
 
-    plant_inv = db.query(Inventory).filter(
-        Inventory.user_id == user.vk_id, Inventory.plant_id == product.plant_id
+    if product.plant_id is not None:
+        plant_obj = db.query(Plant).filter(Plant.id == product.plant_id).first()
+        if plant_obj is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Растение не найдено")
+
+        plant_inv = db.query(Inventory).filter(
+            Inventory.user_id == user.vk_id, Inventory.plant_id == product.plant_id
+        ).first()
+        if plant_inv is None or (plant_inv.qty or 0) < req.qty:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Недостаточно растений на складе",
+            )
+
+        recipe = db.query(UserRecipe).join(
+            Recipe, UserRecipe.recipe_id == Recipe.id
+        ).filter(
+            UserRecipe.user_id == user.vk_id,
+            UserRecipe.status == "studied",
+            Recipe.plant_id == product.plant_id,
+            Recipe.product_id == req.product_id,
+        ).first()
+        if recipe is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Рецепт не изучен",
+            )
+
+        norm_per_unit = get_production_norm(db, plant_obj.level)
+        required = norm_per_unit * req.qty
+
+        cs = CraftSession(
+            user_id=user.vk_id, plant_id=product.plant_id, qty=req.qty,
+            product_id=req.product_id, required=required,
+        )
+        db.add(cs)
+        db.commit()
+        db.refresh(cs)
+
+        return {
+            "craft_session_id": cs.id,
+            "required": required,
+            "plant_name": plant_obj.name,
+            "product_name": product.name,
+            "qty": req.qty,
+        }
+
+    recipe = db.query(Recipe).filter(
+        Recipe.product_id == req.product_id, Recipe.source_product_id.isnot(None)
     ).first()
-    if plant_inv is None or (plant_inv.qty or 0) < req.qty:
+    if recipe is None or recipe.source_product is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Недостаточно растений на складе",
+            detail="У товара нет источника для крафта",
         )
 
-    recipe = db.query(UserRecipe).join(
-        Recipe, UserRecipe.recipe_id == Recipe.id
-    ).filter(
+    studied = db.query(UserRecipe).filter(
         UserRecipe.user_id == user.vk_id,
+        UserRecipe.recipe_id == recipe.id,
         UserRecipe.status == "studied",
-        Recipe.plant_id == product.plant_id,
-        Recipe.product_id == req.product_id,
     ).first()
-    if recipe is None:
+    if studied is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Рецепт не изучен",
         )
 
-    from routes.settings import get_production_norm
-    norm_per_unit = get_production_norm(db, plant_obj.level)
-    required = norm_per_unit * req.qty
+    source_inv = db.query(Inventory).filter(
+        Inventory.user_id == user.vk_id, Inventory.product_id == recipe.source_product_id
+    ).first()
+    if source_inv is None or (source_inv.qty or 0) < req.qty:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Недостаточно продукции животного на складе",
+        )
+
+    required = get_production_norm(db, recipe.level) * req.qty
 
     cs = CraftSession(
-        user_id=user.vk_id, plant_id=product.plant_id, qty=req.qty,
-        product_id=req.product_id, required=required,
+        user_id=user.vk_id, plant_id=None, source_product_id=recipe.source_product_id,
+        qty=req.qty, product_id=req.product_id, required=required,
     )
     db.add(cs)
     db.commit()
@@ -301,7 +381,7 @@ def craft_product(
     return {
         "craft_session_id": cs.id,
         "required": required,
-        "plant_name": plant_obj.name,
+        "source_product_name": recipe.source_product.name,
         "product_name": product.name,
         "qty": req.qty,
     }
@@ -312,7 +392,8 @@ class CraftSessionOut(BaseModel):
     product_id: int
     product_name: str
     product_emoji: str | None
-    plant_name: str
+    plant_name: str | None
+    source_product_name: str | None
     qty: int
     required: int
     production_kind: str | None
@@ -322,13 +403,18 @@ class CraftSessionOut(BaseModel):
 
 def _cs_to_out(cs: CraftSession, db: Session) -> CraftSessionOut:
     product = db.query(Product).filter(Product.id == cs.product_id).first()
-    plant = db.query(Plant).filter(Plant.id == cs.plant_id).first()
+    plant = db.query(Plant).filter(Plant.id == cs.plant_id).first() if cs.plant_id is not None else None
+    source_product = (
+        db.query(Product).filter(Product.id == cs.source_product_id).first()
+        if cs.source_product_id is not None else None
+    )
     return CraftSessionOut(
         id=cs.id,
         product_id=cs.product_id,
         product_name=product.name if product else "",
         product_emoji=product.emoji if product else None,
-        plant_name=plant.name if plant else "",
+        plant_name=plant.name if plant else None,
+        source_product_name=source_product.name if source_product else None,
         qty=cs.qty,
         required=cs.required,
         production_kind=product.production_kind if product else None,

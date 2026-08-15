@@ -6,6 +6,7 @@ const TENT_KINDS: Record<string, string> = {
   alchemy: '⚗️',
   sewing: '🧵',
   workshop: '🔨',
+  barnyard: '🏚️',
 };
 
 const LEVEL_LABELS: Record<number, string> = { 1: 'I', 2: 'II', 3: 'III' };
@@ -129,10 +130,12 @@ export default function LibraryPage() {
                       }}
                     >
                       <div style={{ fontSize: 28, flexShrink: 0 }}>
-                        {r.plant_emoji || '🌱'}
+                        {r.source_kind === 'animal_product' ? (r.source_product_emoji || '🥚') : (r.plant_emoji || '🌱')}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>{r.plant_name}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600 }}>
+                          {r.source_kind === 'animal_product' ? r.source_product_name : r.plant_name}
+                        </div>
                         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                           {r.status === 'studied' ? 'изучен' : r.status === 'studying' ? 'изучается…' : 'закрыт'}
                         </div>
@@ -177,8 +180,12 @@ export default function LibraryPage() {
       {studyRecipe && (
         <Modal title="📖 Начать изучение" onClose={() => setStudyRecipe(null)}>
           <div style={{ textAlign: 'center', marginBottom: 12 }}>
-            <div style={{ fontSize: 32 }}>{studyRecipe.plant_emoji || '🌱'}</div>
-            <div style={{ fontSize: 18, fontWeight: 600 }}>{studyRecipe.plant_name}</div>
+            <div style={{ fontSize: 32 }}>
+              {studyRecipe.source_kind === 'animal_product' ? (studyRecipe.source_product_emoji || '🥚') : (studyRecipe.plant_emoji || '🌱')}
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 600 }}>
+              {studyRecipe.source_kind === 'animal_product' ? studyRecipe.source_product_name : studyRecipe.plant_name}
+            </div>
             <div style={{ fontSize: 24, color: 'var(--text-muted)', marginTop: 4 }}>→</div>
             <div style={{ fontSize: 32 }}>{studyRecipe.product_emoji || '📦'}</div>
             <div style={{ fontSize: 16 }}>{studyRecipe.product_name}</div>

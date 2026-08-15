@@ -7,8 +7,8 @@ from sqlalchemy.orm import declarative_base, relationship
 Base = declarative_base()
 
 
-PRODUCTION_KINDS = ("alchemy", "sewing", "workshop")
-PRODUCTION_NAMES = {"alchemy": "Стол зельеварения", "sewing": "Шатёр портнихи", "workshop": "Мастерская"}
+PRODUCTION_KINDS = ("alchemy", "sewing", "workshop", "barnyard")
+PRODUCTION_NAMES = {"alchemy": "Стол зельеварения", "sewing": "Шатёр портнихи", "workshop": "Мастерская", "barnyard": "Шатёр скотного двора"}
 
 MAX_PLOT_QTY = 20
 
@@ -19,6 +19,7 @@ CARD_DRAW_RULES = {
     "tent_sewing": (3, True),
     "tent_workshop": (4, True),
     "tent_alchemy": (5, True),
+    "tent_barnyard": (2, True),
 }
 
 CONTEXT_TYPES = (
@@ -451,15 +452,18 @@ class Recipe(Base):
     __tablename__ = "recipes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    plant_id = Column(Integer, ForeignKey("plants.id", ondelete="CASCADE"), nullable=False)
+    plant_id = Column(Integer, ForeignKey("plants.id", ondelete="CASCADE"), nullable=True)
+    source_product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     level = Column(Integer, nullable=False, default=1, server_default="1")
 
     plant = relationship("Plant")
-    product = relationship("Product")
+    source_product = relationship("Product", foreign_keys=[source_product_id])
+    product = relationship("Product", foreign_keys=[product_id])
 
     __table_args__ = (
         UniqueConstraint("plant_id", name="uq_recipe_plant"),
+        UniqueConstraint("source_product_id", name="uq_recipe_source_product"),
     )
 
 
@@ -481,7 +485,8 @@ class CraftSession(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
-    plant_id = Column(Integer, ForeignKey("plants.id", ondelete="CASCADE"), nullable=False)
+    plant_id = Column(Integer, ForeignKey("plants.id", ondelete="CASCADE"), nullable=True)
+    source_product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=True)
     qty = Column(Integer, nullable=False)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     required = Column(Integer, nullable=False, default=0, server_default="0")

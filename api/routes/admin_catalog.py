@@ -139,22 +139,27 @@ class PetOut(BaseModel):
 
 
 class RecipeCreate(BaseModel):
-    plant_id: int
+    plant_id: int | None = None
+    source_product_id: int | None = None
     product_id: int
     level: int = 1
 
 
 class RecipeUpdate(BaseModel):
     plant_id: int | None = None
+    source_product_id: int | None = None
     product_id: int | None = None
     level: int | None = None
 
 
 class RecipeOut(BaseModel):
     id: int
-    plant_id: int
-    plant_name: str
+    plant_id: int | None
+    plant_name: str | None
     plant_emoji: str | None
+    source_product_id: int | None
+    source_product_name: str | None
+    source_product_emoji: str | None
     product_id: int
     product_name: str
     product_emoji: str | None
@@ -428,15 +433,22 @@ def delete_pet(
 
 def _recipe_out(r: Recipe) -> RecipeOut:
     return RecipeOut(
-        id=r.id, plant_id=r.plant_id, plant_name=r.plant.name,
-        plant_emoji=r.plant.emoji, product_id=r.product_id,
+        id=r.id,
+        plant_id=r.plant_id,
+        plant_name=r.plant.name if r.plant else None,
+        plant_emoji=r.plant.emoji if r.plant else None,
+        source_product_id=r.source_product_id,
+        source_product_name=r.source_product.name if r.source_product else None,
+        source_product_emoji=r.source_product.emoji if r.source_product else None,
+        product_id=r.product_id,
         product_name=r.product.name, product_emoji=r.product.emoji,
         level=r.level,
     )
 
 
-def _validate_recipe_fields(
+def _validate_recipe_refs(
     plant_id: int | None,
+    source_product_id: int | None,
     product_id: int | None,
     level: int | None,
     db: Session,
@@ -446,9 +458,43 @@ def _validate_recipe_fields(
     if plant_id is not None:
         if db.query(Plant).filter(Plant.id == plant_id).first() is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Растение не найдено")
+    if source_product_id is not None:
+        src = db.query(Product).filter(Product.id == source_product_id).first()
+        if src is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Продукция животного не найдена")
+        if src.animal_id is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Источник должен быть продукцией животного")
     if product_id is not None:
         if db.query(Product).filter(Product.id == product_id).first() is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Товар не найден")
+
+
+def _validate_single_source(plant_id: int | None, source_product_id: int | None) -> None:
+    if (plant_id is None) == (source_product_id is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Укажите ровно один источник: растение или продукцию животного",
+        )
+
+
+def _check_recipe_source_free(
+    plant_id: int | None,
+    source_product_id: int | None,
+    exclude_id: int | None,
+    db: Session,
+) -> None:
+    if plant_id is not None:
+        q = db.query(Recipe).filter(Recipe.plant_id == plant_id)
+        if exclude_id is not None:
+            q = q.filter(Recipe.id != exclude_id)
+        if q.first() is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="У этого растения уже есть рецепт")
+    if source_product_id is not None:
+        q = db.query(Recipe).filter(Recipe.source_product_id == source_product_id)
+        if exclude_id is not None:
+            q = q.filter(Recipe.id != exclude_id)
+        if q.first() is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="У этой продукции уже есть рецепт")
 
 
 @router.get("/recipes", response_model=list[RecipeOut])
@@ -465,10 +511,13 @@ def create_recipe(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
-    _validate_recipe_fields(req.plant_id, req.product_id, req.level, db)
-    if db.query(Recipe).filter(Recipe.plant_id == req.plant_id).first() is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="У этого растения уже есть рецепт")
-    r = Recipe(plant_id=req.plant_id, product_id=req.product_id, level=req.level)
+    _validate_recipe_refs(req.plant_id, req.source_product_id, req.product_id, req.level, db)
+    _validate_single_source(req.plant_id, req.source_product_id)
+    _check_recipe_source_free(req.plant_id, req.source_product_id, None, db)
+    r = Recipe(
+        plant_id=req.plant_id, source_product_id=req.source_product_id,
+        product_id=req.product_id, level=req.level,
+    )
     db.add(r)
     db.commit()
     db.refresh(r)
@@ -485,17 +534,18 @@ def update_recipe(
     r = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if r is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
-    _validate_recipe_fields(req.plant_id, req.product_id, req.level, db)
-    plant_id = req.plant_id if req.plant_id is not None else r.plant_id
-    if plant_id != r.plant_id:
-        if db.query(Recipe).filter(Recipe.plant_id == plant_id, Recipe.id != r.id).first() is not None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="У этого растения уже есть рецепт")
-    if req.plant_id is not None:
-        r.plant_id = req.plant_id
-    if req.product_id is not None:
-        r.product_id = req.product_id
-    if req.level is not None:
-        r.level = req.level
+    provided = req.model_fields_set
+    plant_id = req.plant_id if "plant_id" in provided else r.plant_id
+    source_product_id = req.source_product_id if "source_product_id" in provided else r.source_product_id
+    product_id = req.product_id if "product_id" in provided else r.product_id
+    level = req.level if "level" in provided else r.level
+    _validate_recipe_refs(plant_id, source_product_id, product_id, level, db)
+    _validate_single_source(plant_id, source_product_id)
+    _check_recipe_source_free(plant_id, source_product_id, r.id, db)
+    r.plant_id = plant_id
+    r.source_product_id = source_product_id
+    r.product_id = product_id
+    r.level = level
     db.commit()
     db.refresh(r)
     return _recipe_out(r)

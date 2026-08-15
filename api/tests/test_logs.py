@@ -11,11 +11,10 @@ def test_admin_logs_player_forbidden(player_client):
     assert player_client.get("/api/admin/logs").status_code == 403
 
 
-def test_middleware_logs_successful_request(admin_client):
+def test_middleware_skips_successful_request(admin_client):
     admin_client.get("/api/me")
     rows = admin_client.get("/api/admin/logs").json()
-    assert any(r["path"] == "/api/me" and r["source"] == "server" and r["status_code"] == 200 for r in rows)
-    assert all(r["level"] == "info" for r in rows if r["status_code"] == 200 and r["path"] == "/api/me")
+    assert not any(r["path"] == "/api/me" and r["source"] == "server" and r["status_code"] == 200 for r in rows)
 
 
 def test_middleware_logs_4xx_as_warn(admin_client):

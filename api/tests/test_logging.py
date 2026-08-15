@@ -47,9 +47,4 @@ def test_log_skips_body_for_2xx(player_client, db):
     assert resp.status_code == 200
 
     rows = _logs_for(db, "/api/farm/productions")
-    assert rows
-    ok = rows[0]
-    assert ok.level == "info"
-    assert ok.status_code == 200
-    assert ok.message in (None, "")
-    assert ok.details in (None, "")
+    assert not rows, "успешные запросы (2xx) не логируются"

@@ -221,7 +221,7 @@ export default function AdminPage() {
 
   // ── Рецепты библиотеки ──
   const [recipes, setRecipes] = useState<AdminRecipe[]>([]);
-  const [recipeForm, setRecipeForm] = useState({ plant_id: '', product_id: '', level: '1' });
+  const [recipeForm, setRecipeForm] = useState({ source_kind: 'plant', plant_id: '', source_product_id: '', product_id: '', level: '1' });
   const [recipeEditingId, setRecipeEditingId] = useState<number | null>(null);
 
   const MEDIA_TYPES: { code: string; kind: string; label: string }[] = [
@@ -861,7 +861,16 @@ export default function AdminPage() {
           </div>
           <div style={{ marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
             <span style={{ fontSize: 13 }}>Ингредиенты:</span>
-            <input className="fm-input" placeholder="тип (plant_garden, alchemy, ...)" value={potionSlotInput} onChange={(e) => setPotionSlotInput(e.target.value)} style={{ width: 200 }} />
+            <select className="fm-input" value={potionSlotInput} onChange={(e) => setPotionSlotInput(e.target.value)}>
+              <option value="">— тип ингредиента —</option>
+              <option value="plant_garden">🌱 Растение (грядка)</option>
+              <option value="plant_orchard">🍎 Растение (сад)</option>
+              <option value="animal_product">🐄 Продукция животного</option>
+              <option value="workshop">🔨 Товар мастерской</option>
+              <option value="sewing">🧵 Товар портнихи</option>
+              <option value="alchemy">🔮 Товар зельеварения</option>
+              <option value="barnyard">🏚️ Товар скотного двора</option>
+            </select>
             <button className="fm-btn fm-btn-sm" onClick={() => { if (potionSlotInput.trim()) { setPotionForm({ ...potionForm, ingredient_slots: [...potionForm.ingredient_slots, potionSlotInput.trim()] }); setPotionSlotInput(''); } }}>+</button>
           </div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -909,17 +918,21 @@ export default function AdminPage() {
     } catch { /* ignore */ }
   }
   async function saveRecipe() {
-    const plantId = Number(recipeForm.plant_id);
     const productId = Number(recipeForm.product_id);
-    if (!plantId) { setMsg('✗ Выберите растение'); return; }
     if (!productId) { setMsg('✗ Выберите товар'); return; }
+    const plantId = recipeForm.source_kind === 'plant' ? Number(recipeForm.plant_id) || null : null;
+    const sourceProductId = recipeForm.source_kind === 'animal_product' ? Number(recipeForm.source_product_id) || null : null;
+    if (!plantId && !sourceProductId) {
+      setMsg(recipeForm.source_kind === 'plant' ? '✗ Выберите растение' : '✗ Выберите продукцию животного');
+      return;
+    }
     setBusy(true); setMsg(null);
     try {
-      const data = { plant_id: plantId, product_id: productId, level: Number(recipeForm.level) };
+      const data = { plant_id: plantId, source_product_id: sourceProductId, product_id: productId, level: Number(recipeForm.level) };
       if (recipeEditingId) { await api.adminUpdateRecipe(recipeEditingId, data); }
       else { await api.adminCreateRecipe(data); }
       await loadRecipes();
-      setRecipeForm({ plant_id: '', product_id: '', level: '1' });
+      setRecipeForm({ source_kind: 'plant', plant_id: '', source_product_id: '', product_id: '', level: '1' });
       setRecipeEditingId(null);
       setMsg('✓ Сохранено');
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -935,17 +948,34 @@ export default function AdminPage() {
 
   function renderRecipes() {
     const recipePlants = plants.filter((p) => !recipes.some((r) => r.plant_id === p.id) || String(p.id) === recipeForm.plant_id);
+    const animalProducts = catalogProducts.filter(
+      (p) => p.animal_id != null
+        && (!recipes.some((r) => r.source_product_id === p.id) || String(p.id) === recipeForm.source_product_id)
+    );
     return (
       <div>
         <h2>📚 Рецепты библиотеки</h2>
         <div className="fm-card" style={{ marginBottom: 10 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            <select className="fm-input" value={recipeForm.plant_id} onChange={(e) => setRecipeForm({ ...recipeForm, plant_id: e.target.value })}>
-              <option value="">— растение —</option>
-              {(recipeEditingId ? plants : recipePlants).map((p) => (
-                <option key={p.id} value={String(p.id)}>{p.emoji || '🌱'} {p.name}</option>
-              ))}
+            <select className="fm-input" value={recipeForm.source_kind} onChange={(e) => setRecipeForm({ ...recipeForm, source_kind: e.target.value })}>
+              <option value="plant">🌱 Из растения</option>
+              <option value="animal_product">🥚 Из продукции животного</option>
             </select>
+            {recipeForm.source_kind === 'plant' ? (
+              <select className="fm-input" value={recipeForm.plant_id} onChange={(e) => setRecipeForm({ ...recipeForm, plant_id: e.target.value })}>
+                <option value="">— растение —</option>
+                {(recipeEditingId ? plants : recipePlants).map((p) => (
+                  <option key={p.id} value={String(p.id)}>{p.emoji || '🌱'} {p.name}</option>
+                ))}
+              </select>
+            ) : (
+              <select className="fm-input" value={recipeForm.source_product_id} onChange={(e) => setRecipeForm({ ...recipeForm, source_product_id: e.target.value })}>
+                <option value="">— продукция животного —</option>
+                {animalProducts.map((p) => (
+                  <option key={p.id} value={String(p.id)}>{p.emoji || '🥚'} {p.name}</option>
+                ))}
+              </select>
+            )}
             <select className="fm-input" value={recipeForm.product_id} onChange={(e) => setRecipeForm({ ...recipeForm, product_id: e.target.value })}>
               <option value="">— товар —</option>
               {catalogProducts.map((p) => (
@@ -961,19 +991,27 @@ export default function AdminPage() {
           <button className="fm-btn" disabled={busy} onClick={saveRecipe}>
             {recipeEditingId ? '✎ Сохранить' : '➕ Создать'}
           </button>
-          {recipeEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setRecipeEditingId(null); setRecipeForm({ plant_id: '', product_id: '', level: '1' }); }}>Отмена</button>}
+          {recipeEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setRecipeEditingId(null); setRecipeForm({ source_kind: 'plant', plant_id: '', source_product_id: '', product_id: '', level: '1' }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
-          <thead><tr><th>ID</th><th>Растение</th><th>Товар</th><th>Уровень</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Источник</th><th>Товар</th><th>Уровень</th><th></th></tr></thead>
           <tbody>
             {recipes.map((r) => (
               <tr key={r.id}>
                 <td>{r.id}</td>
-                <td>{r.plant_emoji || '🌱'} {r.plant_name}</td>
+                <td>{r.source_product_id != null
+                  ? <>{r.source_product_emoji || '🥚'} {r.source_product_name}</>
+                  : <>{r.plant_emoji || '🌱'} {r.plant_name}</>}</td>
                 <td>{r.product_emoji || '📦'} {r.product_name}</td>
                 <td>{r.level}</td>
                 <td>
-                  <button className="fm-btn fm-btn-sm" onClick={() => { setRecipeEditingId(r.id); setRecipeForm({ plant_id: String(r.plant_id), product_id: String(r.product_id), level: String(r.level) }); }}>✎</button>
+                  <button className="fm-btn fm-btn-sm" onClick={() => { setRecipeEditingId(r.id); setRecipeForm({
+                    source_kind: r.source_product_id != null ? 'animal_product' : 'plant',
+                    plant_id: r.plant_id != null ? String(r.plant_id) : '',
+                    source_product_id: r.source_product_id != null ? String(r.source_product_id) : '',
+                    product_id: String(r.product_id),
+                    level: String(r.level),
+                  }); }}>✎</button>
                   <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteRecipe(r.id)}>🗑</button>
                 </td>
               </tr>
@@ -1526,9 +1564,9 @@ export default function AdminPage() {
                 { key: 'name', label: 'Название', ph: 'Яд' },
                 { key: 'stars', label: 'Звёзды', ph: '1', type: 'number' },
                 { key: 'production_kind', label: 'Производство', ph: '', options: prodTemplates.map((pt) => ({ value: pt.code, label: `${pt.emoji || ''} ${pt.name}` })) },
-                { key: 'plant_id', label: 'Растение-источник', options: plants.map((p) => ({ value: String(p.id), label: `${p.emoji || ''} ${p.name}` })) },
-                { key: 'animal_id', label: 'Животное-источник', options: animals.map((a) => ({ value: String(a.id), label: `${a.emoji || ''} ${a.name}` })) },
-                { key: 'pet_id', label: 'Питомец-источник', options: pets.map((p) => ({ value: String(p.id), label: `${p.emoji || ''} ${p.name}` })) },
+                { key: 'plant_id', label: 'Растение-источник', options: plants.filter((p) => !catalogProducts.some((x) => x.plant_id === p.id && x.id !== editingId)).map((p) => ({ value: String(p.id), label: `${p.emoji || ''} ${p.name}` })) },
+                { key: 'animal_id', label: 'Животное-источник', options: animals.filter((a) => !catalogProducts.some((x) => x.animal_id === a.id && x.id !== editingId)).map((a) => ({ value: String(a.id), label: `${a.emoji || ''} ${a.name}` })) },
+                { key: 'pet_id', label: 'Питомец-источник', options: pets.filter((pt) => !catalogProducts.some((x) => x.pet_id === pt.id && x.id !== editingId)).map((pt) => ({ value: String(pt.id), label: `${pt.emoji || ''} ${pt.name}` })) },
               ]}
             />
           )}

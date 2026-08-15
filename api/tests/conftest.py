@@ -52,7 +52,8 @@ def seed_farm():
             "INSERT INTO production_templates (code, name, emoji, required, cards_to_draw, surcharge) VALUES "
             "('alchemy', 'Стол зельеварения', '🔮', 500, 5, 40), "
             "('sewing', 'Шатёр портнихи', '🧵', 500, 3, 30), "
-            "('workshop', 'Мастерская', '🔨', 500, 4, 35)"
+            "('workshop', 'Мастерская', '🔨', 500, 4, 35), "
+            "('barnyard', 'Шатёр скотного двора', '🏚️', 500, 2, 30)"
         ))
         conn.execute(text(
             "INSERT INTO settings (key, value) VALUES "

@@ -45,11 +45,18 @@ def _process_context(report: "StitchReport", db: Session) -> None:
         cs = db.query(CraftSession).filter(CraftSession.id == report.context_id).first()
         if cs is not None and cs.status == "pending":
             cs.status = "completed"
-            plant_inv = db.query(Inventory).filter(
-                Inventory.user_id == cs.user_id, Inventory.plant_id == cs.plant_id
-            ).first()
-            if plant_inv:
-                plant_inv.qty = (plant_inv.qty or 0) - cs.qty
+            if cs.source_product_id is not None:
+                source_inv = db.query(Inventory).filter(
+                    Inventory.user_id == cs.user_id, Inventory.product_id == cs.source_product_id
+                ).first()
+                if source_inv:
+                    source_inv.qty = (source_inv.qty or 0) - cs.qty
+            else:
+                plant_inv = db.query(Inventory).filter(
+                    Inventory.user_id == cs.user_id, Inventory.plant_id == cs.plant_id
+                ).first()
+                if plant_inv:
+                    plant_inv.qty = (plant_inv.qty or 0) - cs.qty
             prod_inv = db.query(Inventory).filter(
                 Inventory.user_id == cs.user_id, Inventory.product_id == cs.product_id
             ).first()
