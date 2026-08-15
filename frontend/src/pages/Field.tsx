@@ -43,6 +43,10 @@ export default function FieldPage() {
   const [stitchNote, setStitchNote] = useState('');
   const [stitchSending, setStitchSending] = useState(false);
 
+  // Модалка обязательной пересадки после сбора урожая.
+  const [replant, setReplant] = useState<{ cell: FieldCellDetail; bedId: number | null } | null>(null);
+  const [replantQty, setReplantQty] = useState('');
+
   // Модалка шатра.
   const [tentModal, setTentModal] = useState<Tent | null>(null);
   const [buildInvestAmount, setBuildInvestAmount] = useState('');
@@ -232,17 +236,45 @@ export default function FieldPage() {
     } finally { setBusy(false); setStitchSending(false); }
   }
 
+  function openReplant(cell: FieldCellDetail, bedId: number | null) {
+    setReplant({ cell, bedId });
+    setReplantQty(String(cell.plot?.qty ?? 1));
+  }
+
   async function doHarvest(cell: FieldCellDetail) {
     setBusy(true); setMsg(null);
     try {
       if (careBedId != null) {
-        await api.harvestBed(fieldId, careBedId);
+        const pb = await api.harvestBed(fieldId, careBedId);
         setMsg('✓ Урожай собран');
+        const asCell = bedToCareCell(pb);
+        setCareCell(null); setCareBedId(null);
+        openReplant(asCell, pb.id);
       } else {
-        await api.harvestCell(fieldId, cell.col, cell.row);
-        setMsg('✓ Урожай собран, клетка свободна');
+        const updated = await api.harvestCell(fieldId, cell.col, cell.row);
+        setMsg('✓ Урожай собран');
+        setCareCell(null);
+        openReplant(updated, null);
       }
-      setCareBedId(null);
+      await load(); await refresh();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  async function doReplant() {
+    if (!replant) return;
+    const qty = Number(replantQty) || 0;
+    if (qty < 1 || qty > 20) return;
+    setBusy(true); setMsg(null);
+    try {
+      if (replant.bedId != null) {
+        await api.replantBed(fieldId, replant.bedId, qty);
+      } else {
+        await api.replantCell(fieldId, replant.cell.col, replant.cell.row, qty);
+      }
+      setMsg('✓ Посажено заново! Узнайте норму.');
+      setReplant(null);
       await load(); await refresh();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -474,7 +506,7 @@ export default function FieldPage() {
                   else if (cell.kind === 'bed' && cell.occupant_user_id == null && field.plant_category !== 'orchard') bg = `center/contain no-repeat url(${plotUrl})`;
                   else if (cell.occupant_user_id != null) bg = cell.plot?.status === 'grown' ? 'rgba(111,174,74,0.30)' : 'rgba(90,143,62,0.20)';
                   const isBed = cell.kind === 'bed';
-                  const grownImg = cell.plot?.status === 'grown' ? (cell.plant_image_harvested || cell.plant_image_grown) : cell.plant_image_young;
+                  const grownImg = (cell.plot?.status === 'grown' || cell.plot?.status === 'await_replant') ? (cell.plant_image_harvested || cell.plant_image_grown) : cell.plant_image_young;
                   return (
                     <div
                       key={`cell-${c}-${r}`}
@@ -501,8 +533,12 @@ export default function FieldPage() {
                             setField(fd);
                             setProducts(prs);
                             if (freshCell) {
-                              setCareCell(freshCell);
-                              setInvestAmount(freshCell.plot ? String(freshCell.plot.required - freshCell.plot.accumulated) : '');
+                              if (freshCell.plot?.status === 'await_replant') {
+                                openReplant(freshCell, null);
+                              } else {
+                                setCareCell(freshCell);
+                                setInvestAmount(freshCell.plot ? String(freshCell.plot.required - freshCell.plot.accumulated) : '');
+                              }
                             }
                           } catch (e: any) {
                             setMsg('✗ ' + (e?.response?.data?.detail || 'Не удалось загрузить грядку. Попробуйте ещё раз.'));
@@ -533,14 +569,14 @@ export default function FieldPage() {
                           ) : (
                             <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.plant_emoji}</div>
                           )}
-                          {cell.plot && cell.plot.status !== 'grown' && (
+                          {cell.plot && cell.plot.status === 'planted' && (
                             <div style={{ fontSize: 9, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>
                               {cell.plot.accumulated}/{cell.plot.required}
                             </div>
                           )}
                           {cell.plot && (
                             <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 14, color: '#7fff7f', pointerEvents: 'none' }}>
-                              {cell.plot.status === 'grown' ? '✓' : ''}
+                              {cell.plot.status === 'grown' ? '✓' : cell.plot.status === 'await_replant' ? '🔁' : ''}
                             </div>
                           )}
                           {cell.plot && (
@@ -656,7 +692,7 @@ export default function FieldPage() {
               const spanCols = pb.col2 - pb.col1 + 1;
               const spanRows = pb.row2 - pb.row1 + 1;
               const occupied = pb.occupant_user_id != null;
-              const grownImg = pb.plot?.status === 'grown' ? (pb.plant_image_harvested || pb.plant_image_grown) : pb.plant_image_young;
+              const grownImg = (pb.plot?.status === 'grown' || pb.plot?.status === 'await_replant') ? (pb.plant_image_harvested || pb.plant_image_grown) : pb.plant_image_young;
               return (
                 <div
                   key={`bed-${pb.id}`}
@@ -675,13 +711,15 @@ export default function FieldPage() {
                             ...(field.plant_beds?.filter((b) => b.plant_id != null && b.occupant_user_id != null).map((b) => b.plant_id!) ?? []),
                           ]);
                           setPlantBedSel(field.plants.find((p) => !plantedIds.has(p.id))?.id ?? null);
+                        } else if (pb.plot?.status === 'await_replant') {
+                          openReplant(bedToCareCell(pb), pb.id);
                         } else {
-                        setShowVideo(false);
-                        setCardResult(null);
-                        setCareBedId(pb.id);
-                        setCareCell(bedToCareCell(pb));
-                        setInvestAmount(pb.plot ? String(pb.plot.required - (pb.plot.accumulated ?? 0)) : '');
-                      }
+                          setShowVideo(false);
+                          setCardResult(null);
+                          setCareBedId(pb.id);
+                          setCareCell(bedToCareCell(pb));
+                          setInvestAmount(pb.plot ? String(pb.plot.required - (pb.plot.accumulated ?? 0)) : '');
+                        }
                     }}
                     style={{
                       gridColumn: `${pb.col1 + 1} / span ${spanCols}`,
@@ -706,13 +744,16 @@ export default function FieldPage() {
                     {occupied && !grownImg && pb.plant_emoji && (
                       <div style={{ fontSize: '8vw', lineHeight: 1, pointerEvents: 'none' }}>{pb.plant_emoji}</div>
                     )}
-                    {occupied && pb.plot && pb.plot.status !== 'grown' && (
+                    {occupied && pb.plot && pb.plot.status === 'planted' && (
                       <div style={{ fontSize: 11, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>
                         {pb.plot.accumulated}/{pb.plot.required}
                       </div>
                     )}
                     {occupied && pb.plot && pb.plot.status === 'grown' && (
                       <div style={{ fontSize: 20, color: '#7fff7f', pointerEvents: 'none' }}>✓</div>
+                    )}
+                    {occupied && pb.plot && pb.plot.status === 'await_replant' && (
+                      <div style={{ fontSize: 18, pointerEvents: 'none' }}>🔁</div>
                     )}
                     {occupied && pb.plot && (
                       <div style={{ position: 'absolute', bottom: 6, left: 6, fontSize: 13, color: '#fff', textShadow: '0 1px 2px #000', fontWeight: 700, pointerEvents: 'none' }}>
@@ -832,7 +873,17 @@ export default function FieldPage() {
           onClose={() => { setCareCell(null); setCareBedId(null); }}
           wide={showVideo || (careCell.plot.norm_revealed && !showVideo)}
         >
-          {careCell.plot.status === 'grown' ? (
+          {careCell.plot.status === 'await_replant' ? (
+            <>
+              <p style={{ fontSize: 14, color: 'var(--success)' }}>✓ Урожай собран!</p>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                Укажите новое количество и посадите {careCell.plant_emoji} {careCell.plant_name} ещё раз.
+              </p>
+              <button className="fm-btn" style={{ width: '100%', marginTop: 8 }} disabled={busy} onClick={() => openReplant(careCell, careBedId)}>
+                🌱 Посадить заново
+              </button>
+            </>
+          ) : careCell.plot.status === 'grown' ? (
             <>
               <p style={{ fontSize: 14, color: 'var(--success)' }}>✓ Растение выросло!</p>
               <button className="fm-btn" style={{ width: '100%', marginTop: 8 }} disabled={busy} onClick={() => { doHarvest(careCell); setCareCell(null); setCareBedId(null); }}>
@@ -954,6 +1005,34 @@ export default function FieldPage() {
               )}
             </>
           )}
+        </Modal>
+      )}
+
+      {/* Модалка обязательной пересадки: новое количество после сбора */}
+      {replant && (
+        <Modal title="🌱 Посадить заново" onClose={() => setReplant(null)}>
+          <p style={{ fontSize: 14, color: 'var(--success)', marginBottom: 6 }}>✓ Урожай собран!</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 10 }}>
+            Укажите новое количество для посадки {replant.cell.plant_emoji} {replant.cell.plant_name}:
+          </p>
+          <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Новое количество (1–20)</label>
+          <input
+            className="fm-input"
+            type="number"
+            min={1}
+            max={20}
+            value={replantQty}
+            onChange={(e) => setReplantQty(e.target.value)}
+            autoFocus
+          />
+          <button
+            className="fm-btn"
+            style={{ width: '100%', marginTop: 14 }}
+            disabled={busy || (Number(replantQty) || 0) < 1 || (Number(replantQty) || 0) > 20}
+            onClick={doReplant}
+          >
+            Посадить
+          </button>
         </Modal>
       )}
 

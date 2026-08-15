@@ -164,11 +164,17 @@ def create_report(
     if context_type == "plant_grow" and context_id is not None:
         from models import Plot
         plot = db.query(Plot).filter(Plot.id == context_id, Plot.user_id == user.vk_id).first()
-        if plot is not None and amount < (plot.required - plot.accumulated):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Недостаточно крестиков. Норма грядки: {plot.required - plot.accumulated}, вы указали {amount}",
-            )
+        if plot is not None:
+            if plot.status == "await_replant":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Растение собрано — укажите новое количество и посадите заново",
+                )
+            if amount < (plot.required - plot.accumulated):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Недостаточно крестиков. Норма грядки: {plot.required - plot.accumulated}, вы указали {amount}",
+                )
 
     if context_type == "production" and context_id is not None:
         from models import CraftSession

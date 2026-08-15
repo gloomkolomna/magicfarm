@@ -141,8 +141,13 @@ def test_harvest_resets_plot_not_frees_cell(admin_client):
         data = r.json()
         assert data["plant_id"] == 1
         plot = data["plot"]
-        assert plot["status"] == "planted"
+        assert plot["status"] == "await_replant"
         assert plot["accumulated"] == 0
+
+        r = c.post(f"/api/fields/{fid}/cells/1/1/replant", json={"qty": 2})
+        assert r.status_code == 200
+        assert r.json()["plot"]["status"] == "planted"
+        assert r.json()["plot"]["qty"] == 2
 
 
 def test_harvest_not_grown(admin_client):

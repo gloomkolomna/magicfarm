@@ -159,17 +159,24 @@ def test_full_cycle_plant_grow_harvest(admin_client, monkeypatch):
         res = c.post(f"/api/farm/plots/{plot_id}/invest", json={"amount": required})
         assert res.status_code == 200
         assert res.json()["status"] == "grown"
-        # 3. Собираем урожай — клетка не освобождается, plot сбрасывается в planted.
+        # 3. Собираем урожай — клетка не освобождается, plot ждёт пересадки.
         res = c.post(f"/api/fields/{fid}/cells/0/0/harvest")
         assert res.status_code == 200
         cc = res.json()
         assert cc["plant_id"] is not None
         assert cc["occupant_user_id"] is not None
         assert cc["plot"] is not None
+        assert cc["plot"]["status"] == "await_replant"
+        assert cc["plot"]["accumulated"] == 0
+        # 4. Пересадка с новым количеством.
+        res = c.post(f"/api/fields/{fid}/cells/0/0/replant", json={"qty": 3})
+        assert res.status_code == 200
+        cc = res.json()
         assert cc["plot"]["status"] == "planted"
         assert cc["plot"]["accumulated"] == 0
+        assert cc["plot"]["qty"] == 3
         assert cc["plot"]["required"] > 0
-        # 4. Клетка занята — повторная посадка невозможна.
+        # 5. Клетка занята — повторная посадка невозможна.
         res = c.post(f"/api/fields/{fid}/cells/0/0/plant", json={"plant_id": pid})
         assert res.status_code == 409
 
@@ -212,3 +219,81 @@ def test_harvest_not_found(admin_client, monkeypatch):
     with _player() as c:
         res = c.post(f"/api/fields/{fid}/cells/9/9/harvest")
     assert res.status_code == 404
+
+
+# ===== Пересадка после сбора (await_replant) =====
+
+def _grown_cell(c, fid, pid, qty=1):
+    planted = c.post(f"/api/fields/{fid}/cells/0/0/plant", json={"plant_id": pid, "qty": qty}).json()
+    plot_id = planted["plot"]["id"]
+    required = planted["plot"]["required"]
+    c.post(f"/api/farm/plots/{plot_id}/invest", json={"amount": required})
+    res = c.post(f"/api/fields/{fid}/cells/0/0/harvest")
+    assert res.status_code == 200
+    return res.json()
+
+
+def test_replant_requires_await_status(admin_client, monkeypatch):
+    fid, pid = _setup_field_with_plants(admin_client, monkeypatch)
+    with _player() as c:
+        _credit_client(c, 100000)
+        c.post(f"/api/fields/{fid}/cells/0/0/plant", json={"plant_id": pid})
+        res = c.post(f"/api/fields/{fid}/cells/0/0/replant", json={"qty": 2})
+    assert res.status_code == 409
+
+
+def test_replant_invalid_qty(admin_client, monkeypatch):
+    fid, pid = _setup_field_with_plants(admin_client, monkeypatch)
+    with _player() as c:
+        _credit_client(c, 100000)
+        _grown_cell(c, fid, pid)
+        res = c.post(f"/api/fields/{fid}/cells/0/0/replant", json={"qty": 0})
+        assert res.status_code == 400
+        res = c.post(f"/api/fields/{fid}/cells/0/0/replant", json={"qty": 21})
+        assert res.status_code == 400
+
+
+def test_replant_second_time_rejected(admin_client, monkeypatch):
+    fid, pid = _setup_field_with_plants(admin_client, monkeypatch)
+    with _player() as c:
+        _credit_client(c, 100000)
+        _grown_cell(c, fid, pid)
+        res = c.post(f"/api/fields/{fid}/cells/0/0/replant", json={"qty": 2})
+        assert res.status_code == 200
+        res = c.post(f"/api/fields/{fid}/cells/0/0/replant", json={"qty": 2})
+        assert res.status_code == 409
+
+
+def test_replant_empty_cell(admin_client, monkeypatch):
+    fid, _ = _setup_field_with_plants(admin_client, monkeypatch)
+    with _player() as c:
+        res = c.post(f"/api/fields/{fid}/cells/0/0/replant", json={"qty": 1})
+    assert res.status_code == 404
+
+
+def test_replant_not_owner(admin_client, monkeypatch):
+    fid, pid = _setup_field_with_plants(admin_client, monkeypatch)
+    with _player() as c:
+        _credit_client(c, 100000)
+        _grown_cell(c, fid, pid)
+    from tests.conftest import make_user_client
+    with make_user_client(999, "player") as other:
+        res = other.post(f"/api/fields/{fid}/cells/0/0/replant", json={"qty": 1})
+    assert res.status_code == 404
+
+
+def test_report_on_await_replant_rejected(admin_client, monkeypatch):
+    fid, pid = _setup_field_with_plants(admin_client, monkeypatch)
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="farm_field_repl_")
+    monkeypatch.setattr(config, "UPLOADS_DIR", tmp)
+    with _player() as c:
+        _credit_client(c, 100000)
+        cc = _grown_cell(c, fid, pid)
+        plot_id = cc["plot"]["id"]
+        res = c.post(
+            "/api/stitches/reports",
+            data={"amount": "500", "context_type": "plant_grow", "context_id": str(plot_id)},
+            files={"photo_after": ("r.png", io.BytesIO(_img_bytes()), "image/png")},
+        )
+    assert res.status_code == 409

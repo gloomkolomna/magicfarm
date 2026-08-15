@@ -421,10 +421,13 @@ def harvest_cell(
             detail="Растение ещё не выросло",
         )
 
-    plot.status = "planted"
+    plot.status = "await_replant"
     plot.accumulated = 0
     plot.norm_revealed = False
     plot.completed_at = plot.completed_at or datetime.datetime.utcnow()
+    plot.drawn_cards_json = None
+    plot.crystal_color = None
+    plot.crystal_count = None
 
     from models import Inventory
     inv = db.query(Inventory).filter(
@@ -440,18 +443,68 @@ def harvest_cell(
     if bonus > 0:
         inv.qty = (inv.qty or 0) + bonus
 
-    num_cards, allow_treasure = CARD_DRAW_RULES.get(f"plant_{plant_obj.level}", (1, False))
-    cards = draw_cards(db, num_cards, allow_treasure)
-    plot.required = calculate_norm(db, user, cards) * plot.qty
-    plot.drawn_cards_json = cards_to_json(cards)
-    plot.crystal_color = None
-    plot.crystal_count = None
-
     db.commit()
     db.refresh(cell)
 
     check_and_award(user.vk_id, "plots_count", db)
 
+    return _cell_detail(cell, db, user, plot)
+
+
+class ReplantRequest(BaseModel):
+    qty: int
+
+
+def _replant_plot(plot: Plot, req: ReplantRequest, user: User, db: Session) -> None:
+    if plot.status != "await_replant":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Растение не ждёт пересадки",
+        )
+    if req.qty < 1 or req.qty > MAX_PLOT_QTY:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Количество растений должно быть от 1 до {MAX_PLOT_QTY}",
+        )
+
+    plot.qty = req.qty
+    plot.status = "planted"
+    plot.accumulated = 0
+    plot.norm_revealed = False
+
+    plant_obj = plot.plant
+    num_cards, allow_treasure = CARD_DRAW_RULES.get(f"plant_{plant_obj.level}", (1, False))
+    cards = draw_cards(db, num_cards, allow_treasure)
+    plot.required = calculate_norm(db, user, cards) * req.qty
+    plot.drawn_cards_json = cards_to_json(cards)
+    plot.crystal_color = None
+    plot.crystal_count = None
+
+    db.commit()
+
+
+@router.post("/{field_id}/cells/{col}/{row}/replant", response_model=CellDetailOut)
+def replant_cell(
+    field_id: int,
+    col: int,
+    row: int,
+    req: ReplantRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    f = _get_field_or_404(field_id, db)
+    cell = db.query(FieldCell).filter(
+        FieldCell.field_id == f.id, FieldCell.col == col, FieldCell.row == row
+    ).first()
+    if cell is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Клетка не найдена")
+
+    plot = db.query(Plot).filter(Plot.cell_id == cell.id, Plot.user_id == user.vk_id).first()
+    if plot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="На клетке нет растения")
+
+    _replant_plot(plot, req, user, db)
+    db.refresh(cell)
     return _cell_detail(cell, db, user, plot)
 
 
@@ -600,10 +653,13 @@ def harvest_bed(
             detail="Дерево ещё не выросло",
         )
 
-    plot.status = "planted"
+    plot.status = "await_replant"
     plot.accumulated = 0
     plot.norm_revealed = False
     plot.completed_at = plot.completed_at or datetime.datetime.utcnow()
+    plot.drawn_cards_json = None
+    plot.crystal_color = None
+    plot.crystal_count = None
 
     from models import Inventory
     inv = db.query(Inventory).filter(
@@ -619,18 +675,33 @@ def harvest_bed(
     if bonus > 0:
         inv.qty = (inv.qty or 0) + bonus
 
-    num_cards, allow_treasure = CARD_DRAW_RULES.get(f"plant_{plant_obj.level}", (1, False))
-    cards = draw_cards(db, num_cards, allow_treasure)
-    plot.required = calculate_norm(db, user, cards) * plot.qty
-    plot.drawn_cards_json = cards_to_json(cards)
-    plot.crystal_color = None
-    plot.crystal_count = None
-
     db.commit()
     db.refresh(pb)
 
     check_and_award(user.vk_id, "plots_count", db)
 
+    return _plant_bed_detail(pb, db, user, plot)
+
+
+@router.post("/{field_id}/plant-beds/{pb_id}/replant", response_model=PlantBedDetailOut)
+def replant_bed(
+    field_id: int,
+    pb_id: int,
+    req: ReplantRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    f = _get_field_or_404(field_id, db)
+    pb = _get_bed_on_field(pb_id, f.id, db)
+
+    plot = db.query(Plot).filter(
+        Plot.plant_bed_id == pb.id, Plot.user_id == user.vk_id
+    ).first()
+    if plot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="В слоте нет дерева")
+
+    _replant_plot(plot, req, user, db)
+    db.refresh(pb)
     return _plant_bed_detail(pb, db, user, plot)
 
 

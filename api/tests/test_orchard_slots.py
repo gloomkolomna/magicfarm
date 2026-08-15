@@ -194,12 +194,18 @@ def test_harvest_tree(admin_client):
         hres = c.post(f"/api/fields/{fid}/plant-beds/{pb_id}/harvest")
     assert hres.status_code == 200, hres.text
     pb = hres.json()
-    assert pb["plot"]["status"] == "planted"
+    assert pb["plot"]["status"] == "await_replant"
     assert pb["plot"]["accumulated"] == 0
     with _player() as c:
         inv_after = c.get("/api/farm/inventory").json()
         after_qty = next((i["qty"] for i in inv_after if i["item_kind"] == "plant" and i["item_id"] == pid), 0)
+        rres = c.post(f"/api/fields/{fid}/plant-beds/{pb_id}/replant", json={"qty": 3})
     assert after_qty >= before_qty + 2
+    assert rres.status_code == 200, rres.text
+    rb = rres.json()
+    assert rb["plot"]["status"] == "planted"
+    assert rb["plot"]["qty"] == 3
+    assert rb["plot"]["required"] > 0
 
 
 def test_harvest_not_grown(admin_client):
