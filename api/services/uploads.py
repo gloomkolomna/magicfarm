@@ -27,16 +27,22 @@ def _read_with_limit(upload: UploadFile, allow_video: bool = False) -> tuple[byt
     elif not ctype.startswith("image/"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Файл должен быть изображением")
 
+    limit = config.UPLOAD_VIDEO_MAX_BYTES if is_video else config.UPLOAD_MAX_BYTES
     buf = bytearray()
     while True:
         chunk = upload.file.read(64 * 1024)
         if not chunk:
             break
         buf += chunk
-        if len(buf) > config.UPLOAD_MAX_BYTES:
+        if len(buf) > limit:
+            if is_video:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Файл слишком большой (макс. {limit // (1024 * 1024)} МБ)",
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Файл слишком большой (макс. {config.UPLOAD_MAX_BYTES // 1024} КБ)",
+                detail=f"Файл слишком большой (макс. {limit // 1024} КБ)",
             )
     return bytes(buf), is_video
 

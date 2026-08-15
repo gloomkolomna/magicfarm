@@ -83,3 +83,58 @@ def test_no_max_size_returns_original():
     result, is_png = _process(buf, max_size=None)
     assert result == buf
     assert is_png is True
+
+
+# ===== Лимиты изображений и видео =====
+
+def _fake_upload(data: bytes, ctype: str):
+    from fastapi import UploadFile
+    from io import BytesIO
+    return UploadFile(file=BytesIO(data), filename="f.bin", headers={"content-type": ctype})
+
+
+def test_video_within_limit_saved(monkeypatch, uploads_tmp):
+    import config
+    monkeypatch.setattr(config, "UPLOAD_VIDEO_MAX_BYTES", 1024 * 1024)
+    from services.uploads import save_upload
+    up = _fake_upload(b"abcd" * 100, "video/mp4")
+    up.filename = "movie.mp4"
+    url = save_upload(up, "gm_test", allow_video=True)
+    assert url.startswith("/api/uploads/gm_test")
+    assert url.endswith(".mp4")
+
+
+def test_video_over_limit_rejected(monkeypatch, uploads_tmp):
+    import config
+    monkeypatch.setattr(config, "UPLOAD_VIDEO_MAX_BYTES", 1024)
+    from services.uploads import save_upload, _read_with_limit
+    from fastapi import HTTPException
+    try:
+        save_upload(_fake_upload(b"z" * 4096, "video/mp4"), "gm_test", allow_video=True)
+        raise AssertionError("ожидались ошибки HTTPException")
+    except HTTPException as e:
+        assert e.status_code == 400
+        assert "МБ" in e.detail
+
+
+def test_image_over_limit_rejected(monkeypatch, uploads_tmp):
+    import config
+    monkeypatch.setattr(config, "UPLOAD_MAX_BYTES", 1024)
+    from services.uploads import save_upload
+    from fastapi import HTTPException
+    try:
+        save_upload(_fake_upload(b"x" * 4096, "image/png"), "gm_test")
+        raise AssertionError("ожидались ошибки HTTPException")
+    except HTTPException as e:
+        assert e.status_code == 400
+        assert "КБ" in e.detail
+
+
+def test_video_not_allowed_without_flag():
+    from services.uploads import save_upload
+    from fastapi import HTTPException
+    try:
+        save_upload(_fake_upload(b"abcd", "video/mp4"), "gm_test")
+        raise AssertionError("ожидались ошибки HTTPException")
+    except HTTPException as e:
+        assert e.status_code == 400

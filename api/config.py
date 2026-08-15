@@ -54,6 +54,7 @@ LOG_RETENTION_DAYS = _env_int("LOG_RETENTION_DAYS", 30)
 UPLOADS_DIR = os.getenv("UPLOADS_DIR", os.path.join(API_DIR, "uploads"))
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 UPLOAD_MAX_BYTES = _env_int("UPLOAD_MAX_BYTES", 8 * 1024 * 1024)
+UPLOAD_VIDEO_MAX_BYTES = _env_int("UPLOAD_VIDEO_MAX_BYTES", 50 * 1024 * 1024)
 
 # ── S3 / Yandex Object Storage ──
 S3_ENABLED = os.getenv("S3_ENABLED", "").strip().lower() in ("1", "true", "yes")
