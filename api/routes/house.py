@@ -13,13 +13,18 @@ from models import (
     HOUSE_CARDS_TO_DRAW, HOUSE_MATERIALS, WITCH_HOUSE_KIND,
 )
 from routes.admin_fields import _get_field_or_404
-from routes.settings import get_house_material_norm
+from routes.settings import get_dice_norm
 from services.achievements import check_and_award
 from services.card_draw import calculate_norm, cards_to_json, draw_cards
 
 router = APIRouter(prefix="/api/fields", tags=["house"])
 
 MAX_DIE = 6
+
+
+def _roll_die(exclude: int | None = None) -> int:
+    values = [v for v in range(1, MAX_DIE + 1) if v != exclude]
+    return random.choice(values)
 
 
 class HouseStateOut(BaseModel):
@@ -116,8 +121,9 @@ def request_material(
 
     remaining = [m for m in HOUSE_MATERIALS if m not in collected]
     hb.current_material = random.choice(remaining)
-    hb.current_die = random.randint(1, MAX_DIE)
-    hb.current_required = get_house_material_norm(db) * hb.current_die
+    hb.current_die = _roll_die(hb.last_die)
+    hb.last_die = hb.current_die
+    hb.current_required = get_dice_norm(user) * hb.current_die
 
     db.commit()
     db.refresh(hb)

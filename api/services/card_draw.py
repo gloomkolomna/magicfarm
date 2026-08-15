@@ -44,8 +44,29 @@ def calculate_norm(db: Session, user, cards: list[dict]) -> int:
         if c.get("is_treasure"):
             total += _treasure_norm(db, user, c["color"])
         else:
-            total += crystal_norm(db, user, c["color"], c["value"])
+            total += crystal_norm(db, user, c["color"]) * c["value"]
     return total
+
+
+def plant_unit_norm(db: Session, user, plant) -> tuple[int, list[dict] | None]:
+    """Стоимость одного растения: кэш пары (игрок, растение) или вытягивание карт.
+
+    Возвращает (норма за одно растение, вытянутые карты либо None при попадании в кэш).
+    """
+    from models import CARD_DRAW_RULES, UserPlantNorm
+
+    cached = db.query(UserPlantNorm).filter(
+        UserPlantNorm.user_id == user.vk_id,
+        UserPlantNorm.plant_id == plant.id,
+    ).first()
+    if cached is not None:
+        return cached.norm_per_unit, None
+
+    num_cards, allow_treasure = CARD_DRAW_RULES.get(f"plant_{plant.level}", (1, False))
+    cards = draw_cards(db, num_cards, allow_treasure)
+    unit = calculate_norm(db, user, cards)
+    db.add(UserPlantNorm(user_id=user.vk_id, plant_id=plant.id, norm_per_unit=unit))
+    return unit, cards
 
 
 def _treasure_norm(db: Session, user, color: str) -> int:

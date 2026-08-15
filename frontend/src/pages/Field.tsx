@@ -71,6 +71,7 @@ export default function FieldPage() {
   const [diceFaceUrls, setDiceFaceUrls] = useState<(string | null)[]>([null, null, null, null, null, null, null]);
   const [houseMaterialUrls, setHouseMaterialUrls] = useState<Record<string, string | null>>({});
   const [houseBuildVideoUrl, setHouseBuildVideoUrl] = useState<string | null>(null);
+  const [houseBuiltImageUrl, setHouseBuiltImageUrl] = useState<string | null>(null);
 
   // Модалка крафта (в построенном шатре).
   const [craftProduct, setCraftProduct] = useState<number | null>(null);
@@ -133,13 +134,14 @@ export default function FieldPage() {
 
   const loadVideo = useCallback(async () => {
     try {
-      const [gm, cards, animals, pets, diceV, houseV, faces, mats] = await Promise.all([
+      const [gm, cards, animals, pets, diceV, houseV, houseImg, faces, mats] = await Promise.all([
         api.gameMediaByCode('card_shuffle').catch(() => null),
         api.crystalCards().catch(() => [] as CrystalCard[]),
         api.animalsAvailable().catch(() => [] as Animal[]),
         api.petsCatalog().catch(() => [] as Pet[]),
         api.gameMediaByCode('dice_roll').catch(() => null),
         api.gameMediaByCode('house_build_video').catch(() => null),
+        api.gameMediaByCode('house_built_image').catch(() => null),
         Promise.all(Array.from({ length: 6 }, (_, i) =>
           api.gameMediaByCode(`dice_face_${i + 1}`).catch(() => null))),
         Promise.all(HOUSE_MATERIALS.map((m) =>
@@ -151,6 +153,7 @@ export default function FieldPage() {
       setPetCatalog(pets || []);
       if (diceV?.url) setDiceVideoUrl(mediaUrl(diceV.url));
       if (houseV?.url) setHouseBuildVideoUrl(mediaUrl(houseV.url));
+      if (houseImg?.url) setHouseBuiltImageUrl(mediaUrl(houseImg.url));
       setDiceFaceUrls([null, ...faces.map((f) => (f?.url ? mediaUrl(f.url) : null))]);
       setHouseMaterialUrls(Object.fromEntries(HOUSE_MATERIALS.map((m, i) => [m.code, mats[i]?.url ? mediaUrl(mats[i]!.url!) : null])));
     } catch {}
@@ -371,7 +374,7 @@ export default function FieldPage() {
     setCraftInfo(null);
     if (id == null) return;
     try {
-      setCraftInfo(await api.productCraftInfo(id));
+      setCraftInfo(await api.productCraftInfo(id, tentModal?.kind ?? undefined));
     } catch {}
   }
 
@@ -384,7 +387,7 @@ export default function FieldPage() {
       const res = await api.craftProduct(prod.id, craftProduct, Number(craftQty) || 1);
       setMsg('✓ Норма выдана!');
       setCraftQty('1');
-      setCraftInfo(await api.productCraftInfo(craftProduct));
+      setCraftInfo(await api.productCraftInfo(craftProduct, tentModal?.kind ?? undefined));
       await load(); await refresh();
       await reloadCraftSessions();
       const p = products.find((x) => x.id === craftProduct);
@@ -1059,6 +1062,11 @@ export default function FieldPage() {
 
               {!showVideo && (
                 <div style={{ borderTop: careCell.plot.norm_revealed ? 'none' : '1px solid var(--border)', paddingTop: careCell.plot.norm_revealed ? 0 : 4 }}>
+                  {!careCell.plot.norm_revealed && !careCell.plot.drawn_cards_json && (
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0' }}>
+                      🌱 Это растение вам знакомо — норма уже известна по первой посадке.
+                    </p>
+                  )}
                   <strong style={{ fontSize: 14 }}>📷 Отчитаться о вышивке</strong>
                   <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>
                     Вышейте норму {careCell.plot.required ?? '?'} крестиков, сделайте фото и отправьте отчёт.
@@ -1239,10 +1247,18 @@ export default function FieldPage() {
                       ? <>{craftInfo.source_product_emoji || '🥚'} {craftInfo.source_product_name}</>
                       : <>{craftInfo.plant_emoji} {craftInfo.plant_name}</>} · на складе: {craftInfo.stock_qty} шт
                   </div>
-                  <div style={{ marginBottom: 4 }}>Норма за 1 товар: {craftInfo.norm_per_unit} ✝️</div>
-                  <div style={{ color: 'var(--text-accent)', fontWeight: 700 }}>
-                    Итого за {Math.max(0, Number(craftQty) || 0)} шт: {craftInfo.norm_per_unit * Math.max(0, Number(craftQty) || 0)} ✝️
-                  </div>
+                  {craftInfo.norm_per_unit > 0 ? (
+                    <>
+                      <div style={{ marginBottom: 4 }}>Норма за 1 товар: {craftInfo.norm_per_unit} ✝️</div>
+                      <div style={{ color: 'var(--text-accent)', fontWeight: 700 }}>
+                        Итого за {Math.max(0, Number(craftQty) || 0)} шт: {craftInfo.norm_per_unit * Math.max(0, Number(craftQty) || 0)} ✝️
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ color: 'var(--danger, #e5484d)' }}>
+                      Задайте нормы производства товара в профиле (Настройки норм) — без них крафт недоступен.
+                    </div>
+                  )}
                 </div>
               )}
               <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Количество товара</label>
@@ -1296,7 +1312,16 @@ export default function FieldPage() {
               </div>
             ) : (
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 10 }}>🏠🎉</div>
+                {houseBuiltImageUrl ? (
+                  <img
+                    src={houseBuiltImageUrl}
+                    alt=""
+                    style={{ width: '100%', maxHeight: '45vh', objectFit: 'contain', borderRadius: 8, marginBottom: 10, cursor: 'pointer' }}
+                    onClick={() => setZoomedImg(houseBuiltImageUrl)}
+                  />
+                ) : (
+                  <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 10 }}>🏠🎉</div>
+                )}
                 <p style={{ fontSize: 15, color: 'var(--success)', fontWeight: 700, marginBottom: 8 }}>Дом ведьмы построен!</p>
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>
                   В подарок начислено на склад: 5 штук растения 1 уровня и 5 штук товара 1 уровня.

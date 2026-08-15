@@ -17,6 +17,11 @@ router = APIRouter(prefix="/api/animals", tags=["animals"])
 MAX_DIE = 6
 
 
+def _roll_die(exclude: int | None = None) -> int:
+    values = [v for v in range(1, MAX_DIE + 1) if v != exclude]
+    return random.choice(values)
+
+
 @router.get("", response_model=list[AnimalOut])
 def list_available_animals(
     db: Session = Depends(get_db),
@@ -232,11 +237,11 @@ def produce(
     if slot.status != "ready":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Загон не готов к производству")
 
-    die = random.randint(1, MAX_DIE)
+    die = _roll_die(slot.last_die)
     slot.last_die = die
 
-    from routes.settings import get_animal_production_norm
-    required = get_animal_production_norm(db) * die
+    from routes.settings import get_dice_norm
+    required = get_dice_norm(user) * die
     slot.required = required
     slot.accumulated = 0
 

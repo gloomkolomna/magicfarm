@@ -241,3 +241,31 @@ def test_animal_build_via_report(admin_client):
         detail = c.get(f"/api/fields/{fid}").json()
         cell = [x for x in detail["cells"] if x["id"] == cell_id][0]
         assert cell["barnyard"]["status"] == "ready"
+
+
+def test_produce_die_no_immediate_repeat(admin_client):
+    sid = _seed_barnyard_slot(123)
+    with make_user_client(123, "player") as c:
+        _credit(c, 50000)
+        r = c.post(f"/api/animals/pens/{sid}/install", json={"animal_id": 1})
+        c.post(f"/api/animals/pens/{sid}/invest", json={"amount": r.json()["required"]})
+        r1 = c.post(f"/api/animals/pens/{sid}/produce").json()
+        r2 = c.post(f"/api/animals/pens/{sid}/produce").json()
+        assert 1 <= r1["die"] <= 6
+        assert 1 <= r2["die"] <= 6
+        assert r2["die"] != r1["die"]
+
+
+def test_produce_uses_personal_dice_norm(admin_client):
+    sid = _seed_barnyard_slot(130)
+    with make_user_client(130, "player") as c:
+        _credit(c, 50000)
+        c.put("/api/crystal-norms/mine", json={"norms": {
+            "green": {"norm": 10, "treasure": 0},
+            "blue": {"norm": 20, "treasure": 0},
+            "violet": {"norm": 30, "treasure": 0},
+        }, "dice_norm": 40})
+        r = c.post(f"/api/animals/pens/{sid}/install", json={"animal_id": 1})
+        c.post(f"/api/animals/pens/{sid}/invest", json={"amount": r.json()["required"]})
+        data = c.post(f"/api/animals/pens/{sid}/produce").json()
+        assert data["required"] == 40 * data["die"]

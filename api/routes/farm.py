@@ -216,6 +216,7 @@ class CraftInfoOut(BaseModel):
 @router.get("/products/{product_id}/craft-info", response_model=CraftInfoOut)
 def product_craft_info(
     product_id: int,
+    production_kind: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -223,7 +224,7 @@ def product_craft_info(
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
 
-    from routes.settings import get_production_norm
+    from routes.settings import get_user_production_norm
 
     if product.plant_id is not None:
         plant_obj = db.query(Plant).filter(Plant.id == product.plant_id).first()
@@ -234,6 +235,15 @@ def product_craft_info(
             Inventory.user_id == user.vk_id, Inventory.plant_id == product.plant_id
         ).first()
 
+        norm = get_user_production_norm(user, plant_obj.level)
+        if norm is not None and production_kind:
+            from models import ProductionTemplate
+            pt = db.query(ProductionTemplate).filter(
+                ProductionTemplate.code == production_kind
+            ).first()
+            crystal = pt.processing_crystal if pt is not None else 0
+            norm = (crystal + plant_obj.level) * norm
+
         return CraftInfoOut(
             source_kind="plant",
             plant_id=plant_obj.id,
@@ -243,7 +253,7 @@ def product_craft_info(
             source_product_name=None,
             source_product_emoji=None,
             stock_qty=(inv.qty or 0) if inv else 0,
-            norm_per_unit=get_production_norm(db, plant_obj.level),
+            norm_per_unit=norm or 0,
         )
 
     from models import Recipe
@@ -266,7 +276,7 @@ def product_craft_info(
         source_product_name=recipe.source_product.name,
         source_product_emoji=recipe.source_product.emoji,
         stock_qty=(inv.qty or 0) if inv else 0,
-        norm_per_unit=get_production_norm(db, recipe.level),
+        norm_per_unit=get_user_production_norm(user, recipe.level) or 0,
     )
 
 
@@ -290,7 +300,7 @@ def craft_product(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Количество товара должно быть ≥ 1")
 
     from models import Recipe
-    from routes.settings import get_production_norm
+    from routes.settings import get_user_production_norm
 
     if product.plant_id is not None:
         plant_obj = db.query(Plant).filter(Plant.id == product.plant_id).first()
@@ -320,8 +330,17 @@ def craft_product(
                 detail="Рецепт не изучен",
             )
 
-        norm_per_unit = get_production_norm(db, plant_obj.level)
-        required = norm_per_unit * req.qty
+        prod_norm = get_user_production_norm(user, plant_obj.level)
+        if prod_norm is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Сначала задайте нормы производства товара в профиле (Настройки норм)",
+            )
+
+        from models import ProductionTemplate
+        pt = db.query(ProductionTemplate).filter(ProductionTemplate.code == pr.kind).first()
+        crystal = pt.processing_crystal if pt is not None else 0
+        required = (crystal + plant_obj.level) * prod_norm * req.qty
 
         cs = CraftSession(
             user_id=user.vk_id, plant_id=product.plant_id, qty=req.qty,
@@ -368,7 +387,13 @@ def craft_product(
             detail="Недостаточно продукции животного на складе",
         )
 
-    required = get_production_norm(db, recipe.level) * req.qty
+    prod_norm = get_user_production_norm(user, recipe.level)
+    if prod_norm is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Сначала задайте нормы производства товара в профиле (Настройки норм)",
+        )
+    required = prod_norm * req.qty
 
     cs = CraftSession(
         user_id=user.vk_id, plant_id=None, source_product_id=recipe.source_product_id,

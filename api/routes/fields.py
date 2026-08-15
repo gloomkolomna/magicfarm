@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_onboarding
-from models import BarnyardSlot, Field, FieldCell, FieldPlant, HouseBuild, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, TentBuild, User, UserPet, MAX_PLOT_QTY, CARD_DRAW_RULES, WITCH_HOUSE_KIND
+from models import BarnyardSlot, Field, FieldCell, FieldPlant, HouseBuild, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, TentBuild, User, UserPet, MAX_PLOT_QTY, WITCH_HOUSE_KIND
 from routes.admin_fields import (
     CellOut, FieldOut, PlantOut, TentOut,
     _field_to_out, _get_field_or_404, _plant_to_out,
@@ -16,7 +16,7 @@ from routes.admin_fields import (
 from routes.farm import PlotOut, _plot_to_out
 from routes.settings import CRYSTAL_COLORS, crystal_norm, get_production_required
 from services.achievements import check_and_award
-from services.card_draw import calculate_norm, cards_to_json, draw_cards
+from services.card_draw import calculate_norm, cards_to_json, draw_cards, plant_unit_norm
 from services.pet_bonuses import apply_pet_bonus_harvest
 
 router = APIRouter(prefix="/api/fields", tags=["fields"])
@@ -377,15 +377,13 @@ def plant_on_cell(
             detail="Это растение уже посажено на другой грядке",
         )
 
-    level_key = f"plant_{plant_obj.level}"
-    num_cards, allow_treasure = CARD_DRAW_RULES.get(level_key, (1, False))
-    cards = draw_cards(db, num_cards, allow_treasure)
-    required = calculate_norm(db, user, cards) * req.qty
+    unit_norm, cards = plant_unit_norm(db, user, plant_obj)
+    required = unit_norm * req.qty
 
     plot = Plot(
         user_id=user.vk_id, plant_id=req.plant_id, qty=req.qty,
         status="planted", accumulated=0, required=required,
-        drawn_cards_json=cards_to_json(cards), cell_id=cell.id,
+        drawn_cards_json=cards_to_json(cards) if cards else None, cell_id=cell.id,
     )
     db.add(plot)
     db.flush()
@@ -492,10 +490,9 @@ def _replant_plot(plot: Plot, req: ReplantRequest, user: User, db: Session) -> N
     plot.norm_revealed = False
 
     plant_obj = plot.plant
-    num_cards, allow_treasure = CARD_DRAW_RULES.get(f"plant_{plant_obj.level}", (1, False))
-    cards = draw_cards(db, num_cards, allow_treasure)
-    plot.required = calculate_norm(db, user, cards) * req.qty
-    plot.drawn_cards_json = cards_to_json(cards)
+    unit_norm, cards = plant_unit_norm(db, user, plant_obj)
+    plot.required = unit_norm * req.qty
+    plot.drawn_cards_json = cards_to_json(cards) if cards else None
     plot.crystal_color = None
     plot.crystal_count = None
 
@@ -612,15 +609,13 @@ def plant_on_bed(
             detail="Это растение уже посажено в другом месте",
         )
 
-    level_key = f"plant_{plant_obj.level}"
-    num_cards, allow_treasure = CARD_DRAW_RULES.get(level_key, (1, False))
-    cards = draw_cards(db, num_cards, allow_treasure)
-    required = calculate_norm(db, user, cards) * req.qty
+    unit_norm, cards = plant_unit_norm(db, user, plant_obj)
+    required = unit_norm * req.qty
 
     plot = Plot(
         user_id=user.vk_id, plant_id=req.plant_id, qty=req.qty,
         status="planted", accumulated=0, required=required,
-        drawn_cards_json=cards_to_json(cards), plant_bed_id=pb.id,
+        drawn_cards_json=cards_to_json(cards) if cards else None, plant_bed_id=pb.id,
     )
     db.add(plot)
     db.flush()

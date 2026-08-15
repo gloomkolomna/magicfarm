@@ -3,28 +3,20 @@ from tests.conftest import make_user_client, make_user_client_no_onboarding
 
 def _full_norms():
     return {
-        "green": {"1": 11, "2": 22, "3": 33, "4": 44, "5": 55},
-        "blue": {"1": 22, "2": 44, "3": 66, "4": 88, "5": 110},
-        "violet": {"1": 33, "2": 66, "3": 99, "4": 132, "5": 165},
+        "green": {"norm": 11, "treasure": 0},
+        "blue": {"norm": 22, "treasure": 0},
+        "violet": {"norm": 33, "treasure": 0},
     }
 
 
-# ===== Пресеты =====
+# ===== Пресеты удалены =====
 
-def test_list_presets(player_client):
-    res = player_client.get("/api/crystal-norms/presets")
-    assert res.status_code == 200
-    rows = res.json()
-    assert len(rows) == 8
-    assert {r["variant"] for r in rows} == {1, 2, 3, 4, 5, 6, 7, 8}
-    for r in rows:
-        assert set(r["norms"].keys()) == {"green", "blue", "violet"}
-        for color in ("green", "blue", "violet"):
-            assert set(r["norms"][color].keys()) == {"1", "2", "3", "4", "5"}
+def test_presets_endpoint_removed(player_client):
+    assert player_client.get("/api/crystal-norms/presets").status_code == 404
 
 
-def test_presets_require_auth(client):
-    assert client.get("/api/crystal-norms/presets").status_code == 401
+def test_apply_preset_endpoint_removed(player_client):
+    assert player_client.post("/api/crystal-norms/mine/preset/2").status_code == 404
 
 
 # ===== Стандарт =====
@@ -33,18 +25,19 @@ def test_get_standard_default(player_client):
     res = player_client.get("/api/crystal-norms/standard")
     assert res.status_code == 200
     norms = res.json()["norms"]
-    # По умолчанию — пресет 1.
-    from routes.settings import VARIANT_TABLES
-    assert norms["green"]["1"] == VARIANT_TABLES[1]["green"][1]
+    from routes.settings import DEFAULT_CARD_NORMS
+    for color in ("green", "blue", "violet"):
+        assert norms[color]["norm"] == DEFAULT_CARD_NORMS[color]
+        assert norms[color]["treasure"] == 0
 
 
 def test_set_standard_admin(admin_client):
     res = admin_client.put("/api/crystal-norms/admin/standard", json={"norms": _full_norms()})
     assert res.status_code == 200
-    assert res.json()["norms"]["blue"]["3"] == 66
+    assert res.json()["norms"]["blue"]["norm"] == 22
 
     res2 = admin_client.get("/api/crystal-norms/standard")
-    assert res2.json()["norms"]["blue"]["3"] == 66
+    assert res2.json()["norms"]["blue"]["norm"] == 22
 
 
 def test_set_standard_player_forbidden(player_client):
@@ -52,20 +45,15 @@ def test_set_standard_player_forbidden(player_client):
     assert res.status_code == 403
 
 
-def test_set_standard_by_preset(admin_client):
-    res = admin_client.put("/api/crystal-norms/admin/standard", json={"preset": 3})
-    assert res.status_code == 200
-    from routes.settings import VARIANT_TABLES
-    assert res.json()["norms"]["violet"]["5"] == VARIANT_TABLES[3]["violet"][5]
-
-
 def test_set_standard_requires_body(admin_client):
     res = admin_client.put("/api/crystal-norms/admin/standard", json={})
-    assert res.status_code == 400
+    assert res.status_code == 422
 
 
-def test_set_standard_invalid_preset(admin_client):
-    res = admin_client.put("/api/crystal-norms/admin/standard", json={"preset": 99})
+def test_set_standard_invalid_value(admin_client):
+    bad = _full_norms()
+    bad["green"]["norm"] = 0
+    res = admin_client.put("/api/crystal-norms/admin/standard", json={"norms": bad})
     assert res.status_code == 400
 
 
@@ -76,6 +64,20 @@ def test_set_standard_missing_color(admin_client):
     assert res.status_code == 422
 
 
+def test_set_standard_with_treasure(admin_client):
+    norms = _full_norms()
+    norms["green"]["treasure"] = 500
+    norms["blue"]["treasure"] = 600
+    norms["violet"]["treasure"] = 700
+    res = admin_client.put("/api/crystal-norms/admin/standard", json={"norms": norms})
+    assert res.status_code == 200
+    data = res.json()["norms"]
+    assert data["green"]["treasure"] == 500
+    assert data["blue"]["treasure"] == 600
+    assert data["violet"]["treasure"] == 700
+    assert data["green"]["norm"] == 11
+
+
 # ===== Мои нормы =====
 
 def test_get_my_norms_new_player_returns_standard():
@@ -84,60 +86,65 @@ def test_get_my_norms_new_player_returns_standard():
     assert res.status_code == 200
     data = res.json()
     assert data["onboarding_done"] is False
-    # Нет персональных норм → отдаётся стандарт (пресет 1).
-    assert "green" in data["norms"]
+    assert data["dice_norm"] == 200
+    from routes.settings import DEFAULT_CARD_NORMS
+    assert data["norms"]["green"]["norm"] == DEFAULT_CARD_NORMS["green"]
 
 
 def test_set_my_norms(player_client):
-    res = player_client.put("/api/crystal-norms/mine", json={"norms": _full_norms()})
+    res = player_client.put(
+        "/api/crystal-norms/mine",
+        json={"norms": _full_norms(), "dice_norm": 150},
+    )
     assert res.status_code == 200
     data = res.json()
     assert data["onboarding_done"] is True
-    assert data["norms"]["blue"]["3"] == 66
+    assert data["norms"]["blue"]["norm"] == 22
+    assert data["dice_norm"] == 150
 
     me = player_client.get("/api/me").json()
     assert me["onboarding_done"] is True
 
     res2 = player_client.get("/api/crystal-norms/mine")
     assert res2.json()["onboarding_done"] is True
-    assert res2.json()["norms"]["blue"]["3"] == 66
+    assert res2.json()["norms"]["blue"]["norm"] == 22
+    assert res2.json()["dice_norm"] == 150
 
 
 def test_set_my_norms_invalid_value(player_client):
     bad = _full_norms()
-    bad["green"]["2"] = 0
-    res = player_client.put("/api/crystal-norms/mine", json={"norms": bad})
+    bad["green"]["norm"] = 0
+    res = player_client.put("/api/crystal-norms/mine", json={"norms": bad, "dice_norm": 150})
     assert res.status_code == 400
 
 
-def test_set_my_norms_missing_count(player_client):
-    bad = {
-        "green": {"1": 10, "2": 20, "3": 30, "4": 40, "5": 50},
-        "blue": {"1": 20, "2": 40, "3": 60, "4": 80},
-        "violet": {"1": 30, "2": 60, "3": 90, "4": 120, "5": 150},
-    }
-    res = player_client.put("/api/crystal-norms/mine", json={"norms": bad})
+def test_set_my_norms_invalid_dice(player_client):
+    res = player_client.put("/api/crystal-norms/mine", json={"norms": _full_norms(), "dice_norm": 0})
     assert res.status_code == 400
 
 
 def test_set_my_norms_missing_color(player_client):
     bad = _full_norms()
     del bad["blue"]
-    res = player_client.put("/api/crystal-norms/mine", json={"norms": bad})
+    res = player_client.put("/api/crystal-norms/mine", json={"norms": bad, "dice_norm": 150})
     assert res.status_code == 422
 
 
-def test_apply_preset(player_client):
-    res = player_client.post("/api/crystal-norms/mine/preset/4")
+def test_treasure_saved_and_returned(player_client):
+    norms = _full_norms()
+    norms["green"]["treasure"] = 400
+    res = player_client.put("/api/crystal-norms/mine", json={"norms": norms, "dice_norm": 150})
     assert res.status_code == 200
-    data = res.json()
-    assert data["onboarding_done"] is True
-    from routes.settings import VARIANT_TABLES
-    assert data["norms"]["violet"]["5"] == VARIANT_TABLES[4]["violet"][5]
+    assert res.json()["norms"]["green"]["treasure"] == 400
+
+    res2 = player_client.get("/api/crystal-norms/mine")
+    assert res2.json()["norms"]["green"]["treasure"] == 400
 
 
-def test_apply_preset_invalid(player_client):
-    assert player_client.post("/api/crystal-norms/mine/preset/99").status_code == 400
+def test_treasure_defaults_to_zero(player_client):
+    res = player_client.put("/api/crystal-norms/mine", json={"norms": _full_norms(), "dice_norm": 150})
+    assert res.status_code == 200
+    assert res.json()["norms"]["green"]["treasure"] == 0
 
 
 # ===== Онбординг-блокировка =====
@@ -157,7 +164,6 @@ def _setup_field(admin_client, monkeypatch):
             pid = p["id"]
             break
     admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [pid]})
-    # По умолчанию новые клетки = empty; сделаем клетку (0,0) грядкой.
     admin_client.put(
         f"/api/admin/fields/{fid}/cells/blocked",
         json={"cells": [{"col": 0, "row": 0}], "kind": "bed"},
@@ -176,14 +182,15 @@ def test_plant_on_cell_blocked_without_onboarding(admin_client, monkeypatch):
 def test_plant_on_cell_allowed_after_onboarding(admin_client, monkeypatch):
     fid, pid = _setup_field(admin_client, monkeypatch)
     with make_user_client_no_onboarding(778, "player") as c:
-        # Проходим онбординг пресетом.
-        assert c.post("/api/crystal-norms/mine/preset/2").status_code == 200
+        assert c.put(
+            "/api/crystal-norms/mine",
+            json={"norms": _full_norms(), "dice_norm": 100},
+        ).status_code == 200
         res = c.post(f"/api/fields/{fid}/cells/0/0/plant", json={"plant_id": pid})
     assert res.status_code == 201
 
 
 def test_start_build_blocked_without_onboarding_impl(admin_client, monkeypatch):
-    # Блокировка онбординга проверяется и на постройке шатра (требует require_onboarding).
     fid = admin_client.post("/api/admin/fields", json={"name": "О", "cols": 4, "rows": 3}).json()["id"]
     tid = admin_client.post(
         f"/api/admin/fields/{fid}/tents",
@@ -197,8 +204,8 @@ def test_start_build_blocked_without_onboarding_impl(admin_client, monkeypatch):
 # ===== crystal_norm использует персональное значение =====
 
 def test_crystal_norm_uses_personal():
-    """crystal_norm возвращает персональное значение × count; без норм — стандарт."""
-    from routes.settings import crystal_norm, VARIANT_TABLES, DEFAULT_VARIANT
+    """crystal_norm возвращает персональную базу за 1 кристалл; без норм — стандарт."""
+    from routes.settings import crystal_norm, DEFAULT_CARD_NORMS
     from models import User, UserCrystalNorm
     from tests.conftest import TestingSessionLocal
 
@@ -209,42 +216,37 @@ def test_crystal_norm_uses_personal():
         s.commit()
         s.refresh(u)
 
-        # Без персональных норм — стандарт (пресет 1).
-        baseline = crystal_norm(s, u, "green", 3)
-        assert baseline == VARIANT_TABLES[DEFAULT_VARIANT]["green"][3] * 3
+        assert crystal_norm(s, u, "green") == DEFAULT_CARD_NORMS["green"]
 
-        # Задаём свою норму green×1 = 999.
         s.add(UserCrystalNorm(user_id=u.vk_id, color="green", count=1, value=999))
         s.commit()
-        assert crystal_norm(s, u, "green", 1) == 999
+        assert crystal_norm(s, u, "green") == 999
 
-        # Другой цвет/количество остаётся стандартным.
-        assert crystal_norm(s, u, "blue", 2) == VARIANT_TABLES[DEFAULT_VARIANT]["blue"][2] * 2
+        assert crystal_norm(s, u, "blue") == DEFAULT_CARD_NORMS["blue"]
     finally:
         s.close()
 
 
-# ===== Treasure =====
+def test_treasure_norm_uses_personal_row():
+    """calculate_norm для карты-сокровища берёт личную норму treasure_<color>."""
+    from models import User, UserCrystalNorm
+    from services.card_draw import calculate_norm
+    from tests.conftest import TestingSessionLocal
 
-def test_set_standard_with_treasure(admin_client):
-    norms = _full_norms()
-    norms["green"]["0"] = 500
-    norms["blue"]["0"] = 600
-    norms["violet"]["0"] = 700
-    res = admin_client.put("/api/crystal-norms/admin/standard", json={"norms": norms})
-    assert res.status_code == 200
-    data = res.json()["norms"]
-    assert data["green"]["0"] == 500
-    assert data["blue"]["0"] == 600
-    assert data["violet"]["0"] == 700
-    assert data["green"]["1"] == 11
+    s = TestingSessionLocal()
+    try:
+        u = User(vk_id=9001, role="player")
+        s.add(u)
+        s.commit()
+        s.refresh(u)
 
+        s.add(UserCrystalNorm(user_id=u.vk_id, color="treasure_green", count=0, value=777))
+        s.commit()
 
-def test_treasure_defaults_to_zero(player_client):
-    norms = _full_norms()
-    res = player_client.put("/api/crystal-norms/mine", json={"norms": norms})
-    assert res.status_code == 200
-    assert res.json()["norms"]["green"]["0"] == 0
+        cards = [{"color": "green", "value": 0, "is_treasure": True}]
+        assert calculate_norm(s, u, cards) == 777
+    finally:
+        s.close()
 
 
 # ===== Norm images =====

@@ -116,7 +116,14 @@ def test_field_cell_has_plant_stage_images(admin_client, uploads_tmp):
 
     from tests.conftest import make_user_client
     with make_user_client(12345, "player") as c:
-        c.post("/api/crystal-norms/mine/preset/1")
+        c.put(
+            "/api/crystal-norms/mine",
+            json={"norms": {
+                "green": {"norm": 10, "treasure": 0},
+                "blue": {"norm": 20, "treasure": 0},
+                "violet": {"norm": 30, "treasure": 0},
+            }, "dice_norm": 200},
+        )
         c.post(f"/api/fields/{fid}/cells/0/0/plant", json={"plant_id": pid})
         detail = c.get(f"/api/fields/{fid}").json()
 

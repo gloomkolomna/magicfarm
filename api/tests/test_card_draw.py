@@ -1,5 +1,5 @@
 from models import User, UserCrystalNorm
-from routes.settings import VARIANT_TABLES, DEFAULT_VARIANT, CRYSTAL_COLORS
+from routes.settings import DEFAULT_CARD_NORMS, CRYSTAL_COLORS
 from services.card_draw import calculate_norm, cards_from_json, cards_to_json, draw_cards
 
 
@@ -10,10 +10,8 @@ def _seed_user(db, vk_id=123):
         db.add(user)
         db.commit()
         db.refresh(user)
-        table = VARIANT_TABLES[DEFAULT_VARIANT]
         for color in CRYSTAL_COLORS:
-            for cnt in range(1, 6):
-                db.add(UserCrystalNorm(user_id=vk_id, color=color, count=cnt, value=table[color][cnt]))
+            db.add(UserCrystalNorm(user_id=vk_id, color=color, count=1, value=DEFAULT_CARD_NORMS[color]))
         db.commit()
     return user
 
@@ -74,7 +72,7 @@ def test_calculate_norm_normal(db):
     user = _seed_user(db)
     cards = [{"color": "green", "value": 3, "is_treasure": False}]
     norm = calculate_norm(db, user, cards)
-    assert norm == 90
+    assert norm == DEFAULT_CARD_NORMS["green"] * 3
 
 
 def test_calculate_norm_multiple_cards(db):
@@ -84,7 +82,7 @@ def test_calculate_norm_multiple_cards(db):
         {"color": "blue", "value": 1, "is_treasure": False},
     ]
     norm = calculate_norm(db, user, cards)
-    assert norm == 60
+    assert norm == DEFAULT_CARD_NORMS["green"] * 2 + DEFAULT_CARD_NORMS["blue"] * 1
 
 
 def test_calculate_norm_treasure_zero_if_not_set(db):

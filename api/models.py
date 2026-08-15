@@ -51,6 +51,7 @@ class ProductionTemplate(Base):
     required = Column(Integer, nullable=False, default=500, server_default="500")
     cards_to_draw = Column(Integer, nullable=False, default=3, server_default="3")
     surcharge = Column(Integer, nullable=False, default=30, server_default="30")
+    processing_crystal = Column(Integer, nullable=False, default=0, server_default="0")
     image_url = Column(String, nullable=True)
 
 
@@ -69,6 +70,13 @@ class User(Base):
     unlocked_pets = Column(Integer, nullable=False, default=0, server_default="0")
     unlocked_plot_level = Column(Integer, nullable=False, default=1, server_default="1")
     unlocked_garden_level = Column(Integer, nullable=False, default=0, server_default="0")
+    dice_norm = Column(Integer, nullable=True)
+    study_norm_l1 = Column(Integer, nullable=True)
+    study_norm_l2 = Column(Integer, nullable=True)
+    study_norm_l3 = Column(Integer, nullable=True)
+    production_norm_l1 = Column(Integer, nullable=True)
+    production_norm_l2 = Column(Integer, nullable=True)
+    production_norm_l3 = Column(Integer, nullable=True)
     onboarding_done = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
@@ -93,6 +101,20 @@ class UserCrystalNorm(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "color", "count", name="uq_usercrystalnorm_user_color_count"),
+    )
+
+
+class UserPlantNorm(Base):
+    __tablename__ = "user_plant_norms"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    plant_id = Column(Integer, ForeignKey("plants.id", ondelete="CASCADE"), nullable=False)
+    norm_per_unit = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "plant_id", name="uq_userplantnorm_user_plant"),
     )
 
 
@@ -397,6 +419,7 @@ class HouseBuild(Base):
     phase = Column(String, nullable=False, default="materials", server_default="materials")
     current_material = Column(String, nullable=True)
     current_die = Column(Integer, nullable=True)
+    last_die = Column(Integer, nullable=True)
     current_required = Column(Integer, nullable=True)
     collected_json = Column(Text, nullable=False, default="[]", server_default="[]")
     cards_json = Column(Text, nullable=True)
@@ -507,6 +530,7 @@ class UserRecipe(Base):
     user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
     recipe_id = Column(Integer, ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
     status = Column(String, nullable=False, default="locked", server_default="locked")
+    required = Column(Integer, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("user_id", "recipe_id", name="uq_userrecipe_user_recipe"),

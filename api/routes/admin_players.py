@@ -367,17 +367,26 @@ def reset_plot_norm(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Грядка не найдена")
 
     from services.card_draw import draw_cards, cards_to_json, calculate_norm
-    from models import Plant as PlantModel
+    from models import CARD_DRAW_RULES, Plant as PlantModel, UserPlantNorm
 
     plant_obj = db.query(PlantModel).filter(PlantModel.id == plot.plant_id).first()
     if plant_obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Растение не найдено")
 
     level_key = f"plant_{plant_obj.level}"
-    num_cards, allow_treasure = __import__("models").CARD_DRAW_RULES.get(level_key, (1, False))
+    num_cards, allow_treasure = CARD_DRAW_RULES.get(level_key, (1, False))
     cards = draw_cards(db, num_cards, allow_treasure)
     plot_user = db.query(User).filter(User.vk_id == vk_id).first()
-    required = calculate_norm(db, plot_user, cards) * plot.qty
+    unit = calculate_norm(db, plot_user, cards)
+    required = unit * plot.qty
+
+    cached = db.query(UserPlantNorm).filter(
+        UserPlantNorm.user_id == vk_id, UserPlantNorm.plant_id == plant_obj.id
+    ).first()
+    if cached is None:
+        cached = UserPlantNorm(user_id=vk_id, plant_id=plant_obj.id)
+        db.add(cached)
+    cached.norm_per_unit = unit
 
     plot.drawn_cards_json = cards_to_json(cards)
     plot.required = required

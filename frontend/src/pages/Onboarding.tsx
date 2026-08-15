@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type CrystalColor, type CrystalNorms, type CrystalPreset } from '../api/endpoints';
+import { api, type CrystalColor, type CrystalNorms } from '../api/endpoints';
 
 const COLORS: { color: CrystalColor; emoji: string; label: string }[] = [
   { color: 'green', emoji: '🟢', label: 'Зелёный' },
@@ -8,11 +8,12 @@ const COLORS: { color: CrystalColor; emoji: string; label: string }[] = [
   { color: 'violet', emoji: '🟣', label: 'Фиолетовый' },
 ];
 
-const COUNTS = [1, 2, 3, 4, 5, 0];
-const COUNT_LABEL: Record<number, string> = { 0: '💎', 1: '×1', 2: '×2', 3: '×3', 4: '×4', 5: '×5' };
-
 function emptyNorms(): CrystalNorms {
-  return { green: {}, blue: {}, violet: {} };
+  return {
+    green: { norm: 0, treasure: 0 },
+    blue: { norm: 0, treasure: 0 },
+    violet: { norm: 0, treasure: 0 },
+  };
 }
 
 function cloneNorms(n: CrystalNorms): CrystalNorms {
@@ -25,47 +26,39 @@ function cloneNorms(n: CrystalNorms): CrystalNorms {
 
 export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
   const { refresh } = useSession();
-  const [presetMap, setPresetMap] = useState<Record<number, CrystalNorms>>({});
   const [norms, setNorms] = useState<CrystalNorms>(emptyNorms());
+  const [diceNorm, setDiceNorm] = useState<number | ''>('');
+  const [studyNorms, setStudyNorms] = useState<{ level1: number | ''; level2: number | ''; level3: number | '' }>({ level1: '', level2: '', level3: '' });
+  const [productionNorms, setProductionNorms] = useState<{ level1: number | ''; level2: number | ''; level3: number | '' }>({ level1: '', level2: '', level3: '' });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  function presetToNorms(p: CrystalPreset): CrystalNorms {
-    const out = emptyNorms();
-    (['green', 'blue', 'violet'] as CrystalColor[]).forEach((color) => {
-      out[color] = {};
-      COUNTS.forEach((cnt) => {
-        out[color][cnt] = Number(p.norms[color]?.[String(cnt)] ?? p.norms[color]?.[cnt] ?? 0);
-      });
-    });
-    return out;
-  }
-
   useEffect(() => {
-    Promise.all([api.crystalPresets(), api.crystalStandard(), api.myCrystalNorms()])
-      .then(([ps, std, mine]) => {
-        const map: Record<number, CrystalNorms> = {};
-        ps.forEach((p) => { map[p.variant] = presetToNorms(p); });
-        setPresetMap(map);
+    Promise.all([api.crystalStandard(), api.myCrystalNorms()])
+      .then(([std, mine]) => {
         setNorms(mine.onboarding_done ? cloneNorms(mine.norms) : cloneNorms(std));
+        setDiceNorm(mine.dice_norm ?? 200);
+        const toField = (v: number | null) => (v == null ? '' : v);
+        setStudyNorms({
+          level1: toField(mine.study_norms?.level1),
+          level2: toField(mine.study_norms?.level2),
+          level3: toField(mine.study_norms?.level3),
+        });
+        setProductionNorms({
+          level1: toField(mine.production_norms?.level1),
+          level2: toField(mine.production_norms?.level2),
+          level3: toField(mine.production_norms?.level3),
+        });
       })
       .catch((e: any) => setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка загрузки')))
       .finally(() => setLoaded(true));
   }, []);
 
-  function setVal(color: CrystalColor, count: number, raw: string) {
+  function setVal(color: CrystalColor, field: 'norm' | 'treasure', raw: string) {
     const n = cloneNorms(norms);
-    const v = raw === '' ? '' : Number(raw);
-    n[color][count] = v as number;
+    n[color][field] = raw === '' ? 0 : Number(raw);
     setNorms(n);
-  }
-
-  function applyPreset(n: number) {
-    const src = presetMap[n];
-    if (!src) return;
-    setNorms(cloneNorms(src));
-    setMsg(null);
   }
 
   function takeStandard() {
@@ -82,8 +75,22 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
 
   function save() {
     setBusy(true);
+    const toNum = (v: number | '') => (v === '' ? null : Number(v));
     api
-      .setMyCrystalNorms(norms)
+      .setMyCrystalNorms(
+        norms,
+        Number(diceNorm) || 200,
+        {
+          level1: toNum(studyNorms.level1),
+          level2: toNum(studyNorms.level2),
+          level3: toNum(studyNorms.level3),
+        },
+        {
+          level1: toNum(productionNorms.level1),
+          level2: toNum(productionNorms.level2),
+          level3: toNum(productionNorms.level3),
+        },
+      )
       .then(async () => {
         if (onSaved) onSaved();
         else await refresh();
@@ -93,39 +100,28 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
       .finally(() => setBusy(false));
   }
 
-  const allFilled = COLORS.every((c) => COUNTS.filter((cnt) => cnt > 0).every((cnt) => Number(norms[c.color][cnt]) >= 1));
+  const allFilled = COLORS.every((c) => Number(norms[c.color].norm) >= 1) && Number(diceNorm) >= 1;
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16 }}>
         Каждое растение и товар требует норму вышивки, измеряемую в крестиках.
-        Норма считается по картам кристаллов: 3 цвета (🟢🔵🟣) и количество кристаллов (1–5).
         Здесь вы задаёте <strong>цену одного кристалла</strong> каждого цвета — итог за карту
-        показан под полем (цена × количество). Потом это можно изменить в любой момент.
+        считается как цена × значение карты (1–5), а при нескольких картах складывается.
+        Ниже — ваша норма за одну точку кубика. Потом всё это можно изменить в любой момент.
       </p>
 
       {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
 
       <div className="fm-card" style={{ marginBottom: 14 }}>
-        <strong>Заполнить готовым набором:</strong>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-          <button className="fm-btn fm-btn-outline" style={{ flex: '1 1 auto' }} disabled={busy} onClick={takeStandard}>
+        <strong>Заполнить стандартом админа:</strong>
+        <div style={{ marginTop: 10 }}>
+          <button className="fm-btn fm-btn-outline" style={{ width: '100%' }} disabled={busy} onClick={takeStandard}>
             ✓ Стандарт админа
           </button>
-          {Object.keys(presetMap).map((k) => (
-            <button
-              key={k}
-              className="fm-btn fm-btn-outline"
-              style={{ minWidth: 64 }}
-              onClick={() => applyPreset(Number(k))}
-              title={`Заполнить пресет ${k}`}
-            >
-              Пресет {k}
-            </button>
-          ))}
         </div>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, marginBottom: 0 }}>
-          Кнопки только заполняют таблицу для предпросмотра. Изменения применяются кнопкой «Сохранить» ниже.
+          Кнопка только заполняет поля для предпросмотра. Изменения применяются кнопкой «Сохранить» ниже.
         </p>
       </div>
 
@@ -136,48 +132,113 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
               <thead>
                 <tr>
                   <th style={{ textAlign: 'left', padding: 6 }}>Цвет</th>
-                  {COUNTS.map((c) => (
-                    <th key={c} style={{ padding: 6, textAlign: 'center' }}>{COUNT_LABEL[c]}</th>
-                  ))}
+                  <th style={{ padding: 6, textAlign: 'center' }}>За 1 кристалл</th>
+                  <th style={{ padding: 6, textAlign: 'center' }}>💎 Сокровище</th>
                 </tr>
               </thead>
               <tbody>
-                {COLORS.map(({ color, emoji, label }) => (
-                  <tr key={color}>
-                    <td style={{ padding: 6 }}>
-                      {emoji} {label}
-                    </td>
-                    {COUNTS.map((cnt) => {
-                      const isTreasure = cnt === 0;
-                      const val = norms[color][cnt];
-                      const num = Number(val);
-                      const total = !isTreasure && Number.isFinite(num) && num >= 1 ? num * cnt : null;
-                      return (
-                        <td key={cnt} style={{ padding: 4, textAlign: 'center' }}>
-                          <input
-                            className="fm-input"
-                            type="number"
-                            min={isTreasure ? 0 : 1}
-                            value={val ?? ''}
-                            onChange={(e) => setVal(color, cnt, e.target.value)}
-                            style={{ width: isTreasure ? 60 : 56, textAlign: 'center', padding: '6px 4px' }}
-                            placeholder={isTreasure ? 'опц.' : ''}
-                          />
-                          {total !== null && (
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                              = {total}
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                {COLORS.map(({ color, emoji, label }) => {
+                  const num = Number(norms[color].norm);
+                  return (
+                    <tr key={color}>
+                      <td style={{ padding: 6 }}>{emoji} {label}</td>
+                      <td style={{ padding: 4, textAlign: 'center' }}>
+                        <input
+                          className="fm-input"
+                          type="number"
+                          min={1}
+                          value={norms[color].norm ?? ''}
+                          onChange={(e) => setVal(color, 'norm', e.target.value)}
+                          style={{ width: 76, textAlign: 'center', padding: '6px 4px' }}
+                        />
+                        {num >= 1 && (
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                            карта ×5 = {num * 5}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: 4, textAlign: 'center' }}>
+                        <input
+                          className="fm-input"
+                          type="number"
+                          min={0}
+                          value={norms[color].treasure ?? 0}
+                          onChange={(e) => setVal(color, 'treasure', e.target.value)}
+                          style={{ width: 76, textAlign: 'center', padding: '6px 4px' }}
+                          placeholder="опц."
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>
-              Под полем — итог за карту (норма × количество кристаллов).
+              Под полем — итог за карту ×5 (норма × значение карты). Сокровище 💎 — фиксированная норма за карту-сокровище.
             </p>
+          </div>
+
+          <div className="fm-card" style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>🎲 Норма за 1 точку кубика</label>
+              <input
+                className="fm-input"
+                type="number"
+                min={1}
+                value={diceNorm}
+                onChange={(e) => setDiceNorm(e.target.value === '' ? '' : Number(e.target.value))}
+                style={{ width: 100, textAlign: 'center' }}
+              />
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, flex: 1, minWidth: 180 }}>
+              Норма для кубиков = это значение × выпавшая грань (дом ведьмы, зверо-двор).
+            </p>
+          </div>
+
+          <div className="fm-card" style={{ marginTop: 14 }}>
+            <strong style={{ fontSize: 14 }}>📖 Нормы изучения рецептов</strong>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>
+              Норма вышивки для изучения рецепта соответствующего уровня (уровень растения). Пока не задана — изучение недоступно.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {([1, 2, 3] as const).map((lvl) => (
+                <div key={lvl}>
+                  <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Ур. {lvl}</label>
+                  <input
+                    className="fm-input"
+                    type="number"
+                    min={1}
+                    placeholder="—"
+                    value={studyNorms[`level${lvl}` as 'level1' | 'level2' | 'level3']}
+                    onChange={(e) => setStudyNorms({ ...studyNorms, [`level${lvl}`]: e.target.value === '' ? '' : Number(e.target.value) } as typeof studyNorms)}
+                    style={{ width: 90, textAlign: 'center' }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="fm-card" style={{ marginTop: 14 }}>
+            <strong style={{ fontSize: 14 }}>🏭 Нормы производства товара</strong>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>
+              Норма переработки растения соответствующего уровня. Считается как (кристалл переработки шатра + уровень растения) × норма × количество. Пока не задана — крафт недоступен.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {([1, 2, 3] as const).map((lvl) => (
+                <div key={lvl}>
+                  <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Ур. {lvl}</label>
+                  <input
+                    className="fm-input"
+                    type="number"
+                    min={1}
+                    placeholder="—"
+                    value={productionNorms[`level${lvl}` as 'level1' | 'level2' | 'level3']}
+                    onChange={(e) => setProductionNorms({ ...productionNorms, [`level${lvl}`]: e.target.value === '' ? '' : Number(e.target.value) } as typeof productionNorms)}
+                    style={{ width: 90, textAlign: 'center' }}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
           <button
@@ -190,7 +251,7 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
           </button>
           {!allFilled && (
             <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: 6 }}>
-              Заполните все 15 полей значениями от 1.
+              Заполните норму каждого цвета (от 1) и норму кубика (от 1).
             </p>
           )}
         </>

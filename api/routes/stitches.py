@@ -204,6 +204,22 @@ def create_report(
                 detail=f"Недостаточно крестиков. Норма крафта: {cs.required}, вы указали {amount}",
             )
 
+    if context_type == "recipe_study" and context_id is not None:
+        from models import UserRecipe
+        ur = db.query(UserRecipe).filter(
+            UserRecipe.user_id == user.vk_id, UserRecipe.recipe_id == context_id
+        ).first()
+        if ur is None or ur.status != "studying":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Рецепт не изучается",
+            )
+        if ur.required is not None and amount < ur.required:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Недостаточно крестиков. Норма изучения: {ur.required}, вы указали {amount}",
+            )
+
     if context_type == "house_material" and context_id is not None:
         from models import HouseBuild
         hb = db.query(HouseBuild).filter(

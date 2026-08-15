@@ -727,6 +727,7 @@ class ProductionTemplateCreate(BaseModel):
     required: int = 500
     cards_to_draw: int = 3
     surcharge: int = 30
+    processing_crystal: int = 0
 
 
 class ProductionTemplateUpdate(BaseModel):
@@ -735,6 +736,7 @@ class ProductionTemplateUpdate(BaseModel):
     required: int | None = None
     cards_to_draw: int | None = None
     surcharge: int | None = None
+    processing_crystal: int | None = None
 
 
 class ProductionTemplateOut(BaseModel):
@@ -745,6 +747,7 @@ class ProductionTemplateOut(BaseModel):
     required: int
     cards_to_draw: int
     surcharge: int
+    processing_crystal: int
     image_url: str | None
 
 
@@ -754,6 +757,7 @@ def _pt_out(pt: ProductionTemplate) -> ProductionTemplateOut:
         required=pt.required,
         cards_to_draw=pt.cards_to_draw,
         surcharge=pt.surcharge,
+        processing_crystal=pt.processing_crystal,
         image_url=pt.image_url,
     )
 
@@ -783,6 +787,7 @@ def create_production_template(
     pt = ProductionTemplate(
         code=code, name=req.name.strip(), emoji=req.emoji,
         required=req.required, cards_to_draw=req.cards_to_draw, surcharge=req.surcharge,
+        processing_crystal=req.processing_crystal,
     )
     db.add(pt)
     db.commit()
@@ -812,6 +817,8 @@ def update_production_template(
         pt.cards_to_draw = req.cards_to_draw
     if req.surcharge is not None:
         pt.surcharge = req.surcharge
+    if req.processing_crystal is not None:
+        pt.processing_crystal = max(0, min(100, req.processing_crystal))
     db.commit()
     db.refresh(pt)
     return _pt_out(pt)

@@ -127,6 +127,31 @@ def test_request_material_repeat_while_pending(admin_client):
     assert res.status_code == 409
 
 
+def test_request_material_die_no_immediate_repeat(admin_client):
+    fid, tid = _make_field_with_house(admin_client)
+    with make_user_client(2010, "player") as c:
+        prev = None
+        for i in range(len(MATERIALS)):
+            st = c.post(f"/api/fields/{fid}/house/{tid}/request-material").json()
+            if prev is not None:
+                assert st["current_die"] != prev
+            prev = st["current_die"]
+            rep = _report(c, st["current_required"] + i * 3, "house_material", st["id"])
+            assert rep.status_code == 201
+
+
+def test_request_material_uses_personal_dice_norm(admin_client):
+    fid, tid = _make_field_with_house(admin_client)
+    with make_user_client(2011, "player") as c:
+        c.put("/api/crystal-norms/mine", json={"norms": {
+            "green": {"norm": 10, "treasure": 0},
+            "blue": {"norm": 20, "treasure": 0},
+            "violet": {"norm": 30, "treasure": 0},
+        }, "dice_norm": 50})
+        st = c.post(f"/api/fields/{fid}/house/{tid}/request-material").json()
+    assert st["current_required"] == 50 * st["current_die"]
+
+
 def test_request_material_requires_onboarding(admin_client):
     fid, tid = _make_field_with_house(admin_client)
     with make_user_client_no_onboarding(2006, "player") as c:

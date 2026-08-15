@@ -8,9 +8,6 @@ const COLORS: { color: CrystalColor; emoji: string; label: string }[] = [
   { color: 'violet', emoji: '🟣', label: 'Фиолетовый' },
 ];
 
-const COUNTS = [1, 2, 3, 4, 5, 0];
-const COUNT_LABEL: Record<number, string> = { 0: '💎', 1: '×1', 2: '×2', 3: '×3', 4: '×4', 5: '×5' };
-
 function cloneNorms(n: CrystalNorms): CrystalNorms {
   return {
     green: { ...n.green },
@@ -36,22 +33,11 @@ export default function CrystalStandardEditor({ disabled }: { disabled: boolean 
     }).catch(() => {});
   }, []);
 
-  function setVal(color: CrystalColor, count: number, raw: string) {
+  function setVal(color: CrystalColor, field: 'norm' | 'treasure', raw: string) {
     if (!norms) return;
     const n = cloneNorms(norms);
-    n[color][count] = raw === '' ? (count === 0 ? 0 : (0 as number)) : Number(raw);
+    n[color][field] = raw === '' ? 0 : Number(raw);
     setNorms(n);
-  }
-
-  async function applyPreset(preset: number) {
-    setBusy(true); setMsg(null);
-    try {
-      const updated = await api.setCrystalStandardPreset(preset);
-      setNorms(cloneNorms(updated));
-      setMsg('✓ Применён пресет ' + preset);
-    } catch (e: any) {
-      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-    } finally { setBusy(false); }
   }
 
   async function save() {
@@ -79,73 +65,78 @@ export default function CrystalStandardEditor({ disabled }: { disabled: boolean 
 
   if (!norms) return <div className="fm-card">Загрузка норм…</div>;
 
-  const allFilled = COLORS.every((c) => COUNTS.filter((cnt) => cnt > 0).every((cnt) => Number(norms[c.color][cnt]) >= 1));
+  const allFilled = COLORS.every((c) => Number(norms[c.color].norm) >= 1);
 
   return (
     <div className="fm-card fm-rise" style={{ gridColumn: '1 / -1' }}>
       <strong>🧵 Стандарт норм кристаллов</strong>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 10px' }}>
-        Норма за 1 кристалл. Это стандарт по умолчанию для новых игроков.
+        Норма за 1 кристалл (итог за карту = норма × значение карты). Это стандарт по умолчанию для новых игроков.
       </p>
 
       {msg && <div style={{ fontSize: 13, marginBottom: 8 }}>{msg}</div>}
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-        {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-          <button key={n} className="fm-btn fm-btn-outline fm-btn-sm" disabled={disabled || busy} onClick={() => applyPreset(n)}>
-            Пресет {n}
-          </button>
-        ))}
-      </div>
 
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr>
               <th style={{ textAlign: 'left', padding: 4 }}>Цвет</th>
-              {COUNTS.map((c) => (
-                <th key={c} style={{ padding: 4, textAlign: 'center' }}>{COUNT_LABEL[c]}</th>
-              ))}
+              <th style={{ padding: 4, textAlign: 'center' }}>За 1 кристалл</th>
+              <th style={{ padding: 4, textAlign: 'center' }}>💎 Сокровище</th>
             </tr>
           </thead>
           <tbody>
-            {COLORS.map(({ color, emoji, label }) => (
-              <tr key={color}>
-                <td style={{ padding: 4 }}>{emoji} {label}</td>
-                {COUNTS.map((cnt) => {
-                  const val = norms[color][cnt] ?? (cnt === 0 ? 0 : '');
-                  const isTreasure = cnt === 0;
-                  const total = !isTreasure && Number(val) >= 1 ? Number(val) * cnt : null;
-                  const imgKey = `${color}_${cnt}`;
-                  const imgUrl = images[imgKey];
-                  return (
-                    <td key={cnt} style={{ padding: 3, textAlign: 'center', verticalAlign: 'top' }}>
-                      <input
-                        className="fm-input"
-                        type="number"
-                        min={isTreasure ? 0 : 1}
-                        value={val ?? ''}
-                        onChange={(e) => setVal(color, cnt, e.target.value)}
-                        style={{ width: isTreasure ? 60 : 52, textAlign: 'center', padding: '5px 3px' }}
-                        placeholder={isTreasure ? 'опц.' : ''}
+            {COLORS.map(({ color, emoji, label }) => {
+              const baseImg = images[`${color}_1`];
+              const treasureImg = images[`${color}_0`];
+              return (
+                <tr key={color}>
+                  <td style={{ padding: 4 }}>{emoji} {label}</td>
+                  <td style={{ padding: 3, textAlign: 'center', verticalAlign: 'top' }}>
+                    <input
+                      className="fm-input"
+                      type="number"
+                      min={1}
+                      value={norms[color].norm ?? ''}
+                      onChange={(e) => setVal(color, 'norm', e.target.value)}
+                      style={{ width: 72, textAlign: 'center', padding: '5px 3px' }}
+                    />
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                      карта ×5 = {(Number(norms[color].norm) || 0) * 5}
+                    </div>
+                    {baseImg && (
+                      <img src={mediaUrl(baseImg)} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 3, marginTop: 3, display: 'block', marginLeft: 'auto', marginRight: 'auto' }} />
+                    )}
+                    <label style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'inline-block' }}>
+                      🖼
+                      <input type="file" accept="image/*" style={{ display: 'none' }}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(color, 1, f); }}
                       />
-                      {!isTreasure && total !== null && (
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>= {total}</div>
-                      )}
-                      {imgUrl && (
-                        <img src={mediaUrl(imgUrl)} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 3, marginTop: 3, display: 'block', marginLeft: 'auto', marginRight: 'auto' }} />
-                      )}
-                      <label style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'inline-block' }}>
-                        🖼
-                        <input type="file" accept="image/*" style={{ display: 'none' }}
-                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(color, cnt, f); }}
-                        />
-                      </label>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                    </label>
+                  </td>
+                  <td style={{ padding: 3, textAlign: 'center', verticalAlign: 'top' }}>
+                    <input
+                      className="fm-input"
+                      type="number"
+                      min={0}
+                      value={norms[color].treasure ?? 0}
+                      onChange={(e) => setVal(color, 'treasure', e.target.value)}
+                      style={{ width: 72, textAlign: 'center', padding: '5px 3px' }}
+                      placeholder="опц."
+                    />
+                    {treasureImg && (
+                      <img src={mediaUrl(treasureImg)} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 3, marginTop: 3, display: 'block', marginLeft: 'auto', marginRight: 'auto' }} />
+                    )}
+                    <label style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'inline-block' }}>
+                      🖼
+                      <input type="file" accept="image/*" style={{ display: 'none' }}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(color, 0, f); }}
+                      />
+                    </label>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

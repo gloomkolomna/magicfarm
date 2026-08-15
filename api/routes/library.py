@@ -65,6 +65,15 @@ def start_study(
     if r is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
 
+    from routes.settings import get_user_study_norm
+
+    study_norm = get_user_study_norm(user, r.level)
+    if study_norm is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Сначала задайте нормы изучения рецептов в профиле (Настройки норм)",
+        )
+
     existing = db.query(UserRecipe).filter(
         UserRecipe.user_id == user.vk_id, UserRecipe.recipe_id == recipe_id
     ).first()
@@ -74,7 +83,7 @@ def start_study(
         if existing.status == "studying":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Рецепт уже изучается")
 
-    ur = UserRecipe(user_id=user.vk_id, recipe_id=recipe_id, status="studying")
+    ur = UserRecipe(user_id=user.vk_id, recipe_id=recipe_id, status="studying", required=study_norm)
     db.add(ur)
     db.commit()
     return _recipe_to_out(r, user.vk_id, db)

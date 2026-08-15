@@ -22,7 +22,7 @@ from sqlalchemy.orm import sessionmaker
 from db import get_db
 from deps import get_current_user
 from models import Base, User, UserCrystalNorm
-from routes.settings import VARIANT_TABLES, DEFAULT_VARIANT, CRYSTAL_COLORS
+from routes.settings import DEFAULT_CARD_NORMS, CRYSTAL_COLORS
 
 engine = create_engine(
     "sqlite:///:memory:",
@@ -57,20 +57,11 @@ def seed_farm():
         ))
         conn.execute(text(
             "INSERT INTO settings (key, value) VALUES "
-            "('crystal_rate_variant', '1'), "
             "('auto_credit', '1'), "
             "('default_plant_qty', '7'), "
             "('production_required', '500'), "
             "('order_reward_per_unit', '5'), "
-            "('production_norm_lvl1', '100'), "
-            "('production_norm_lvl2', '200'), "
-            "('production_norm_lvl3', '300'), "
-            "('study_norm_lvl1', '500'), "
-            "('study_norm_lvl2', '1000'), "
-            "('study_norm_lvl3', '1500'), "
             "('animal_build_norm', '1000'), "
-            "('animal_production_norm', '200'), "
-            "('house_material_norm', '200'), "
             "('sale_price_ratio', '0.5')"
         ))
         conn.execute(text(
@@ -145,11 +136,18 @@ def db():
 
 
 def _seed_default_norms(db, user_id: int) -> None:
-    """Заполняет персональные нормы игрока пресетом по умолчанию (для существующих тестов)."""
-    table = VARIANT_TABLES[DEFAULT_VARIANT]
+    """Заполняет персональные нормы игрока базами по умолчанию (для существующих тестов)."""
     for color in CRYSTAL_COLORS:
-        for cnt in range(1, 6):
-            db.add(UserCrystalNorm(user_id=user_id, color=color, count=cnt, value=table[color][cnt]))
+        db.add(UserCrystalNorm(user_id=user_id, color=color, count=1, value=DEFAULT_CARD_NORMS[color]))
+    u = db.query(User).filter(User.vk_id == user_id).first()
+    if u is not None:
+        u.study_norm_l1 = 500
+        u.study_norm_l2 = 1000
+        u.study_norm_l3 = 1500
+        u.production_norm_l1 = 100
+        u.production_norm_l2 = 200
+        u.production_norm_l3 = 300
+    db.commit()
 
 
 def _make_user_override(vk_id: int, role: str):

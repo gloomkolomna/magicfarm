@@ -36,16 +36,7 @@ const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: 'default_plant_qty', label: 'Кол-во растений в заказе (1–50)', hint: 'По умолчанию при посадке' },
   { key: 'production_required', label: 'Норма цикла производства', hint: 'Крестики за один цикл крафта' },
   { key: 'order_reward_per_unit', label: 'Награда за единицу заказа', hint: 'Монет за 1 товар' },
-  { key: 'production_norm_lvl1', label: 'Норма переработки ур.1', hint: 'Крестиков на 1 растение 1 уровня' },
-  { key: 'production_norm_lvl2', label: 'Норма переработки ур.2', hint: 'Крестиков на 1 растение 2 уровня' },
-  { key: 'production_norm_lvl3', label: 'Норма переработки ур.3', hint: 'Крестиков на 1 растение 3 уровня' },
-  { key: 'study_norm_lvl1', label: 'Норма изучения ур.1', hint: 'Крестиков на изучение рецепта 1 уровня' },
-  { key: 'study_norm_lvl2', label: 'Норма изучения ур.2', hint: 'Крестиков на изучение рецепта 2 уровня' },
-  { key: 'study_norm_lvl3', label: 'Норма изучения ур.3', hint: 'Крестиков на изучение рецепта 3 уровня' },
-  { key: 'animal_production_norm', label: 'Норма продукции животного', hint: 'За 1 ед. продукции (умножается на кубик)' },
-  { key: 'house_material_norm', label: 'Базовая норма стройматериала дома', hint: 'За 1 материал (умножается на кубик)' },
   { key: 'sale_price_ratio', label: 'Коэфф. продажи излишков (0.01–1.0)', hint: 'Доля от полной цены (0.5 = ½)' },
-  { key: 'crystal_rate_variant', label: 'Вариант таблицы норм (1–8)', hint: 'Пресет для глобальных норм кристаллов' },
 ];
 
 export default function AdminPage() {
@@ -235,6 +226,7 @@ export default function AdminPage() {
     { code: 'dice_face_5', kind: 'image', label: '⚄ Грань кубика 5' },
     { code: 'dice_face_6', kind: 'image', label: '⚅ Грань кубика 6' },
     { code: 'house_build_video', kind: 'video', label: '🏠 Видео постройки дома ведьмы' },
+    { code: 'house_built_image', kind: 'image', label: '🏠 Картинка финала дома ведьмы' },
     { code: 'house_material_glass', kind: 'image', label: '🪟 Стройматериал: стекло' },
     { code: 'house_material_wood', kind: 'image', label: '🪵 Стройматериал: древесина' },
     { code: 'house_material_nails', kind: 'image', label: '🔩 Стройматериал: гвозди' },
@@ -1585,6 +1577,7 @@ export default function AdminPage() {
                 { key: 'name', label: 'Название', ph: 'Стол зельеварения' },
                 { key: 'cards_to_draw', label: 'Карт для нормы', options: CARDS_DRAW_OPTIONS },
                 { key: 'surcharge', label: 'Добавочная стоимость', options: SURCHARGE_OPTIONS },
+                { key: 'processing_crystal', label: '💎 Кристалл переработки', ph: '0', type: 'number' },
               ]}
             />
           )}

@@ -103,16 +103,25 @@ export interface UserPotion {
 
 export type CrystalColor = 'green' | 'blue' | 'violet';
 
-export type CrystalNorms = Record<CrystalColor, Record<number, number>>;
+export interface ColorNorms {
+  norm: number;
+  treasure: number;
+}
 
-export interface CrystalPreset {
-  variant: number;
-  norms: Record<CrystalColor, Record<string, number>>;
+export type CrystalNorms = Record<CrystalColor, ColorNorms>;
+
+export interface LevelNorms {
+  level1: number | null;
+  level2: number | null;
+  level3: number | null;
 }
 
 export interface CrystalNormsMine {
   onboarding_done: boolean;
   norms: CrystalNorms;
+  dice_norm: number;
+  study_norms: LevelNorms;
+  production_norms: LevelNorms;
 }
 
 export interface Animal {
@@ -236,6 +245,7 @@ export interface ProductionTemplate {
   required: number;
   cards_to_draw: number;
   surcharge: number;
+  processing_crystal: number;
   image_url: string | null;
 }
 
@@ -552,8 +562,10 @@ export const api = {
     client
       .post<CraftStart>(`/farm/productions/${production_id}/craft`, { product_id, qty })
       .then((r) => r.data),
-  productCraftInfo: (product_id: number) =>
-    client.get<CraftInfo>(`/farm/products/${product_id}/craft-info`).then((r) => r.data),
+  productCraftInfo: (product_id: number, production_kind?: string) =>
+    client.get<CraftInfo>('/farm/products/' + product_id + '/craft-info', {
+      params: production_kind ? { production_kind } : undefined,
+    }).then((r) => r.data),
   craftSessions: () =>
     client.get<CraftSessionInfo[]>('/farm/craft-sessions', { params: { status: 'pending' } }).then((r) => r.data),
   cancelCraftSession: (id: number) =>
@@ -627,14 +639,10 @@ export const api = {
     client.put<Setting>(`/admin/settings/${key}`, { value }).then((r) => r.data),
 
   // ── Нормы кристаллов ──
-  crystalPresets: () =>
-    client.get<CrystalPreset[]>('/crystal-norms/presets').then((r) => r.data),
   crystalStandard: () =>
     client.get<{ norms: CrystalNorms }>('/crystal-norms/standard').then((r) => r.data.norms),
   setCrystalStandard: (norms: CrystalNorms) =>
     client.put<{ norms: CrystalNorms }>('/crystal-norms/admin/standard', { norms }).then((r) => r.data.norms),
-  setCrystalStandardPreset: (preset: number) =>
-    client.put<{ norms: CrystalNorms }>('/crystal-norms/admin/standard', { preset }).then((r) => r.data.norms),
   normImages: () =>
     client.get<NormImage[]>('/crystal-norms/admin/images').then((r) => r.data),
   uploadNormImage: (color: string, count: number, file: File) => {
@@ -644,10 +652,18 @@ export const api = {
   },
   myCrystalNorms: () =>
     client.get<CrystalNormsMine>('/crystal-norms/mine').then((r) => r.data),
-  setMyCrystalNorms: (norms: CrystalNorms) =>
-    client.put<CrystalNormsMine>('/crystal-norms/mine', { norms }).then((r) => r.data),
-  applyMyCrystalPreset: (n: number) =>
-    client.post<CrystalNormsMine>(`/crystal-norms/mine/preset/${n}`).then((r) => r.data),
+  setMyCrystalNorms: (
+    norms: CrystalNorms,
+    diceNorm: number,
+    studyNorms?: { level1: number | null; level2: number | null; level3: number | null },
+    productionNorms?: { level1: number | null; level2: number | null; level3: number | null },
+  ) =>
+    client.put<CrystalNormsMine>('/crystal-norms/mine', {
+      norms,
+      dice_norm: diceNorm,
+      study_norms: studyNorms,
+      production_norms: productionNorms,
+    }).then((r) => r.data),
 
   // ── Питомцы ──
   userPets: () => client.get<any[]>('/pets').then(r => r.data),
