@@ -398,6 +398,67 @@ def reset_plot_norm(
     return _plot_to_out(plot)
 
 
+@router.post("/{vk_id}/restart", response_model=PlayerOut)
+def restart_player(
+    vk_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    """РЕСТАРТ: полное обнуление прогресса игрока (как будто только пришёл в игру)."""
+    from models import (
+        BarnyardSlot, Cauldron, CraftSession, HouseBuild, Inventory, OrderReq,
+        Plot, Production, StitchReport, TentBuild, UserAchievement, UserCrystalNorm,
+        UserPet, UserPlantNorm, UserPotion, UserRecipe,
+    )
+
+    target = db.query(User).filter(User.vk_id == vk_id).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+
+    for model in (
+        UserPlantNorm, UserCrystalNorm, UserAchievement, UserPotion, Cauldron,
+        UserPet, BarnyardSlot, CraftSession, UserRecipe, HouseBuild, TentBuild,
+        OrderReq, Inventory, Production, Plot, StitchReport,
+    ):
+        db.query(model).filter(model.user_id == vk_id).delete(synchronize_session=False)
+
+    target.crosses_balance = 0
+    target.crosses_total = 0
+    target.coins = 0
+    target.round = 1
+    target.level = 0
+    target.unlocked_barnyard = 0
+    target.unlocked_pets = 0
+    target.unlocked_plot_level = 1
+    target.unlocked_garden_level = 0
+    target.onboarding_done = False
+    target.dice_norm = None
+    target.study_norm_l1 = None
+    target.study_norm_l2 = None
+    target.study_norm_l3 = None
+    target.production_norm_l1 = None
+    target.production_norm_l2 = None
+    target.production_norm_l3 = None
+
+    db.commit()
+    db.refresh(target)
+
+    names = resolve_vk_names([target.vk_id])
+    nm = names.get(target.vk_id, {})
+    return PlayerOut(
+        vk_id=target.vk_id,
+        first_name=nm.get("first_name", ""),
+        last_name=nm.get("last_name", ""),
+        role=target.role,
+        crosses_balance=0,
+        crosses_total=0,
+        coins=0,
+        round=1,
+        reports_total=0,
+        created_at=target.created_at.isoformat() if target.created_at else None,
+    )
+
+
 @router.delete("/{vk_id}/plots/{plot_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_player_plot(
     vk_id: int,

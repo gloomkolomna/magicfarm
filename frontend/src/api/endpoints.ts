@@ -862,6 +862,8 @@ export const api = {
     client.get<FieldDetail>(`/admin/players/${vkId}/fields/${fieldId}`).then((r) => r.data),
   adminResetPlotNorm: (vkId: number, plotId: number) =>
     client.post<any>(`/admin/players/${vkId}/plots/${plotId}/reset-norm`).then((r) => r.data),
+  adminRestartPlayer: (vkId: number) =>
+    client.post<Player>(`/admin/players/${vkId}/restart`).then((r) => r.data),
   adminDeletePlayerPlot: (vkId: number, plotId: number) =>
     client.delete(`/admin/players/${vkId}/plots/${plotId}`).then((r) => r.data),
 

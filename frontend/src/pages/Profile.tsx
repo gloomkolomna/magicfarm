@@ -41,11 +41,6 @@ export default function ProfilePage() {
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>всего вышито крестиков</div>
         </div>
         <div className="fm-card" style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 24 }}>✝️</div>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{user.crosses_balance}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>крестиков на балансе</div>
-        </div>
-        <div className="fm-card" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 24 }}>🪙</div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>{user.coins}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>монет заработано</div>

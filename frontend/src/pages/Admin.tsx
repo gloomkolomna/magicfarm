@@ -346,6 +346,25 @@ export default function AdminPage() {
     }
   }
 
+  async function restartPlayer() {
+    if (!selectedPlayer) return;
+    if (!confirm(`Удалить ВЕСЬ прогресс игрока #${selectedPlayer.vk_id} (грядки, склад, заказы, отчёты, достижения, нормы)?`)) return;
+    if (!confirm('Точно? Действие необратимо.')) return;
+    setBusy(true); setMsg(null);
+    try {
+      const updated = await api.adminRestartPlayer(selectedPlayer.vk_id);
+      setSelectedPlayer(updated);
+      setPlayerReports([]);
+      setPlayerDetail(null);
+      try { setPlayerDetail(await api.adminPlayerDetail(selectedPlayer.vk_id)); } catch {}
+      setMsg('✓ Игрок перезапущен: прогресс обнулён');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function openPlayerField(fieldId: number) {
     if (!selectedPlayer) return;
     setBusy(true);
@@ -1221,6 +1240,9 @@ export default function AdminPage() {
                     <h2 style={{ margin: 0, fontSize: 18 }}>
                       {selectedPlayer.first_name || selectedPlayer.last_name ? `${selectedPlayer.first_name} ${selectedPlayer.last_name}`.trim() : `#${selectedPlayer.vk_id}`}
                     </h2>
+                    <button className="fm-btn fm-btn-sm fm-btn-danger" style={{ marginLeft: 'auto' }} disabled={busy} onClick={restartPlayer}>
+                      🔁 РЕСТАРТ
+                    </button>
                   </div>
                   <div className="fm-card" style={{ marginBottom: 14, fontSize: 13 }}>
                     <div>ID: {selectedPlayer.vk_id} · Роль: {selectedPlayer.role}</div>
