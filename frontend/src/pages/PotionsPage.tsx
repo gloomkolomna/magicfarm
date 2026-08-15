@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type Cauldron, type InventoryItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
+import { api, potionBonusLabel, type Cauldron, type InventoryItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
+import { mediaUrl } from '../api/media';
 
 const INGREDIENT_ICON: Record<string, string> = {
   plant: '🌿',
@@ -34,6 +35,7 @@ export default function PotionsPage() {
   const [warehouseLoading, setWarehouseLoading] = useState(false);
 
   const [levelPage, setLevelPage] = useState(0);
+  const [zoomedImg, setZoomedImg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,7 +129,8 @@ export default function PotionsPage() {
     try {
       const potion = await api.brewCauldron(cauldron.id);
       setCauldron(null);
-      setMsg(`✓ Зелье на складе! Бонус: ${potion.bonus_code || '—'}`);
+      const brewed = recipes.find((r) => r.id === potion.recipe_id);
+      setMsg(`✓ Зелье на складе! Бонус: ${potionBonusLabel(brewed?.bonus_code) || '—'}`);
       const pots = await api.userPotions();
       setUserPotions(pots);
       await refresh();
@@ -253,21 +256,34 @@ export default function PotionsPage() {
                 {groupedByLevel[currentLevel].map((r) => (
                   <div key={r.id} className="fm-card fm-rise">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <strong>{r.name}</strong>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                           {r.ingredient_slots.map((s) => INGREDIENT_ICON[s] || s).join(' ')} · {r.ingredient_slots.length} слота
                         </div>
                         {r.bonus_code && (
                           <div className="fm-chip" style={{ background: 'rgba(160,120,220,0.18)', marginTop: 4 }}>
-                            Бонус: {r.bonus_code}
+                            ⚡ {potionBonusLabel(r.bonus_code)}
                           </div>
                         )}
                         <div className="fm-chip" style={{ background: 'rgba(224,168,62,0.18)', marginTop: 2 }}>
                           🪙 {r.reward_coins} монет
                         </div>
                       </div>
+                      {r.image_url && (
+                        <img
+                          src={mediaUrl(r.image_url)}
+                          alt=""
+                          style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, marginLeft: 8 }}
+                          onClick={() => setZoomedImg(mediaUrl(r.image_url!))}
+                        />
+                      )}
                     </div>
+                    {r.description && (
+                      <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
+                        {r.description}
+                      </p>
+                    )}
                     <button
                       className="fm-btn fm-btn-sm"
                       style={{ width: '100%', marginTop: 10 }}
@@ -288,17 +304,25 @@ export default function PotionsPage() {
               <div className="fm-grid">
                 {userPotions.map((p) => (
                   <div key={p.id} className="fm-card" style={{ opacity: p.activated ? 0.7 : 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <strong>{p.potion_name}</strong>
-                        {p.bonus_code && (
+                        {(p.bonus_description || p.bonus_code) && (
                           <div className="fm-chip" style={{ background: 'rgba(160,120,220,0.18)', marginTop: 4 }}>
-                            {p.bonus_code}
+                            ⚡ {p.bonus_description || p.bonus_code}
                           </div>
                         )}
                       </div>
-                      <span className="fm-chip">{p.activated ? 'Активно' : 'Неактивно'}</span>
+                      {p.image_url && (
+                        <img src={mediaUrl(p.image_url)} alt="" style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 8, marginLeft: 8 }} />
+                      )}
+                      <span className="fm-chip" style={{ marginLeft: 6 }}>{p.activated ? 'Активно' : 'Неактивно'}</span>
                     </div>
+                    {p.description && (
+                      <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
+                        {p.description}
+                      </p>
+                    )}
                     {!p.activated && (
                       <button
                         className="fm-btn fm-btn-sm"
@@ -315,6 +339,15 @@ export default function PotionsPage() {
             </>
           )}
         </>
+      )}
+
+      {zoomedImg && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={() => setZoomedImg(null)}
+        >
+          <img src={zoomedImg} alt="" style={{ maxWidth: '90vw', maxHeight: '80vh', borderRadius: 10 }} />
+        </div>
       )}
 
       {warehouseOpen && (

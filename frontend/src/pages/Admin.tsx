@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
+import { api, potionBonusLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import CrystalStandardEditor from '../components/CrystalStandardEditor';
@@ -207,7 +207,7 @@ export default function AdminPage() {
 
   // ── Рецепты зелий ──
   const [potionRecipes, setPotionRecipes] = useState<PotionRecipe[]>([]);
-  const [potionForm, setPotionForm] = useState<PotionRecipeCreate>({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100 });
+  const [potionForm, setPotionForm] = useState<PotionRecipeCreate>({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100, description: '' });
   const [potionEditingId, setPotionEditingId] = useState<number | null>(null);
   const [potionSlotInput, setPotionSlotInput] = useState('');
 
@@ -832,12 +832,22 @@ export default function AdminPage() {
       if (potionEditingId) { await api.adminUpdatePotionRecipe(potionEditingId, potionForm); }
       else { await api.adminCreatePotionRecipe(potionForm); }
       await loadPotionRecipes();
-      setPotionForm({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100 });
+      setPotionForm({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100, description: '' });
       setPotionEditingId(null);
       setMsg('✓ Сохранено');
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
+  async function uploadPotionImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminUploadPotionImage(id, file);
+      await loadPotionRecipes();
+      setMsg('✓ Картинка зелья загружена');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
   async function deletePotionRecipe(id: number) {
     if (!confirm('Удалить рецепт?')) return;
     setBusy(true); setMsg(null);
@@ -899,20 +909,46 @@ export default function AdminPage() {
               </span>
             ))}
           </div>
+          <div style={{ marginBottom: 8 }}>
+            <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Описание действия зелья</label>
+            <textarea
+              className="fm-input"
+              value={potionForm.description || ''}
+              onChange={(e) => setPotionForm({ ...potionForm, description: e.target.value })}
+              placeholder="Например: удваивает урожай с одной грядки"
+              rows={2}
+              style={{ width: '100%' }}
+            />
+          </div>
+          {potionEditingId && (
+            <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer', marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              🖼 Картинка зелья
+              <input type="file" accept="image/*" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPotionImage(potionEditingId, f); }}
+              />
+            </label>
+          )}
           <button className="fm-btn" disabled={busy} onClick={savePotionRecipe}>
             {potionEditingId ? '✎ Сохранить' : '➕ Создать'}
           </button>
-          {potionEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setPotionEditingId(null); setPotionForm({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100 }); }}>Отмена</button>}
+          {potionEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setPotionEditingId(null); setPotionForm({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100, description: '' }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
-          <thead><tr><th>ID</th><th>Название</th><th>Уровень</th><th>Слотов</th><th>Бонус</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Название</th><th>Уровень</th><th>Слотов</th><th>Бонус</th><th>Описание</th><th></th></tr></thead>
           <tbody>
             {potionRecipes.map((r) => (
               <tr key={r.id}>
-                <td>{r.id}</td><td>{r.name}</td><td>{r.level}</td>
-                <td>{r.ingredient_slots.join(', ')}</td><td>{r.bonus_code || '—'}</td>
+                <td>{r.id}</td>
                 <td>
-                  <button className="fm-btn fm-btn-sm" onClick={() => { setPotionEditingId(r.id); setPotionForm({ name: r.name, level: r.level, ingredient_slots: r.ingredient_slots, bonus_code: r.bonus_code, reward_coins: r.reward_coins }); }}>✎</button>
+                  {r.image_url && <img src={mediaUrl(r.image_url)} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, marginRight: 4, verticalAlign: 'middle' }} />}
+                  {r.name}
+                </td>
+                <td>{r.level}</td>
+                <td>{r.ingredient_slots.join(', ')}</td>
+                <td>{potionBonusLabel(r.bonus_code) || '—'}</td>
+                <td style={{ maxWidth: 220 }}>{r.description || '—'}</td>
+                <td>
+                  <button className="fm-btn fm-btn-sm" onClick={() => { setPotionEditingId(r.id); setPotionForm({ name: r.name, level: r.level, ingredient_slots: r.ingredient_slots, bonus_code: r.bonus_code, reward_coins: r.reward_coins, description: r.description || '' }); }}>✎</button>
                   <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deletePotionRecipe(r.id)}>🗑</button>
                 </td>
               </tr>

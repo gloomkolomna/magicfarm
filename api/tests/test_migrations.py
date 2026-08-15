@@ -37,6 +37,11 @@ def migrated_db(tmp_path, monkeypatch):
             CREATE TABLE settings (key VARCHAR PRIMARY KEY, value VARCHAR);
             CREATE TABLE production_templates (id INTEGER PRIMARY KEY, code VARCHAR NOT NULL);
             CREATE TABLE user_recipes (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL);
+            CREATE TABLE potion_recipes (
+                id INTEGER PRIMARY KEY, code VARCHAR NOT NULL, name VARCHAR NOT NULL,
+                level VARCHAR NOT NULL, ingredient_slots TEXT NOT NULL,
+                bonus_code VARCHAR, reward_coins INTEGER NOT NULL DEFAULT 100,
+                image_url VARCHAR);
         """)
         conn.execute("INSERT INTO alembic_version (version_num) VALUES (:r)", {"r": OLD_REV})
         conn.execute("INSERT INTO settings (key, value) VALUES ('house_material_norm', '150')")

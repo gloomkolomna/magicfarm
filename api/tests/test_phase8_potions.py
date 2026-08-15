@@ -156,3 +156,89 @@ def test_admin_player_forbidden(admin_client):
     with make_user_client(123, "player") as c:
         r = c.get("/api/admin/potion-recipes")
         assert r.status_code == 403
+
+
+def _img_bytes():
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (30, 30), (90, 60, 200)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_admin_create_with_description(admin_client):
+    res = admin_client.post("/api/admin/potion-recipes", json={
+        "name": "Эликсир дождя",
+        "level": "green",
+        "ingredient_slots": ["plant_garden"],
+        "bonus_code": "double_garden_harvest",
+        "reward_coins": 120,
+        "description": "Удваивает урожай с одной грядки при сборе.",
+    })
+    assert res.status_code == 201, res.text
+    data = res.json()
+    assert data["description"] == "Удваивает урожай с одной грядки при сборе."
+
+    res2 = admin_client.put(f"/api/admin/potion-recipes/{data['id']}", json={
+        "name": "Эликсир дождя",
+        "level": "green",
+        "ingredient_slots": ["plant_garden"],
+        "bonus_code": "double_garden_harvest",
+        "reward_coins": 130,
+        "description": "Обновлённое описание.",
+    })
+    assert res2.status_code == 200
+    assert res2.json()["description"] == "Обновлённое описание."
+
+
+def test_upload_potion_image_admin(admin_client, uploads_tmp):
+    res = admin_client.put(
+        "/api/admin/potion-recipes/1/image",
+        files={"image": ("p.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+    assert res.status_code == 200
+    assert res.json()["image_url"] is not None
+
+
+def test_upload_potion_image_requires_admin(player_client, uploads_tmp):
+    denied = player_client.put(
+        "/api/admin/potion-recipes/1/image",
+        files={"image": ("p.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+    assert denied.status_code == 403
+
+
+def test_user_potion_shows_bonus_description(admin_client, uploads_tmp):
+    admin_client.put("/api/admin/potion-recipes/1", json={
+        "name": "Сонное пророчество",
+        "level": "green",
+        "ingredient_slots": ["plant_garden", "plant_garden", "plant_garden", "alchemy"],
+        "bonus_code": "skip_plant_stitch",
+        "reward_coins": 100,
+        "description": "Позволяет вырастить растение без вышивки нормы.",
+    })
+    admin_client.put(
+        "/api/admin/potion-recipes/1/image",
+        files={"image": ("p.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+
+    _seed_plant_inventory(123, 1, 5)
+    _seed_product_inventory(123, 1, 5)
+    with make_user_client(123, "player") as c:
+        r = c.post("/api/potions/cauldrons", json={"recipe_id": 1})
+        cid = r.json()["id"]
+        for i in range(3):
+            c.post(f"/api/potions/cauldrons/{cid}/slot/{i}", json={"item_kind": "plant", "item_id": 1})
+        c.post(f"/api/potions/cauldrons/{cid}/slot/3", json={"item_kind": "product", "item_id": 1})
+        c.post(f"/api/potions/cauldrons/{cid}/brew")
+
+        potions = c.get("/api/potions").json()
+        assert len(potions) == 1
+        p = potions[0]
+        assert p["bonus_description"] == "Растение без отшива нормы"
+        assert p["description"] == "Позволяет вырастить растение без вышивки нормы."
+        assert p["image_url"] is not None
+
+        recipes = c.get("/api/potions/recipes").json()
+        rec = [r2 for r2 in recipes if r2["id"] == 1][0]
+        assert rec["description"] == "Позволяет вырастить растение без вышивки нормы."
+        assert rec["image_url"] is not None

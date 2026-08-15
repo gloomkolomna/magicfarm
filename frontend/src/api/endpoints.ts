@@ -66,7 +66,31 @@ export interface PotionRecipe {
   ingredient_slots: string[];
   bonus_code: string | null;
   reward_coins: number;
+  description: string | null;
   image_url: string | null;
+}
+
+export const POTION_BONUS_LABELS: Record<string, string> = {
+  double_garden_harvest: '×2 урожай с грядки',
+  double_orchard_harvest: '×2 урожай из сада',
+  double_animal_product: '×2 продукция животного',
+  skip_plant_stitch: 'Растение без отшива нормы',
+  early_level_up: '+1 уровень маршрутного листа',
+  double_order_reward: '×2 награда за заказ',
+  free_pet: 'Бесплатный питомец',
+  extra_barnyard_slot: '+1 загон зверо-двора',
+  bonus_sewing_product: '+1 товар портнихи',
+  bonus_workshop_product: '+1 товар мастерской',
+  bonus_alchemy_product: '+1 товар зельеварения',
+  skip_animal_stitch: 'Животное без отшива нормы',
+  unlock_garden_l3: 'Грядки 3 уровня',
+  unlock_orchard_l3: 'Сады 3 уровня',
+  partial_order: 'Неполное выполнение заказа',
+};
+
+export function potionBonusLabel(code: string | null | undefined): string | null {
+  if (!code) return null;
+  return POTION_BONUS_LABELS[code] || code;
 }
 
 export interface PotionRecipeCreate {
@@ -75,6 +99,7 @@ export interface PotionRecipeCreate {
   ingredient_slots: string[];
   bonus_code?: string | null;
   reward_coins?: number;
+  description?: string | null;
 }
 
 export interface CauldronSlot {
@@ -98,6 +123,9 @@ export interface UserPotion {
   potion_recipe_id: number;
   potion_name: string;
   bonus_code: string | null;
+  bonus_description: string | null;
+  description: string | null;
+  image_url: string | null;
   activated: boolean;
 }
 
@@ -917,6 +945,11 @@ export const api = {
     client.get<PotionRecipe[]>('/admin/potion-recipes').then((r) => r.data),
   adminCreatePotionRecipe: (data: PotionRecipeCreate) =>
     client.post<PotionRecipe>('/admin/potion-recipes', data).then((r) => r.data),
+  adminUploadPotionImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<PotionRecipe>(`/admin/potion-recipes/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
   adminUpdatePotionRecipe: (id: number, data: PotionRecipeCreate) =>
     client.put<PotionRecipe>(`/admin/potion-recipes/${id}`, data).then((r) => r.data),
   adminDeletePotionRecipe: (id: number) =>
@@ -934,7 +967,7 @@ export const api = {
   clearCauldronSlot: (cauldronId: number, slotIndex: number) =>
     client.delete(`/potions/cauldrons/${cauldronId}/slot/${slotIndex}`).then((r) => r.data),
   brewCauldron: (cauldronId: number) =>
-    client.post<UserPotion>(`/potions/cauldrons/${cauldronId}/brew`).then((r) => r.data),
+    client.post<Cauldron>(`/potions/cauldrons/${cauldronId}/brew`).then((r) => r.data),
   userPotions: () =>
     client.get<UserPotion[]>('/potions').then((r) => r.data),
   activatePotion: (id: number) =>

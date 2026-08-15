@@ -631,6 +631,7 @@ class PotionRecipe(Base):
     ingredient_slots = Column(Text, nullable=False)
     bonus_code = Column(String, nullable=True)
     reward_coins = Column(Integer, nullable=False, default=100, server_default="100")
+    description = Column(Text, nullable=True)
     image_url = Column(String, nullable=True)
 
 

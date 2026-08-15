@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -9,8 +9,33 @@ from db import get_db
 from deps import get_current_user, require_role
 from models import Cauldron, CauldronSlot, Inventory, PotionRecipe, User, UserPotion
 from services.achievements import check_and_award
+from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/potions", tags=["potions"])
+
+POTION_BONUS_LABELS = {
+    "double_garden_harvest": "×2 урожай с грядки",
+    "double_orchard_harvest": "×2 урожай из сада",
+    "double_animal_product": "×2 продукция животного",
+    "skip_plant_stitch": "Растение без отшива нормы",
+    "early_level_up": "+1 уровень маршрутного листа",
+    "double_order_reward": "×2 награда за заказ",
+    "free_pet": "Бесплатный питомец",
+    "extra_barnyard_slot": "+1 загон зверо-двора",
+    "bonus_sewing_product": "+1 товар портнихи",
+    "bonus_workshop_product": "+1 товар мастерской",
+    "bonus_alchemy_product": "+1 товар зельеварения",
+    "skip_animal_stitch": "Животное без отшива нормы",
+    "unlock_garden_l3": "Грядки 3 уровня",
+    "unlock_orchard_l3": "Сады 3 уровня",
+    "partial_order": "Неполное выполнение заказа",
+}
+
+
+def _bonus_label(code: str | None) -> str | None:
+    if not code:
+        return None
+    return POTION_BONUS_LABELS.get(code, code)
 
 
 class PotionRecipeOut(BaseModel):
@@ -21,6 +46,7 @@ class PotionRecipeOut(BaseModel):
     ingredient_slots: list[str]
     bonus_code: str | None
     reward_coins: int
+    description: str | None
     image_url: str | None
 
 
@@ -29,7 +55,7 @@ def _recipe_out(r: PotionRecipe) -> PotionRecipeOut:
     return PotionRecipeOut(
         id=r.id, code=r.code, name=r.name, level=r.level,
         ingredient_slots=slots, bonus_code=r.bonus_code,
-        reward_coins=r.reward_coins, image_url=r.image_url,
+        reward_coins=r.reward_coins, description=r.description, image_url=r.image_url,
     )
 
 
@@ -48,6 +74,9 @@ class UserPotionOut(BaseModel):
     potion_recipe_id: int
     potion_name: str
     bonus_code: str | None
+    bonus_description: str | None
+    description: str | None
+    image_url: str | None
     activated: bool
     acquired_at: str | None
 
@@ -357,7 +386,10 @@ def list_user_potions(
         result.append(UserPotionOut(
             id=up.id, potion_recipe_id=up.potion_recipe_id,
             potion_name=recipe.name if recipe else "?",
-            bonus_code=up.bonus_code, activated=up.activated,
+            bonus_code=up.bonus_code, bonus_description=_bonus_label(up.bonus_code),
+            description=recipe.description if recipe else None,
+            image_url=recipe.image_url if recipe else None,
+            activated=up.activated,
             acquired_at=up.acquired_at.isoformat() if up.acquired_at else None,
         ))
     return result
@@ -383,7 +415,10 @@ def activate_potion(
     return UserPotionOut(
         id=up.id, potion_recipe_id=up.potion_recipe_id,
         potion_name=recipe.name if recipe else "?",
-        bonus_code=up.bonus_code, activated=up.activated,
+        bonus_code=up.bonus_code, bonus_description=_bonus_label(up.bonus_code),
+        description=recipe.description if recipe else None,
+        image_url=recipe.image_url if recipe else None,
+        activated=up.activated,
         acquired_at=up.acquired_at.isoformat() if up.acquired_at else None,
     )
 
@@ -399,6 +434,7 @@ class PotionRecipeCreate(BaseModel):
     ingredient_slots: list[str]
     bonus_code: str | None = None
     reward_coins: int = 100
+    description: str | None = None
 
 
 @admin_router.get("", response_model=list[PotionRecipeOut])
@@ -423,6 +459,7 @@ def admin_create(
         code=code, name=req.name, level=req.level,
         ingredient_slots=json.dumps(req.ingredient_slots, ensure_ascii=False),
         bonus_code=req.bonus_code, reward_coins=req.reward_coins,
+        description=req.description,
     )
     db.add(r)
     db.commit()
@@ -445,6 +482,24 @@ def admin_update(
     r.ingredient_slots = json.dumps(req.ingredient_slots, ensure_ascii=False)
     r.bonus_code = req.bonus_code
     r.reward_coins = req.reward_coins
+    r.description = req.description
+    db.commit()
+    db.refresh(r)
+    return _recipe_out(r)
+
+
+@admin_router.put("/{recipe_id}/image", response_model=PotionRecipeOut)
+def admin_upload_image(
+    recipe_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    r = db.query(PotionRecipe).filter(PotionRecipe.id == recipe_id).first()
+    if r is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
+    remove_upload(r.image_url)
+    r.image_url = save_upload(image, f"potion_{r.id}", max_size=400)
     db.commit()
     db.refresh(r)
     return _recipe_out(r)
