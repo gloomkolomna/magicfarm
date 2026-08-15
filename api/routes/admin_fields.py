@@ -478,6 +478,11 @@ def create_tent(
     user: User = Depends(require_role("admin")),
 ):
     f = _get_field_or_404(field_id, db)
+    if kind == WITCH_HOUSE_KIND and f.field_kind != "house":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Дом ведьмы размещается только на локациях типа «Дома»",
+        )
     tmpl = None
     if kind != WITCH_HOUSE_KIND:
         tmpl = db.query(ProductionTemplate).filter(ProductionTemplate.code == kind).first()

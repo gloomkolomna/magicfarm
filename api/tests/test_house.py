@@ -15,7 +15,7 @@ def _img_bytes():
 
 
 def _make_field_with_house(admin_client):
-    fid = admin_client.post("/api/admin/fields", json={"name": "Поляна ведьмы", "cols": 4, "rows": 3}).json()["id"]
+    fid = admin_client.post("/api/admin/fields", json={"name": "Поляна ведьмы", "cols": 4, "rows": 3, "field_kind": "house"}).json()["id"]
     res = admin_client.post(
         f"/api/admin/fields/{fid}/tents",
         data={"name": "Дом ведьмы", "kind": "witch_house", "col1": "1", "row1": "1", "col2": "2", "row2": "2"},
@@ -58,6 +58,16 @@ def test_create_tent_requires_admin(player_client):
         data={"name": "Дом", "kind": "witch_house", "col1": "0", "row1": "0", "col2": "1", "row2": "1"},
     )
     assert res.status_code == 403
+
+
+def test_create_witch_house_only_on_house_field(admin_client):
+    fid = admin_client.post("/api/admin/fields", json={"name": "Огород", "cols": 4, "rows": 3}).json()["id"]
+    res = admin_client.post(
+        f"/api/admin/fields/{fid}/tents",
+        data={"name": "Дом ведьмы", "kind": "witch_house", "col1": "0", "row1": "0", "col2": "1", "row2": "1"},
+    )
+    assert res.status_code == 400
+    assert "«Дома»" in res.json()["detail"]
 
 
 # ===== состояние дома =====

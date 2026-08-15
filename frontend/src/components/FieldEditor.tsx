@@ -433,7 +433,6 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             <BrushBtn active={brush === 'pet'} onClick={() => setBrush('pet')}>🐾 Питомец</BrushBtn>
             <BrushBtn active={brush === 'barnyard'} onClick={() => setBrush('barnyard')}>🐄 Скотный двор</BrushBtn>
             <BrushBtn active={brush === 'tent'} onClick={() => setBrush('tent')}>⛺ Производство</BrushBtn>
-            <BrushBtn active={brush === 'house'} onClick={() => setBrush('house')}>🏠 Дом ведьмы</BrushBtn>
           </div>
         );
       })()}
