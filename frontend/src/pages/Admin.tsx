@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, potionBonusLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
+import { api, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import CrystalStandardEditor from '../components/CrystalStandardEditor';
@@ -905,7 +905,7 @@ export default function AdminPage() {
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
             {potionForm.ingredient_slots.map((s, i) => (
               <span key={i} className="fm-card" style={{ padding: '2px 8px', fontSize: 13, cursor: 'pointer' }} onClick={() => setPotionForm({ ...potionForm, ingredient_slots: potionForm.ingredient_slots.filter((_, j) => j !== i) })}>
-                {s} ✕
+                {potionIngredientLabel(s)} ✕
               </span>
             ))}
           </div>
@@ -944,7 +944,7 @@ export default function AdminPage() {
                   {r.name}
                 </td>
                 <td>{r.level}</td>
-                <td>{r.ingredient_slots.join(', ')}</td>
+                <td>{r.ingredient_slots.map(potionIngredientLabel).join(', ')}</td>
                 <td>{potionBonusLabel(r.bonus_code) || '—'}</td>
                 <td style={{ maxWidth: 220 }}>{r.description || '—'}</td>
                 <td>

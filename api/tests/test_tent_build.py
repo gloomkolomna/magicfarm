@@ -242,3 +242,47 @@ def test_tent_build_via_report(admin_client):
         detail = c.get(f"/api/fields/{fid}").json()
         tent = [t for t in detail["tents"] if t["id"] == tid][0]
         assert tent["build_status"] == "built"
+
+
+def test_two_tents_same_kind_no_duplicate_production(admin_client):
+    """Достройка второго шатра того же вида не должна падать на UNIQUE(user_id, kind)."""
+    tmpl = admin_client.post("/api/admin/catalog/production-templates", json={
+        "name": "Шатёр зельеварения", "required": 500, "cards_to_draw": 3, "surcharge": 30,
+    }).json()
+    kind_code = tmpl["code"]
+
+    fid = admin_client.post("/api/admin/fields", json={"name": "Два шатра", "cols": 5, "rows": 3}).json()["id"]
+    t1 = admin_client.post(
+        f"/api/admin/fields/{fid}/tents",
+        data={"name": "Шатёр 1", "kind": kind_code, "col1": "0", "row1": "0", "col2": "1", "row2": "1"},
+    ).json()["id"]
+    t2 = admin_client.post(
+        f"/api/admin/fields/{fid}/tents",
+        data={"name": "Шатёр 2", "kind": kind_code, "col1": "3", "row1": "0", "col2": "4", "row2": "1"},
+    ).json()["id"]
+
+    with make_user_client(1040, "player") as c:
+        r1 = c.post(f"/api/fields/{fid}/tents/{t1}/start-build").json()
+        rep1 = c.post(
+            "/api/stitches/reports",
+            data={"amount": str(r1["required"]), "context_type": "tent_build", "context_id": str(t1)},
+            files=[("photo_after", ("a.png", io.BytesIO(_img_bytes()), "image/png"))],
+        )
+        assert rep1.status_code == 201, rep1.text
+
+        r2 = c.post(f"/api/fields/{fid}/tents/{t2}/start-build").json()
+        rep2 = c.post(
+            "/api/stitches/reports",
+            data={"amount": str(r2["required"] + 5), "context_type": "tent_build", "context_id": str(t2)},
+            files=[("photo_after", ("b.png", io.BytesIO(_img_bytes()), "image/png"))],
+        )
+        assert rep2.status_code == 201, rep2.text
+
+        detail = c.get(f"/api/fields/{fid}").json()
+        statuses = {t["id"]: t["build_status"] for t in detail["tents"]}
+        assert statuses[t1] == "built"
+        assert statuses[t2] == "built"
+
+        prods = c.get("/api/farm/productions").json()
+        same_kind = [p for p in prods if p["kind"] == kind_code]
+        assert len(same_kind) == 1

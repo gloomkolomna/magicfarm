@@ -93,6 +93,34 @@ export function potionBonusLabel(code: string | null | undefined): string | null
   return POTION_BONUS_LABELS[code] || code;
 }
 
+export const POTION_INGREDIENT_ICONS: Record<string, string> = {
+  plant: '🌿',
+  product: '📦',
+  plant_garden: '🌱',
+  plant_orchard: '🍎',
+  animal_product: '🐄',
+  workshop: '🔨',
+  sewing: '🧵',
+  alchemy: '🔮',
+  barnyard: '🏚️',
+};
+
+export const POTION_INGREDIENT_LABELS: Record<string, string> = {
+  plant: 'Растение',
+  product: 'Товар',
+  plant_garden: 'Растение (грядка)',
+  plant_orchard: 'Растение (сад)',
+  animal_product: 'Продукция животного',
+  workshop: 'Товар мастерской',
+  sewing: 'Товар портнихи',
+  alchemy: 'Товар зельеварения',
+  barnyard: 'Товар скотного двора',
+};
+
+export function potionIngredientLabel(code: string): string {
+  return POTION_INGREDIENT_LABELS[code] || code;
+}
+
 export interface PotionRecipeCreate {
   name: string;
   level: string;

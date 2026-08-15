@@ -7,18 +7,34 @@ import MiniAppShell from './components/MiniAppShell';
 import { isAdminAllowed } from './auth/adminGate';
 import { installGlobalErrorReporters } from './api/vkLogger';
 
-const OrdersPage = lazy(() => import('./pages/Orders'));
-const ProfilePage = lazy(() => import('./pages/Profile'));
-const AdminPage = lazy(() => import('./pages/Admin'));
-const FieldsPage = lazy(() => import('./pages/Fields'));
-const FieldPage = lazy(() => import('./pages/Field'));
-const InventoryPage = lazy(() => import('./pages/Inventory'));
-const LibraryPage = lazy(() => import('./pages/Library'));
-const BarnyardPage = lazy(() => import('./pages/Barnyard'));
-const PetsPage = lazy(() => import('./pages/PetsPage'));
-const PotionsPage = lazy(() => import('./pages/PotionsPage'));
-const AchievementsPage = lazy(() => import('./pages/Achievements'));
-const Onboarding = lazy(() => import('./pages/Onboarding'));
+function reloadOnStaleChunk(err: unknown): never {
+  const msg = String((err as Error)?.message || '');
+  if (msg.includes('Failed to fetch dynamically imported module')) {
+    try {
+      if (!sessionStorage.getItem('farm_chunk_reload')) {
+        sessionStorage.setItem('farm_chunk_reload', '1');
+        window.location.reload();
+      }
+    } catch { /* ignore */ }
+  }
+  throw err;
+}
+
+const lazyPage = (load: () => Promise<{ default: React.ComponentType }>) =>
+  lazy(() => load().catch(reloadOnStaleChunk));
+
+const OrdersPage = lazyPage(() => import('./pages/Orders'));
+const ProfilePage = lazyPage(() => import('./pages/Profile'));
+const AdminPage = lazyPage(() => import('./pages/Admin'));
+const FieldsPage = lazyPage(() => import('./pages/Fields'));
+const FieldPage = lazyPage(() => import('./pages/Field'));
+const InventoryPage = lazyPage(() => import('./pages/Inventory'));
+const LibraryPage = lazyPage(() => import('./pages/Library'));
+const BarnyardPage = lazyPage(() => import('./pages/Barnyard'));
+const PetsPage = lazyPage(() => import('./pages/PetsPage'));
+const PotionsPage = lazyPage(() => import('./pages/PotionsPage'));
+const AchievementsPage = lazyPage(() => import('./pages/Achievements'));
+const Onboarding = lazyPage(() => import('./pages/Onboarding'));
 
 const zoomed = { zoom: 'var(--app-scale)', width: 'calc(100% / var(--app-scale))', margin: '0 auto' } as const;
 
@@ -57,6 +73,10 @@ function App() {
   const { user, loading: sessionLoading } = useSession();
 
   useEffect(() => { installGlobalErrorReporters(); }, []);
+
+  useEffect(() => {
+    try { sessionStorage.removeItem('farm_chunk_reload'); } catch { /* ignore */ }
+  }, []);
 
   if (loading) return <><Background /><Skeleton /></>;
   if (!isAdminAllowed(vkUserId)) return <><Background /><StubPage /></>;

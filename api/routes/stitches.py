@@ -92,7 +92,7 @@ def _process_context(report: "StitchReport", db: Session) -> None:
                 if t is not None:
                     from routes.settings import get_production_required
                     exists = db.query(Production).filter(
-                        Production.user_id == report.user_id, Production.tent_id == t.id
+                        Production.user_id == report.user_id, Production.kind == t.kind
                     ).first()
                     if exists is None:
                         db.add(Production(

@@ -1,22 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, potionBonusLabel, type Cauldron, type InventoryItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
+import { api, potionBonusLabel, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type InventoryItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 
-const INGREDIENT_ICON: Record<string, string> = {
-  plant: '🌿',
-  product: '📦',
-};
-
-const INGREDIENT_LABEL: Record<string, string> = {
-  plant: 'Растение',
-  product: 'Товар',
-};
+function ingredientSummary(slots: string[]): string {
+  const counts = new Map<string, number>();
+  for (const s of slots) counts.set(s, (counts.get(s) || 0) + 1);
+  return Array.from(counts.entries())
+    .map(([s, n]) => `${INGREDIENT_ICON[s] || '❓'} ${INGREDIENT_LABEL[s] || s}${n > 1 ? ` ×${n}` : ''}`)
+    .join(' · ');
+}
 
 const LEVEL_LABELS: Record<string, string> = {
-  '1': 'Ⅰ',
-  '2': 'Ⅱ',
-  '3': 'Ⅲ',
+  green: '🟢 Простые',
+  blue: '🔵 Средние',
+  violet: '🟣 Сложные',
 };
 
 export default function PotionsPage() {
@@ -235,13 +233,13 @@ export default function PotionsPage() {
           <h2 style={{ fontSize: 16, marginBottom: 10 }}>Рецепты</h2>
 
           {totalLevelPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <button className="fm-card" disabled={safeLevelPage === 0} onClick={() => setLevelPage(safeLevelPage - 1)} style={{ cursor: safeLevelPage === 0 ? 'default' : 'pointer', opacity: safeLevelPage === 0 ? 0.4 : 1, padding: '6px 14px', fontSize: 18 }}>◀</button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, background: 'linear-gradient(180deg, var(--leaf) 0%, var(--grass) 100%)', border: '1px solid var(--grass-deep)', borderRadius: 'var(--radius-md)', padding: '8px 10px', color: '#1a2414' }}>
+              <button disabled={safeLevelPage === 0} onClick={() => setLevelPage(safeLevelPage - 1)} style={{ cursor: safeLevelPage === 0 ? 'default' : 'pointer', opacity: safeLevelPage === 0 ? 0.4 : 1, padding: '6px 14px', fontSize: 18, background: 'transparent', border: 'none', color: 'inherit' }}>◀</button>
               <span style={{ fontWeight: 600 }}>
-                {currentLevel === 'green' ? '🟢 Простые' : currentLevel === 'blue' ? '🔵 Средние' : currentLevel === 'violet' ? '🟣 Сложные' : currentLevel}
+                {LEVEL_LABELS[currentLevel] || currentLevel}
                 {cauldronMaterial && ` (${cauldronMaterial})`}
               </span>
-              <button className="fm-card" disabled={safeLevelPage >= totalLevelPages - 1} onClick={() => setLevelPage(safeLevelPage + 1)} style={{ cursor: safeLevelPage >= totalLevelPages - 1 ? 'default' : 'pointer', opacity: safeLevelPage >= totalLevelPages - 1 ? 0.4 : 1, padding: '6px 14px', fontSize: 18 }}>▶</button>
+              <button disabled={safeLevelPage >= totalLevelPages - 1} onClick={() => setLevelPage(safeLevelPage + 1)} style={{ cursor: safeLevelPage >= totalLevelPages - 1 ? 'default' : 'pointer', opacity: safeLevelPage >= totalLevelPages - 1 ? 0.4 : 1, padding: '6px 14px', fontSize: 18, background: 'transparent', border: 'none', color: 'inherit' }}>▶</button>
             </div>
           )}
 
@@ -249,9 +247,6 @@ export default function PotionsPage() {
             <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет доступных рецептов.</div>
           ) : currentLevel ? (
             <div style={{ marginBottom: 14 }}>
-              <h3 style={{ fontSize: 15, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-                Уровень {LEVEL_LABELS[currentLevel] || currentLevel}
-              </h3>
               <div className="fm-grid">
                 {groupedByLevel[currentLevel].map((r) => (
                   <div key={r.id} className="fm-card fm-rise">
@@ -259,7 +254,7 @@ export default function PotionsPage() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <strong>{r.name}</strong>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                          {r.ingredient_slots.map((s) => INGREDIENT_ICON[s] || s).join(' ')} · {r.ingredient_slots.length} слота
+                          {ingredientSummary(r.ingredient_slots)} · {r.ingredient_slots.length} слота
                         </div>
                         {r.bonus_code && (
                           <div className="fm-chip" style={{ background: 'rgba(160,120,220,0.18)', marginTop: 4 }}>
@@ -290,7 +285,7 @@ export default function PotionsPage() {
                       disabled={busy || !!cauldron}
                       onClick={() => createCauldron(r.id)}
                     >
-                      Установить рецепт и котёл
+                      Установить котёл
                     </button>
                   </div>
                 ))}
