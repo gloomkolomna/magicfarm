@@ -159,6 +159,34 @@ button.fm-card {
   border-radius: 999px;
 }
 
+/* ── Таблицы (админка) ── */
+.fm-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  background: linear-gradient(180deg, rgba(10,16,8,0.60) 0%, rgba(10,16,8,0.48) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.fm-table th,
+.fm-table td {
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border);
+}
+.fm-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  background: rgba(10, 16, 8, 0.35);
+}
+.fm-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
 /* ── Прогресс-бар ── */
 .fm-progress {
   height: 10px;
