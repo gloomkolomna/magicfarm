@@ -72,7 +72,7 @@ def upgrade() -> None:
                     new[color] = {"norm": int(per["norm"]), "treasure": int(per.get("treasure", 0))}
                     continue
                 norm = per.get("1", per.get(1))
-                treasure = per.get("0", per.get(0), 0)
+                treasure = per.get("0", per.get(0, 0))
                 if norm is None:
                     ok = False
                     break
