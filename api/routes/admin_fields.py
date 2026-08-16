@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_role
-from models import Animal, Field, FieldAnimal, FieldCell, FieldPet, FieldPlant, Pet, PetZone, Plant, PlantBed, ProductionTemplate, Tent, User, WITCH_HOUSE_KIND
+from models import (
+    BREWERY_MAX_INGREDIENT_CELLS, BREWERY_ZONE_KINDS, Animal, BreweryZone, Field, FieldAnimal,
+    FieldCell, FieldPet, FieldPlant, FieldPotionRecipe, Pet, PetZone, Plant, PlantBed,
+    PotionRecipe, ProductionTemplate, Tent, User, WITCH_HOUSE_KIND,
+)
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/admin/fields", tags=["admin-fields"])
@@ -147,6 +151,18 @@ class PetZoneOut(BaseModel):
     row2: int
 
 
+class BreweryZoneOut(BaseModel):
+    id: int
+    field_id: int
+    zone_kind: str
+    col1: int
+    row1: int
+    col2: int
+    row2: int
+    image_url: str | None
+    recipe_id: int | None
+
+
 class PlantOut(BaseModel):
     id: int
     code: str
@@ -176,6 +192,8 @@ class FieldDetailOut(FieldOut):
     pet_zones: list[PetZoneOut] = []
     animal_ids: list[int] = []
     pet_ids: list[int] = []
+    brewery_zones: list[BreweryZoneOut] = []
+    potion_recipe_ids: list[int] = []
 
 
 def _field_to_out(f: Field) -> FieldOut:
@@ -303,6 +321,8 @@ def delete_field(
     remove_upload(f.map_url)
     for t in f.tents:
         remove_upload(t.image_url)
+    for z in f.brewery_zones:
+        remove_upload(z.image_url)
     db.delete(f)
     db.commit()
     return None
@@ -582,6 +602,13 @@ def _detail(f: Field) -> FieldDetailOut:
         ],
         animal_ids=[fa.animal_id for fa in f.animals],
         pet_ids=[fp.pet_id for fp in f.pets],
+        brewery_zones=[
+            BreweryZoneOut(id=z.id, field_id=z.field_id, zone_kind=z.zone_kind,
+                           col1=z.col1, row1=z.row1, col2=z.col2, row2=z.row2,
+                           image_url=z.image_url, recipe_id=z.recipe_id)
+            for z in f.brewery_zones
+        ],
+        potion_recipe_ids=[fpr.recipe_id for fpr in f.potion_recipes],
     )
 
 
@@ -746,3 +773,157 @@ def delete_pet_zone(
     db.delete(pz)
     db.commit()
     return None
+
+
+def _check_brewery_field(f: Field) -> None:
+    if f.field_kind != "brewery":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Зоны зельеварни размещаются только на локациях типа «Зельеварня»",
+        )
+
+
+def _check_brewery_rect(f: Field, c1: int, r1: int, c2: int, r2: int) -> None:
+    if c1 < 0 or r1 < 0 or c2 >= f.cols or r2 >= f.rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Прямоугольник выходит за пределы поля")
+
+    for z in f.brewery_zones:
+        if not (c2 < z.col1 or c1 > z.col2 or r2 < z.row1 or r1 > z.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пересекается с другой зоной зельеварни")
+
+    for t in f.tents:
+        if not (c2 < t.col1 or c1 > t.col2 or r2 < t.row1 or r1 > t.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Пересекается с шатром «{t.name}»")
+
+    for pb in f.plant_beds:
+        if not (c2 < pb.col1 or c1 > pb.col2 or r2 < pb.row1 or r1 > pb.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пересекается с грядкой")
+
+    for pz in f.pet_zones:
+        if not (c2 < pz.col1 or c1 > pz.col2 or r2 < pz.row1 or r1 > pz.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пересекается с зоной питомца")
+
+
+def _zone_out(z: BreweryZone) -> BreweryZoneOut:
+    return BreweryZoneOut(id=z.id, field_id=z.field_id, zone_kind=z.zone_kind,
+                          col1=z.col1, row1=z.row1, col2=z.col2, row2=z.row2,
+                          image_url=z.image_url, recipe_id=z.recipe_id)
+
+
+@router.post("/{field_id}/brewery-zones", response_model=BreweryZoneOut, status_code=status.HTTP_201_CREATED)
+def create_brewery_zone(
+    field_id: int,
+    zone_kind: str = Form(...),
+    col1: int = Form(...),
+    row1: int = Form(...),
+    col2: int = Form(...),
+    row2: int = Form(...),
+    image: UploadFile | None = File(default=None),
+    recipe_id: int | None = Form(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    _check_brewery_field(f)
+    if zone_kind not in BREWERY_ZONE_KINDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Тип зоны должен быть одним из: {', '.join(BREWERY_ZONE_KINDS)}",
+        )
+    c1, r1, c2, r2 = _normalize_rect(col1, row1, col2, row2)
+
+    if zone_kind == "ingredient":
+        if c1 != c2 or r1 != r2:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Окошко ингредиента — ровно одна клетка")
+        count = sum(1 for z in f.brewery_zones if z.zone_kind == "ingredient")
+        if count >= BREWERY_MAX_INGREDIENT_CELLS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Максимум {BREWERY_MAX_INGREDIENT_CELLS} окошек ингредиентов",
+            )
+
+    if zone_kind == "recipe_card":
+        if recipe_id is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для карточки рецепта выберите зелье")
+        linked = {fpr.recipe_id for fpr in f.potion_recipes}
+        if recipe_id not in linked:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Зелье не привязано к этой локации")
+    elif recipe_id is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="recipe_id задаётся только для карточки рецепта")
+
+    _check_brewery_rect(f, c1, r1, c2, r2)
+
+    image_url = save_upload(image, f"brewery_{f.id}", max_size=512) if image else None
+    z = BreweryZone(field_id=f.id, zone_kind=zone_kind, col1=c1, row1=r1, col2=c2, row2=r2,
+                    image_url=image_url, recipe_id=recipe_id if zone_kind == "recipe_card" else None)
+    db.add(z)
+    db.commit()
+    db.refresh(z)
+    return _zone_out(z)
+
+
+@router.put("/{field_id}/brewery-zones/{zone_id}/image", response_model=BreweryZoneOut)
+def upload_brewery_zone_image(
+    field_id: int,
+    zone_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    z = db.query(BreweryZone).filter(BreweryZone.id == zone_id, BreweryZone.field_id == f.id).first()
+    if z is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Зона не найдена")
+    new_url = save_upload(image, f"brewery_{f.id}_{z.id}", max_size=512)
+    remove_upload(z.image_url)
+    z.image_url = new_url
+    db.commit()
+    db.refresh(z)
+    return _zone_out(z)
+
+
+@router.delete("/{field_id}/brewery-zones/{zone_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_brewery_zone(
+    field_id: int,
+    zone_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    z = db.query(BreweryZone).filter(BreweryZone.id == zone_id, BreweryZone.field_id == f.id).first()
+    if z is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Зона не найдена")
+    remove_upload(z.image_url)
+    db.delete(z)
+    db.commit()
+    return None
+
+
+class FieldPotionRecipesRequest(BaseModel):
+    recipe_ids: list[int]
+
+
+@router.put("/{field_id}/potion-recipes", response_model=list[int])
+def set_field_potion_recipes(
+    field_id: int,
+    req: FieldPotionRecipesRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    valid_ids = {r.id for r in db.query(PotionRecipe).filter(PotionRecipe.id.in_(req.recipe_ids)).all()}
+    removed = {fpr.recipe_id for fpr in f.potion_recipes} - valid_ids
+    if removed:
+        for z in db.query(BreweryZone).filter(
+            BreweryZone.field_id == f.id, BreweryZone.zone_kind == "recipe_card",
+            BreweryZone.recipe_id.in_(removed),
+        ).all():
+            remove_upload(z.image_url)
+            db.delete(z)
+    db.query(FieldPotionRecipe).filter(FieldPotionRecipe.field_id == f.id).delete()
+    for rid in req.recipe_ids:
+        if rid in valid_ids:
+            db.add(FieldPotionRecipe(field_id=f.id, recipe_id=rid))
+    db.commit()
+    db.refresh(f)
+    return [fpr.recipe_id for fpr in f.potion_recipes]

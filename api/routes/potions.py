@@ -48,6 +48,7 @@ class PotionRecipeOut(BaseModel):
     reward_coins: int
     description: str | None
     image_url: str | None
+    card_image_url: str | None = None
 
 
 def _recipe_out(r: PotionRecipe) -> PotionRecipeOut:
@@ -56,6 +57,7 @@ def _recipe_out(r: PotionRecipe) -> PotionRecipeOut:
         id=r.id, code=r.code, name=r.name, level=r.level,
         ingredient_slots=slots, bonus_code=r.bonus_code,
         reward_coins=r.reward_coins, description=r.description, image_url=r.image_url,
+        card_image_url=r.card_image_url,
     )
 
 
@@ -512,6 +514,23 @@ def admin_upload_image(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
     remove_upload(r.image_url)
     r.image_url = save_upload(image, f"potion_{r.id}", max_size=400)
+    db.commit()
+    db.refresh(r)
+    return _recipe_out(r)
+
+
+@admin_router.put("/{recipe_id}/card-image", response_model=PotionRecipeOut)
+def admin_upload_card_image(
+    recipe_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    r = db.query(PotionRecipe).filter(PotionRecipe.id == recipe_id).first()
+    if r is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
+    remove_upload(r.card_image_url)
+    r.card_image_url = save_upload(image, f"potion_card_{r.id}", max_size=512)
     db.commit()
     db.refresh(r)
     return _recipe_out(r)

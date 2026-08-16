@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { api, type Animal, type CraftInfo, type CraftSessionInfo, type CrystalCard, type FieldCellDetail, type FieldDetail, type HouseState, type Pet, type PlantBed, type Product, type Tent } from '../api/endpoints';
+import { api, POTION_INGREDIENT_ICONS as ING_ICON, POTION_INGREDIENT_LABELS as ING_LABEL, potionBonusLabel, type Animal, type BreweryZoneView, type CraftInfo, type CraftSessionInfo, type CrystalCard, type FieldCellDetail, type FieldDetail, type HouseState, type Pet, type PlantBed, type Product, type SlotWarehouseItem, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import StitchReportForm from '../components/StitchReportForm';
 import Toast from '../components/Toast';
@@ -92,6 +92,14 @@ export default function FieldPage() {
   const [petCatalog, setPetCatalog] = useState<Pet[]>([]);
   const [petSel, setPetSel] = useState<number | null>(null);
   const [petSettleResult, setPetSettleResult] = useState<{ pet_id: number; pet_name: string; required: number } | null>(null);
+
+  // Зельеварня.
+  const [brewPickRecipe, setBrewPickRecipe] = useState(false);
+  const [brewCardModal, setBrewCardModal] = useState<BreweryZoneView | null>(null);
+  const [brewCauldronModal, setBrewCauldronModal] = useState(false);
+  const [brewSlotIndex, setBrewSlotIndex] = useState<number | null>(null);
+  const [brewWarehouse, setBrewWarehouse] = useState<SlotWarehouseItem[]>([]);
+  const [brewWarehouseLoading, setBrewWarehouseLoading] = useState(false);
 
   const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string; norm?: number; qty?: number } | null>(null);
   const [showVideo, setShowVideo] = useState(false);
@@ -197,6 +205,84 @@ export default function FieldPage() {
     }
     return grid;
   }, [field]);
+
+  const activeCauldron = field?.active_cauldron ?? null;
+  const brewCauldronZone = (field?.brewery_zones ?? []).find((z) => z.zone_kind === 'cauldron');
+  const brewJarZone = (field?.brewery_zones ?? []).find((z) => z.zone_kind === 'jar');
+  const brewIngredientZones = useMemo(
+    () => (field?.brewery_zones ?? [])
+      .filter((z) => z.zone_kind === 'ingredient')
+      .slice()
+      .sort((a, b) => (a.row1 - b.row1) || (a.col1 - b.col1)),
+    [field],
+  );
+  const brewCardZones = (field?.brewery_zones ?? []).filter((z) => z.zone_kind === 'recipe_card');
+  const brewActiveRecipe = field?.potion_recipes?.find((r) => r.id === activeCauldron?.recipe_id) ?? null;
+  const brewAllSlotsFilled = !!activeCauldron && activeCauldron.slots.length > 0 && activeCauldron.slots.every((s) => s.item_id != null);
+
+  async function installBrewCauldron(recipeId: number) {
+    setBusy(true); setMsg(null);
+    try {
+      await api.createCauldron(recipeId);
+      setBrewPickRecipe(false);
+      setBrewCardModal(null);
+      setMsg('✓ Котёл установлен!');
+      await load(); await refresh();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  async function openBrewSlot(slotIndex: number) {
+    if (!activeCauldron) return;
+    setBrewSlotIndex(slotIndex);
+    setBrewWarehouse([]);
+    setBrewWarehouseLoading(true);
+    try {
+      const items = await api.cauldronSlotWarehouse(activeCauldron.id, slotIndex);
+      setBrewWarehouse(items);
+    } catch {
+      setBrewWarehouse([]);
+    } finally {
+      setBrewWarehouseLoading(false);
+    }
+  }
+
+  async function fillBrewSlot(itemKind: string, itemId: number) {
+    if (!activeCauldron || brewSlotIndex == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.fillCauldronSlot(activeCauldron.id, brewSlotIndex, itemKind, itemId);
+      setBrewSlotIndex(null);
+      await load();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  async function clearBrewSlot(slotIndex: number) {
+    if (!activeCauldron) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.clearCauldronSlot(activeCauldron.id, slotIndex);
+      await load();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  async function brewNow() {
+    if (!activeCauldron) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.brewCauldron(activeCauldron.id);
+      setBrewCauldronModal(false);
+      setMsg(`✓ Зелье «${activeCauldron.recipe_name ?? ''}» сварено!`);
+      await load(); await refresh();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
 
   async function doPlant() {
     if (!plantCell || plantSel == null) return;
@@ -850,6 +936,169 @@ export default function FieldPage() {
                 </div>
               );
             })}
+            {/* Зельеварня: место котла. */}
+            {field.field_kind === 'brewery' && brewCauldronZone && (() => {
+              const spanCols = brewCauldronZone.col2 - brewCauldronZone.col1 + 1;
+              const spanRows = brewCauldronZone.row2 - brewCauldronZone.row1 + 1;
+              return (
+                <div
+                  style={{
+                    position: 'absolute', inset: 0, pointerEvents: 'none', display: 'grid',
+                    gridTemplateColumns: `repeat(${field.cols}, 1fr)`,
+                    gridTemplateRows: `repeat(${field.rows}, 1fr)`,
+                  }}
+                >
+                  <div
+                    onClick={() => {
+                      if (activeCauldron) setBrewCauldronModal(true);
+                      else setBrewPickRecipe(true);
+                    }}
+                    style={{
+                      gridColumn: `${brewCauldronZone.col1 + 1} / span ${spanCols}`,
+                      gridRow: `${brewCauldronZone.row1 + 1} / span ${spanRows}`,
+                      position: 'relative', display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                      padding: 4, overflow: 'hidden', borderRadius: 6,
+                      border: activeCauldron ? 'none' : '2px dashed rgba(160,120,220,0.7)',
+                      cursor: 'pointer', touchAction: 'manipulation', pointerEvents: 'auto',
+                    }}
+                  >
+                    {activeCauldron && brewCauldronZone.image_url && (
+                      <img src={mediaUrl(brewCauldronZone.image_url)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                    )}
+                    {activeCauldron ? (
+                      <div style={{ position: 'absolute', left: 2, right: 2, bottom: 1, fontSize: 'clamp(9px,2.2vw,13px)', color: '#e6d9ff', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600, background: 'rgba(10,16,8,0.45)', borderRadius: 4, padding: '0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        🍲 {activeCauldron.recipe_name ?? 'Котёл'}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 'clamp(10px,2.4vw,14px)', color: '#e6d9ff', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600, lineHeight: 1.15 }}>
+                        🍲 Место котла
+                        <div style={{ fontSize: 10, opacity: 0.85 }}>установить</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Зельеварня: банка варящегося зелья. */}
+            {field.field_kind === 'brewery' && brewJarZone && (() => {
+              const spanCols = brewJarZone.col2 - brewJarZone.col1 + 1;
+              const spanRows = brewJarZone.row2 - brewJarZone.row1 + 1;
+              const jarImg = brewActiveRecipe?.image_url ?? brewCardZones.find((z) => z.recipe_id === activeCauldron?.recipe_id)?.recipe_image ?? null;
+              return (
+                <div
+                  style={{
+                    position: 'absolute', inset: 0, pointerEvents: 'none', display: 'grid',
+                    gridTemplateColumns: `repeat(${field.cols}, 1fr)`,
+                    gridTemplateRows: `repeat(${field.rows}, 1fr)`,
+                  }}
+                >
+                  <div
+                    style={{
+                      gridColumn: `${brewJarZone.col1 + 1} / span ${spanCols}`,
+                      gridRow: `${brewJarZone.row1 + 1} / span ${spanRows}`,
+                      position: 'relative', display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                      padding: 4, overflow: 'hidden', borderRadius: 6,
+                      border: activeCauldron ? 'none' : '1px dashed rgba(160,120,220,0.45)',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {activeCauldron && jarImg && (
+                      <img src={mediaUrl(jarImg)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                    )}
+                    {activeCauldron && !jarImg && (
+                      <div style={{ fontSize: '9vw', lineHeight: 1, opacity: 0.9 }}>🧪</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Зельеварня: окошки ингредиентов активного котла. */}
+            {field.field_kind === 'brewery' && brewIngredientZones.map((z, i) => {
+              const slot = activeCauldron?.slots.find((s) => s.slot_index === i) ?? null;
+              const slotType = brewActiveRecipe?.ingredient_slots?.[i] ?? null;
+              const filled = slot?.item_id != null;
+              return (
+                <div
+                  key={`bzi-${z.id}`}
+                  style={{
+                    position: 'absolute', inset: 0, pointerEvents: 'none', display: 'grid',
+                    gridTemplateColumns: `repeat(${field.cols}, 1fr)`,
+                    gridTemplateRows: `repeat(${field.rows}, 1fr)`,
+                  }}
+                >
+                  <div
+                    onClick={() => {
+                      if (!activeCauldron || !slot) return;
+                      if (filled) clearBrewSlot(i);
+                      else openBrewSlot(i);
+                    }}
+                    style={{
+                      gridColumn: `${z.col1 + 1} / span 1`,
+                      gridRow: `${z.row1 + 1} / span 1`,
+                      position: 'relative', display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                      borderRadius: 6, overflow: 'hidden',
+                      border: activeCauldron && slot ? '1px solid rgba(160,120,220,0.55)' : '1px dashed rgba(160,120,220,0.3)',
+                      background: filled ? 'rgba(111,174,74,0.22)' : 'rgba(30,20,50,0.30)',
+                      cursor: activeCauldron && slot ? 'pointer' : 'default',
+                      touchAction: 'manipulation', pointerEvents: activeCauldron && slot ? 'auto' : 'none',
+                    }}
+                  >
+                    <div style={{ fontSize: 'clamp(14px,4vw,24px)', lineHeight: 1, pointerEvents: 'none' }}>
+                      {filled ? '✅' : slotType ? (ING_ICON[slotType] || '❓') : '▫️'}
+                    </div>
+                    {activeCauldron && slot && (
+                      <div style={{ fontSize: 8, color: '#e6d9ff', textShadow: '0 1px 2px #000', pointerEvents: 'none', textAlign: 'center', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {filled ? 'убрать' : (slotType ? (ING_LABEL[slotType] || slotType) : '')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Зельеварня: карточки рецептов. */}
+            {field.field_kind === 'brewery' && brewCardZones.map((z) => {
+              const spanCols = z.col2 - z.col1 + 1;
+              const spanRows = z.row2 - z.row1 + 1;
+              const cardImg = z.recipe_card_image || z.recipe_image;
+              return (
+                <div
+                  key={`bzc-${z.id}`}
+                  style={{
+                    position: 'absolute', inset: 0, pointerEvents: 'none', display: 'grid',
+                    gridTemplateColumns: `repeat(${field.cols}, 1fr)`,
+                    gridTemplateRows: `repeat(${field.rows}, 1fr)`,
+                  }}
+                >
+                  <div
+                    onClick={() => setBrewCardModal(z)}
+                    style={{
+                      gridColumn: `${z.col1 + 1} / span ${spanCols}`,
+                      gridRow: `${z.row1 + 1} / span ${spanRows}`,
+                      position: 'relative', display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                      padding: 2, overflow: 'hidden', borderRadius: 6,
+                      border: '1px dashed rgba(160,120,220,0.4)',
+                      cursor: 'pointer', touchAction: 'manipulation', pointerEvents: 'auto',
+                    }}
+                  >
+                    {cardImg && (
+                      <img src={mediaUrl(cardImg)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                    )}
+                    {!cardImg && (
+                      <div style={{ fontSize: 'clamp(10px,2.4vw,14px)', color: '#e6d9ff', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600 }}>
+                        🃏 {z.recipe_name ?? 'Рецепт'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div style={{ color: 'var(--text-muted)', fontSize: 16 }}>Карта не загружена</div>
@@ -886,6 +1135,121 @@ export default function FieldPage() {
       </div>
 
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
+
+      {/* Зельеварня: выбор рецепта для котла */}
+      {brewPickRecipe && (
+        <Modal title="🍲 Установить котёл" onClose={() => setBrewPickRecipe(false)}>
+          {activeCauldron && (
+            <div className="fm-card" style={{ marginBottom: 10, fontSize: 13 }}>
+              Уже стоит котёл с рецептом «{activeCauldron.recipe_name}». Сначала сварите или очистите его.
+            </div>
+          )}
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            Выберите зелье из привязанных к этой зельеварне:
+          </p>
+          {(field.potion_recipes ?? []).length === 0 ? (
+            <div className="fm-card" style={{ color: 'var(--text-muted)' }}>В этой зельеварне нет привязанных зелий.</div>
+          ) : (
+            <div className="fm-grid">
+              {(field.potion_recipes ?? []).map((r) => (
+                <div key={r.id} className="fm-card fm-rise" style={{ textAlign: 'center', cursor: activeCauldron ? 'default' : 'pointer', opacity: activeCauldron ? 0.6 : 1 }} onClick={() => { if (!activeCauldron) installBrewCauldron(r.id); }}>
+                  {r.image_url && <img src={mediaUrl(r.image_url)} alt="" style={{ height: 72, maxWidth: '100%', objectFit: 'contain', marginBottom: 6 }} />}
+                  <strong style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>{r.name}</strong>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{r.ingredient_slots.length} ингр. · 🪙 {r.reward_coins}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* Зельеварня: карточка рецепта */}
+      {brewCardModal && (() => {
+        const r = (field.potion_recipes ?? []).find((x) => x.id === brewCardModal.recipe_id) ?? null;
+        const cardImg = brewCardModal.recipe_card_image || brewCardModal.recipe_image;
+        return (
+          <Modal title={`🃏 ${brewCardModal.recipe_name ?? r?.name ?? 'Рецепт'}`} onClose={() => setBrewCardModal(null)}>
+            {cardImg && (
+              <img src={mediaUrl(cardImg)} alt="" style={{ width: '100%', maxHeight: 260, objectFit: 'contain', marginBottom: 10, borderRadius: 8 }} onClick={() => setZoomedImg(mediaUrl(cardImg!))} />
+            )}
+            {r && (
+              <>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  {r.ingredient_slots.map((s) => ING_ICON[s] || '❓').join(' ')} · {r.ingredient_slots.length} ингредиентов · 🪙 {r.reward_coins}
+                </div>
+                {r.bonus_code && (
+                  <div style={{ fontSize: 13, borderLeft: '3px solid #a078dc', paddingLeft: 8, color: '#c9a6f2', marginBottom: 6 }}>
+                    ⚡ {potionBonusLabel(r.bonus_code)}
+                  </div>
+                )}
+                {r.description && <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0' }}>{r.description}</p>}
+              </>
+            )}
+            {activeCauldron ? (
+              <div className="fm-card" style={{ fontSize: 13 }}>
+                {activeCauldron.recipe_id === brewCardModal.recipe_id
+                  ? 'Это зелье сейчас варится в вашем котле.'
+                  : `Сейчас варится «${activeCauldron.recipe_name}». Новый котёл — после варки.`}
+              </div>
+            ) : r && (
+              <button className="fm-btn" style={{ width: '100%', marginTop: 10 }} disabled={busy} onClick={() => installBrewCauldron(r.id)}>
+                🍲 Установить котёл с этим зельем
+              </button>
+            )}
+          </Modal>
+        );
+      })()}
+
+      {/* Зельеварня: модалка котла */}
+      {brewCauldronModal && activeCauldron && (
+        <Modal title={`🍲 ${activeCauldron.recipe_name ?? 'Котёл'}`} onClose={() => setBrewCauldronModal(false)}>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
+            Слоты: {activeCauldron.slots.filter((s) => s.item_id != null).length}/{activeCauldron.slots.length} заполнено.
+            Тапайте по окошкам на карте, чтобы добавить или убрать ингредиенты.
+          </div>
+          <div className="fm-grid" style={{ marginBottom: 10 }}>
+            {activeCauldron.slots.map((s) => {
+              const slotType = brewActiveRecipe?.ingredient_slots?.[s.slot_index] ?? null;
+              return (
+                <div key={s.slot_index} className="fm-card" style={{ textAlign: 'center', fontSize: 13, background: s.item_id != null ? 'rgba(111,174,74,0.18)' : undefined }}>
+                  <div style={{ fontSize: 22 }}>{s.item_id != null ? '✅' : (slotType ? (ING_ICON[slotType] || '❓') : '▫️')}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{slotType ? (ING_LABEL[slotType] || slotType) : 'слот'}</div>
+                </div>
+              );
+            })}
+          </div>
+          {brewAllSlotsFilled ? (
+            <button className="fm-btn" style={{ width: '100%' }} disabled={busy} onClick={brewNow}>🧪 Сварить зелье</button>
+          ) : (
+            <div className="fm-card" style={{ fontSize: 13, color: 'var(--text-muted)' }}>Заполните все окошки ингредиентов на карте.</div>
+          )}
+        </Modal>
+      )}
+
+      {/* Зельеварня: выбор ингредиента для окошка */}
+      {brewSlotIndex != null && activeCauldron && (() => {
+        const slotType = brewActiveRecipe?.ingredient_slots?.[brewSlotIndex] ?? null;
+        return (
+          <Modal title={slotType ? `Выбрать: ${ING_LABEL[slotType] || slotType}` : 'Выбор ингредиента'} onClose={() => setBrewSlotIndex(null)}>
+            {brewWarehouseLoading ? (
+              <div style={{ color: 'var(--text-muted)' }}>Загрузка склада…</div>
+            ) : brewWarehouse.length === 0 ? (
+              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет подходящих предметов на складе.</div>
+            ) : (
+              <div className="fm-grid">
+                {brewWarehouse.map((item) => (
+                  <div key={`${item.item_kind}-${item.item_id}`} className="fm-card fm-rise" style={{ cursor: 'pointer' }} onClick={() => fillBrewSlot(item.item_kind, item.item_id)}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{item.item_emoji} {item.item_name}</span>
+                      <span className="fm-chip">×{item.qty}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
 
       {/* Модалка посадки */}
       {plantCell && (

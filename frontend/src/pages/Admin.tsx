@@ -851,6 +851,15 @@ export default function AdminPage() {
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
+  async function uploadPotionCardImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminUploadPotionCardImage(id, file);
+      await loadPotionRecipes();
+      setMsg('✓ Карточка рецепта загружена');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
 
   async function deletePotionRecipe(id: number) {
     if (!confirm('Удалить рецепт?')) return;
@@ -925,12 +934,20 @@ export default function AdminPage() {
             />
           </div>
           {potionEditingId && (
-            <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer', marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              🖼 Картинка зелья
-              <input type="file" accept="image/*" style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPotionImage(potionEditingId, f); }}
-              />
-            </label>
+            <>
+              <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer', marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                🖼 Картинка зелья
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPotionImage(potionEditingId, f); }}
+                />
+              </label>
+              <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer', marginBottom: 8, marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                🃏 Карточка рецепта
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPotionCardImage(potionEditingId, f); }}
+                />
+              </label>
+            </>
           )}
           <button className="fm-btn" disabled={busy} onClick={savePotionRecipe}>
             {potionEditingId ? '✎ Сохранить' : '➕ Создать'}
@@ -945,6 +962,7 @@ export default function AdminPage() {
                 <td>{r.id}</td>
                 <td>
                   {r.image_url && <img src={mediaUrl(r.image_url)} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, marginRight: 4, verticalAlign: 'middle' }} />}
+                  {r.card_image_url && <img src={mediaUrl(r.card_image_url)} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, marginRight: 4, verticalAlign: 'middle', border: '1px solid var(--border)' }} />}
                   {r.name}
                 </td>
                 <td>{r.level}</td>
@@ -1578,6 +1596,7 @@ export default function AdminPage() {
                             <option value="house">🏠 Дом</option>
                             <option value="barnyard">🐄 Скотный двор</option>
                             <option value="library">📖 Библиотека</option>
+                            <option value="brewery">🧪 Зельеварня</option>
                           </select>
                         </div>
                         <div style={{ marginTop: 8 }}>

@@ -68,6 +68,7 @@ export interface PotionRecipe {
   reward_coins: number;
   description: string | null;
   image_url: string | null;
+  card_image_url?: string | null;
 }
 
 export const POTION_BONUS_LABELS: Record<string, string> = {
@@ -536,6 +537,24 @@ export interface PetZone {
   row2: number;
 }
 
+export interface BreweryZone {
+  id: number;
+  field_id: number;
+  zone_kind: 'cauldron' | 'jar' | 'ingredient' | 'recipe_card';
+  col1: number;
+  row1: number;
+  col2: number;
+  row2: number;
+  image_url: string | null;
+  recipe_id: number | null;
+}
+
+export interface BreweryZoneView extends BreweryZone {
+  recipe_name?: string | null;
+  recipe_image?: string | null;
+  recipe_card_image?: string | null;
+}
+
 export interface FieldDetail extends FieldInfo {
   cells: FieldCellDetail[];
   plants: Plant[];
@@ -544,6 +563,9 @@ export interface FieldDetail extends FieldInfo {
   pet_zones?: PetZone[];
   animal_ids?: number[];
   pet_ids?: number[];
+  brewery_zones?: BreweryZoneView[];
+  potion_recipes?: PotionRecipe[];
+  active_cauldron?: Cauldron | null;
 }
 
 export interface NormImage {
@@ -809,6 +831,36 @@ export const api = {
   adminDeletePlantBed: (fieldId: number, bedId: number) =>
     client.delete(`/admin/fields/${fieldId}/plant-beds/${bedId}`).then((r) => r.data),
 
+  adminCreateBreweryZone: (
+    fieldId: number,
+    zoneKind: 'cauldron' | 'jar' | 'ingredient' | 'recipe_card',
+    rect: { col1: number; row1: number; col2: number; row2: number },
+    opts?: { image?: File; recipeId?: number },
+  ) => {
+    const form = new FormData();
+    form.append('zone_kind', zoneKind);
+    form.append('col1', String(rect.col1));
+    form.append('row1', String(rect.row1));
+    form.append('col2', String(rect.col2));
+    form.append('row2', String(rect.row2));
+    if (opts?.image) form.append('image', opts.image);
+    if (opts?.recipeId != null) form.append('recipe_id', String(opts.recipeId));
+    return client
+      .post<BreweryZone>(`/admin/fields/${fieldId}/brewery-zones`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => r.data);
+  },
+  adminUploadBreweryZoneImage: (fieldId: number, zoneId: number, image: File) => {
+    const form = new FormData();
+    form.append('image', image);
+    return client
+      .put<BreweryZone>(`/admin/fields/${fieldId}/brewery-zones/${zoneId}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => r.data);
+  },
+  adminDeleteBreweryZone: (fieldId: number, zoneId: number) =>
+    client.delete(`/admin/fields/${fieldId}/brewery-zones/${zoneId}`).then((r) => r.data),
+  adminSetFieldPotionRecipes: (fieldId: number, recipeIds: number[]) =>
+    client.put<number[]>(`/admin/fields/${fieldId}/potion-recipes`, { recipe_ids: recipeIds }).then((r) => r.data),
+
   adminCreatePetZone: (fieldId: number, col1: number, row1: number, col2: number, row2: number) => {
     const form = new FormData();
     form.append('col1', String(col1));
@@ -998,6 +1050,11 @@ export const api = {
     const form = new FormData();
     form.append('image', file);
     return client.put<PotionRecipe>(`/admin/potion-recipes/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadPotionCardImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<PotionRecipe>(`/admin/potion-recipes/${id}/card-image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
   adminUpdatePotionRecipe: (id: number, data: PotionRecipeCreate) =>
     client.put<PotionRecipe>(`/admin/potion-recipes/${id}`, data).then((r) => r.data),

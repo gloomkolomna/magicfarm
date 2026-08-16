@@ -312,6 +312,8 @@ class Field(Base):
     pet_zones = relationship("PetZone", back_populates="field", cascade="all, delete-orphan")
     animals = relationship("FieldAnimal", back_populates="field", cascade="all, delete-orphan")
     pets = relationship("FieldPet", back_populates="field", cascade="all, delete-orphan")
+    potion_recipes = relationship("FieldPotionRecipe", back_populates="field", cascade="all, delete-orphan")
+    brewery_zones = relationship("BreweryZone", back_populates="field", cascade="all, delete-orphan")
 
 
 class FieldPlant(Base):
@@ -342,6 +344,38 @@ class FieldPet(Base):
 
     field = relationship("Field", back_populates="pets")
     pet = relationship("Pet")
+
+
+class FieldPotionRecipe(Base):
+    __tablename__ = "field_potion_recipes"
+
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+    recipe_id = Column(Integer, ForeignKey("potion_recipes.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+
+    field = relationship("Field", back_populates="potion_recipes")
+    recipe = relationship("PotionRecipe")
+
+
+BREWERY_ZONE_KINDS = ("cauldron", "jar", "ingredient", "recipe_card")
+BREWERY_MAX_INGREDIENT_CELLS = 6
+
+
+class BreweryZone(Base):
+    __tablename__ = "brewery_zones"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False)
+    zone_kind = Column(String, nullable=False)
+    col1 = Column(Integer, nullable=False)
+    row1 = Column(Integer, nullable=False)
+    col2 = Column(Integer, nullable=False)
+    row2 = Column(Integer, nullable=False)
+    image_url = Column(String, nullable=True)
+    recipe_id = Column(Integer, ForeignKey("potion_recipes.id", ondelete="CASCADE"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    field = relationship("Field", back_populates="brewery_zones")
+    recipe = relationship("PotionRecipe")
 
 
 class FieldCell(Base):
@@ -633,6 +667,7 @@ class PotionRecipe(Base):
     reward_coins = Column(Integer, nullable=False, default=100, server_default="100")
     description = Column(Text, nullable=True)
     image_url = Column(String, nullable=True)
+    card_image_url = Column(String, nullable=True)
 
 
 class Cauldron(Base):

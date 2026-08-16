@@ -8,12 +8,13 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_onboarding
-from models import BarnyardSlot, Field, FieldCell, FieldPlant, HouseBuild, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, TentBuild, User, UserPet, MAX_PLOT_QTY, WITCH_HOUSE_KIND
+from models import BarnyardSlot, Cauldron, Field, FieldCell, FieldPlant, HouseBuild, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, TentBuild, User, UserPet, MAX_PLOT_QTY, WITCH_HOUSE_KIND
 from routes.admin_fields import (
     CellOut, FieldOut, PlantOut, TentOut,
     _field_to_out, _get_field_or_404, _plant_to_out,
 )
 from routes.farm import PlotOut, _plot_to_out
+from routes.potions import CauldronOut, _cauldron_detail, _recipe_out
 from routes.settings import CRYSTAL_COLORS, crystal_norm, get_production_required
 from services.achievements import check_and_award
 from services.card_draw import calculate_norm, cards_to_json, draw_cards, plant_unit_norm
@@ -78,11 +79,28 @@ class PlantBedDetailOut(BaseModel):
     plot: PlotOut | None
 
 
+class BreweryZonePublic(BaseModel):
+    id: int
+    zone_kind: str
+    col1: int
+    row1: int
+    col2: int
+    row2: int
+    image_url: str | None
+    recipe_id: int | None
+    recipe_name: str | None = None
+    recipe_image: str | None = None
+    recipe_card_image: str | None = None
+
+
 class FieldDetailPublic(FieldOut):
     cells: list[CellDetailOut]
     plants: list[PlantOut]
     tents: list[TentOut]
     plant_beds: list[PlantBedDetailOut]
+    brewery_zones: list[BreweryZonePublic] = []
+    potion_recipes: list = []
+    active_cauldron: CauldronOut | None = None
 
 
 @router.get("", response_model=list[FieldListItem])
@@ -275,6 +293,28 @@ def get_field(
     plants = [_plant_to_out(fp.plant) for fp in f.plants]
     tents = [_tent_to_out_for_user(t, builds.get(t.id), houses.get(t.id)) for t in f.tents]
     plant_beds = [_plant_bed_detail(pb, db, user, bed_plots.get(pb.id)) for pb in f.plant_beds]
+
+    brewery_zones = []
+    potion_recipes = []
+    active_cauldron = None
+    if f.field_kind == "brewery":
+        for z in f.brewery_zones:
+            r = z.recipe
+            brewery_zones.append(BreweryZonePublic(
+                id=z.id, zone_kind=z.zone_kind, col1=z.col1, row1=z.row1,
+                col2=z.col2, row2=z.row2, image_url=z.image_url,
+                recipe_id=z.recipe_id,
+                recipe_name=r.name if r else None,
+                recipe_image=r.image_url if r else None,
+                recipe_card_image=r.card_image_url if r else None,
+            ))
+        potion_recipes = [_recipe_out(fpr.recipe) for fpr in f.potion_recipes]
+        c = db.query(Cauldron).filter(
+            Cauldron.user_id == user.vk_id, Cauldron.status != "done"
+        ).first()
+        if c is not None:
+            active_cauldron = _cauldron_detail(c, db)
+
     return FieldDetailPublic(
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
@@ -282,6 +322,8 @@ def get_field(
         field_kind=f.field_kind,
         created_at=f.created_at,
         cells=cells, plants=plants, tents=tents, plant_beds=plant_beds,
+        brewery_zones=brewery_zones, potion_recipes=potion_recipes,
+        active_cauldron=active_cauldron,
     )
 
 
