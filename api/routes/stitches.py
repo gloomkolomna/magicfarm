@@ -11,6 +11,7 @@ from models import StitchReport, User
 from routes.settings import get_auto_credit
 from services.achievements import check_and_award
 from services.pet_bonuses import apply_pet_bonus_animal_product, apply_pet_bonus_craft
+from services.potion_bonuses import consume_potion, is_potion_active, product_bonus_code
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/stitches", tags=["stitches"])
@@ -67,6 +68,12 @@ def _process_context(report: "StitchReport", db: Session) -> None:
             bonus = apply_pet_bonus_craft(cs.user_id, db)
             if bonus > 0:
                 prod_inv.qty = (prod_inv.qty or 0) + bonus
+            from models import Product as ProductModel
+            prod = db.query(ProductModel).filter(ProductModel.id == cs.product_id).first()
+            bonus_code = product_bonus_code(prod.production_kind if prod is not None else None)
+            if bonus_code and is_potion_active(cs.user_id, bonus_code, db):
+                prod_inv.qty = (prod_inv.qty or 0) + 1
+                consume_potion(cs.user_id, bonus_code, db)
             db.commit()
     elif report.context_type == "animal_produce" and report.context_id is not None:
         from models import Animal, BarnyardSlot

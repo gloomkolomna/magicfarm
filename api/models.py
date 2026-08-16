@@ -698,6 +698,7 @@ class UserPotion(Base):
     potion_recipe_id = Column(Integer, ForeignKey("potion_recipes.id", ondelete="CASCADE"), nullable=False)
     bonus_code = Column(String, nullable=True)
     activated = Column(Boolean, nullable=False, default=False, server_default="0")
+    used = Column(Boolean, nullable=False, default=False, server_default="0")
     acquired_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     __table_args__ = (

@@ -163,6 +163,17 @@ export interface UserPotion {
   description: string | null;
   image_url: string | null;
   activated: boolean;
+  used: boolean;
+}
+
+export interface BonusCatalogItem {
+  code: string;
+  label: string;
+  kind: 'instant' | 'conditional';
+  owned: boolean;
+  activated: boolean;
+  used: boolean;
+  potion_id: number | null;
 }
 
 export type CrystalColor = 'green' | 'blue' | 'violet';
@@ -1079,6 +1090,8 @@ export const api = {
     client.post<Cauldron>(`/potions/cauldrons/${cauldronId}/brew`).then((r) => r.data),
   userPotions: () =>
     client.get<UserPotion[]>('/potions').then((r) => r.data),
+  potionBonuses: () =>
+    client.get<BonusCatalogItem[]>('/potions/bonuses').then((r) => r.data),
   activatePotion: (id: number) =>
     client.post<UserPotion>(`/potions/${id}/activate`).then((r) => r.data),
 

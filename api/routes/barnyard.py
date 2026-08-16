@@ -11,6 +11,7 @@ from models import Animal, BarnyardSlot, Field, FieldAnimal, Inventory, User
 from routes.admin_catalog import AnimalOut, _animal_out
 from services.achievements import check_and_award
 from services.card_draw import calculate_norm, cards_to_json, draw_cards
+from services.potion_bonuses import consume_potion, is_potion_active
 
 router = APIRouter(prefix="/api/animals", tags=["animals"])
 
@@ -98,8 +99,12 @@ def _install_into_slot(db: Session, user: User, slot: BarnyardSlot, animal_id: i
     cards = draw_cards(db, 5, True)
     required = calculate_norm(db, user, cards)
 
+    skip = is_potion_active(user.vk_id, "skip_animal_stitch", db)
+    if skip:
+        required = 0
+
     slot.animal_id = animal_id
-    slot.status = "building"
+    slot.status = "ready" if skip else "building"
     slot.required = required
     slot.accumulated = 0
     slot.drawn_cards_json = cards_to_json(cards)
@@ -107,6 +112,9 @@ def _install_into_slot(db: Session, user: User, slot: BarnyardSlot, animal_id: i
         BarnyardSlot.user_id == user.vk_id,
         BarnyardSlot.animal_id.isnot(None),
     ).count() + 1
+
+    if skip:
+        consume_potion(user.vk_id, "skip_animal_stitch", db)
 
     db.commit()
     db.refresh(slot)
@@ -228,6 +236,11 @@ def produce(
     slot.required = required
     slot.accumulated = 0
 
+    product_coins = (slot.opening_order or 1) * 5
+    if is_potion_active(user.vk_id, "double_animal_product", db):
+        product_coins = product_coins * 2
+        consume_potion(user.vk_id, "double_animal_product", db)
+
     db.commit()
     db.refresh(slot)
 
@@ -236,5 +249,5 @@ def produce(
         "die": die,
         "required": required,
         "animal_name": slot.animal.name,
-        "product_coins": (slot.opening_order or 1) * 5,
+        "product_coins": product_coins,
     }

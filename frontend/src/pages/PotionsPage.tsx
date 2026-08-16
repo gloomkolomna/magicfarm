@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, potionBonusLabel, cauldronMaterialFor, CAULDRON_MATERIAL_LABELS, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type SlotWarehouseItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
+import { api, potionBonusLabel, cauldronMaterialFor, CAULDRON_MATERIAL_LABELS, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type SlotWarehouseItem, type PotionRecipe, type UserPotion, type BonusCatalogItem } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
 import SpritePedestal from '../components/SpritePedestal';
@@ -30,6 +30,7 @@ export default function PotionsPage() {
   const [recipes, setRecipes] = useState<PotionRecipe[]>([]);
   const [cauldron, setCauldron] = useState<Cauldron | null>(null);
   const [userPotions, setUserPotions] = useState<UserPotion[]>([]);
+  const [bonuses, setBonuses] = useState<BonusCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -61,14 +62,16 @@ export default function PotionsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [rec, pots, active] = await Promise.all([
+      const [rec, pots, active, bns] = await Promise.all([
         api.potionRecipes(),
         api.userPotions().catch(() => [] as UserPotion[]),
         api.activeCauldron().catch(() => null),
+        api.potionBonuses().catch(() => [] as BonusCatalogItem[]),
       ]);
       setRecipes(rec);
       setUserPotions(pots);
       setCauldron(active);
+      setBonuses(bns);
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка загрузки'));
     } finally {
@@ -157,6 +160,7 @@ export default function PotionsPage() {
       setMsg(`✓ Зелье на складе! Бонус: ${potionBonusLabel(brewed?.bonus_code) || '—'}`);
       const pots = await api.userPotions();
       setUserPotions(pots);
+      setBonuses(await api.potionBonuses().catch(() => [] as BonusCatalogItem[]));
       await refresh();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -173,6 +177,7 @@ export default function PotionsPage() {
       setMsg('✓ Бонус активирован!');
       const pots = await api.userPotions();
       setUserPotions(pots);
+      setBonuses(await api.potionBonuses().catch(() => [] as BonusCatalogItem[]));
       await refresh();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -190,6 +195,8 @@ export default function PotionsPage() {
 
   const cauldronStatus = cauldron ? CAULDRON_STATUS[cauldron.status] || { label: cauldron.status, color: 'var(--text-muted)' } : null;
 
+  const activeBonuses = bonuses.filter((b) => b.activated && !b.used);
+
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
@@ -198,6 +205,22 @@ export default function PotionsPage() {
         <div className="fm-card">Загрузка рецептов…</div>
       ) : (
         <>
+          {activeBonuses.length > 0 && (
+            <div className="fm-card" style={{ marginBottom: 14, background: 'rgba(160,120,220,0.12)', border: '1px solid #a078dc' }}>
+              <strong style={{ display: 'block', marginBottom: 8, color: '#c9a6f2' }}>⚡ Активные бонусы</strong>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {activeBonuses.map((b) => (
+                  <span key={b.code} className="fm-chip" style={{ background: 'rgba(160,120,220,0.25)', color: '#e6d9ff', border: '1px solid #a078dc' }}>
+                    {b.label}
+                  </span>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                Сработает на ближайшем подходящем действии.
+              </div>
+            </div>
+          )}
+
           {cauldron ? (
             <div className="fm-card fm-rise" style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -361,12 +384,44 @@ export default function PotionsPage() {
             </div>
           ) : null}
 
+          {bonuses.length > 0 && (
+            <>
+              <h2 style={{ fontSize: 16, margin: '18px 0 10px' }}>Все бонусы</h2>
+              <div className="fm-grid">
+                {bonuses.map((b) => (
+                  <div key={b.code} className="fm-card" style={{ textAlign: 'center', opacity: b.used ? 0.6 : 1 }}>
+                    <div style={{ fontSize: 12, color: b.kind === 'instant' ? 'var(--accent-warm)' : '#c9a6f2', marginBottom: 4 }}>
+                      {b.kind === 'instant' ? '⚡ Мгновенный' : '♻ Действует раз'}
+                    </div>
+                    <strong style={{ display: 'block', marginBottom: 8 }}>{b.label}</strong>
+                    {!b.owned ? (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Нет зелья</div>
+                    ) : b.used ? (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Использовано</div>
+                    ) : b.activated ? (
+                      <div style={{ fontSize: 12, color: 'var(--success)' }}>Активен</div>
+                    ) : (
+                      <button
+                        className="fm-btn fm-btn-sm fm-btn-wrap"
+                        style={{ width: '100%', marginTop: 8 }}
+                        disabled={busy || b.potion_id == null}
+                        onClick={() => activatePotion(b.potion_id!)}
+                      >
+                        Активировать
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
           {userPotions.length > 0 && (
             <>
               <h2 style={{ fontSize: 16, margin: '18px 0 10px' }}>Мои зелья</h2>
               <div className="fm-grid">
                 {userPotions.map((p) => (
-                  <div key={p.id} className="fm-card" style={{ textAlign: 'center', opacity: p.activated ? 0.7 : 1 }}>
+                  <div key={p.id} className="fm-card" style={{ textAlign: 'center', opacity: p.used ? 0.6 : p.activated ? 0.7 : 1 }}>
                     {p.image_url && (
                       <SpritePedestal url={mediaUrl(p.image_url)} height={96} onZoom={setZoomedImg} />
                     )}
@@ -392,7 +447,7 @@ export default function PotionsPage() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 6,
-                        color: p.activated ? 'var(--success)' : 'var(--text-muted)',
+                        color: p.used ? 'var(--text-muted)' : p.activated ? 'var(--success)' : 'var(--text-muted)',
                       }}
                     >
                       <span
@@ -400,18 +455,18 @@ export default function PotionsPage() {
                           width: 8,
                           height: 8,
                           borderRadius: '50%',
-                          background: p.activated ? 'var(--success)' : 'var(--text-muted)',
+                          background: p.used ? 'var(--text-muted)' : p.activated ? 'var(--success)' : 'var(--text-muted)',
                           flexShrink: 0,
                         }}
                       />
-                      {p.activated ? 'Активно' : 'Неактивно'}
+                      {p.used ? 'Использовано' : p.activated ? 'Активно' : 'Неактивно'}
                     </div>
                     {p.description && (
                       <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
                         {p.description}
                       </p>
                     )}
-                    {!p.activated && (
+                    {!p.activated && !p.used && (
                       <button
                         className="fm-btn fm-btn-sm fm-btn-wrap"
                         style={{ width: '100%', marginTop: 8 }}

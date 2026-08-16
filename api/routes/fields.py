@@ -19,6 +19,7 @@ from routes.settings import CRYSTAL_COLORS, crystal_norm, get_production_require
 from services.achievements import check_and_award
 from services.card_draw import calculate_norm, cards_to_json, draw_cards, plant_unit_norm
 from services.pet_bonuses import apply_pet_bonus_harvest
+from services.potion_bonuses import consume_potion, is_potion_active
 
 router = APIRouter(prefix="/api/fields", tags=["fields"])
 
@@ -422,13 +423,20 @@ def plant_on_cell(
     unit_norm, cards = plant_unit_norm(db, user, plant_obj)
     required = unit_norm * req.qty
 
+    skip = is_potion_active(user.vk_id, "skip_plant_stitch", db)
+    if skip:
+        required = 0
+
     plot = Plot(
         user_id=user.vk_id, plant_id=req.plant_id, qty=req.qty,
-        status="planted", accumulated=0, required=required,
+        status="grown" if skip else "planted", accumulated=0, required=required,
         drawn_cards_json=cards_to_json(cards) if cards else None, cell_id=cell.id,
     )
     db.add(plot)
     db.flush()
+
+    if skip:
+        consume_potion(user.vk_id, "skip_plant_stitch", db)
 
     db.commit()
     db.refresh(cell)
@@ -484,6 +492,10 @@ def harvest_cell(
     if bonus > 0:
         inv.qty = (inv.qty or 0) + bonus
 
+    if is_potion_active(user.vk_id, "double_garden_harvest", db):
+        inv.qty = (inv.qty or 0) + plot.qty
+        consume_potion(user.vk_id, "double_garden_harvest", db)
+
     db.commit()
     db.refresh(cell)
 
@@ -509,13 +521,21 @@ def _replant_plot(plot: Plot, req: ReplantRequest, user: User, db: Session) -> N
         )
 
     plot.qty = req.qty
-    plot.status = "planted"
     plot.accumulated = 0
     plot.norm_revealed = False
 
     plant_obj = plot.plant
     unit_norm, cards = plant_unit_norm(db, user, plant_obj)
-    plot.required = unit_norm * req.qty
+
+    skip = is_potion_active(user.vk_id, "skip_plant_stitch", db)
+    if skip:
+        plot.status = "grown"
+        plot.required = 0
+        consume_potion(user.vk_id, "skip_plant_stitch", db)
+    else:
+        plot.status = "planted"
+        plot.required = unit_norm * req.qty
+
     plot.drawn_cards_json = cards_to_json(cards) if cards else None
     plot.crystal_color = None
     plot.crystal_count = None
@@ -636,13 +656,20 @@ def plant_on_bed(
     unit_norm, cards = plant_unit_norm(db, user, plant_obj)
     required = unit_norm * req.qty
 
+    skip = is_potion_active(user.vk_id, "skip_plant_stitch", db)
+    if skip:
+        required = 0
+
     plot = Plot(
         user_id=user.vk_id, plant_id=req.plant_id, qty=req.qty,
-        status="planted", accumulated=0, required=required,
+        status="grown" if skip else "planted", accumulated=0, required=required,
         drawn_cards_json=cards_to_json(cards) if cards else None, plant_bed_id=pb.id,
     )
     db.add(plot)
     db.flush()
+
+    if skip:
+        consume_potion(user.vk_id, "skip_plant_stitch", db)
 
     db.commit()
     db.refresh(pb)
@@ -694,6 +721,10 @@ def harvest_bed(
     bonus = apply_pet_bonus_harvest(user.vk_id, plant_obj.category, plot.qty, db)
     if bonus > 0:
         inv.qty = (inv.qty or 0) + bonus
+
+    if is_potion_active(user.vk_id, "double_orchard_harvest", db):
+        inv.qty = (inv.qty or 0) + plot.qty
+        consume_potion(user.vk_id, "double_orchard_harvest", db)
 
     db.commit()
     db.refresh(pb)

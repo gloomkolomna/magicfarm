@@ -12,6 +12,7 @@ from models import Customer, Inventory, OrderReq, Product, User
 from routes.settings import get_default_plant_qty
 from services.achievements import check_and_award
 from services.pet_bonuses import apply_pet_bonus_fulfill
+from services.potion_bonuses import consume_potion, is_potion_active
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
@@ -209,19 +210,38 @@ def fulfill_order(
     inv = db.query(Inventory).filter(
         Inventory.user_id == user.vk_id, Inventory.product_id == o.product_id
     ).first()
-    if inv is None or (inv.qty or 0) < o.qty:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Недостаточно товара на складе",
-        )
+
+    partial = is_potion_active(user.vk_id, "partial_order", db)
+    double_reward = is_potion_active(user.vk_id, "double_order_reward", db)
+
+    if partial:
+        if inv is None or (inv.qty or 0) < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Недостаточно товара на складе",
+            )
+        spent = min(inv.qty or 0, o.qty)
+    else:
+        if inv is None or (inv.qty or 0) < o.qty:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Недостаточно товара на складе",
+            )
+        spent = o.qty
 
     u = db.query(User).filter(User.vk_id == user.vk_id).first()
-    inv.qty = (inv.qty or 0) - o.qty
-    u.coins = (u.coins or 0) + o.reward_coins
+    inv.qty = (inv.qty or 0) - spent
+    reward = o.reward_coins * 2 if double_reward else o.reward_coins
+    u.coins = (u.coins or 0) + reward
 
     bonus = apply_pet_bonus_fulfill(user.vk_id, db)
     if bonus > 0:
         u.coins = (u.coins or 0) + bonus
+
+    if partial:
+        consume_potion(user.vk_id, "partial_order", db)
+    if double_reward:
+        consume_potion(user.vk_id, "double_order_reward", db)
 
     o.status = "fulfilled"
     o.fulfilled_by = user.vk_id

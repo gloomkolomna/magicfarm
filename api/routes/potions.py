@@ -9,6 +9,7 @@ from db import get_db
 from deps import get_current_user, require_role
 from models import Cauldron, CauldronSlot, Inventory, PotionRecipe, User, UserPotion
 from services.achievements import check_and_award
+from services.potion_bonuses import CONDITIONAL_BONUSES, INSTANT_BONUSES
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/potions", tags=["potions"])
@@ -80,6 +81,7 @@ class UserPotionOut(BaseModel):
     description: str | None
     image_url: str | None
     activated: bool
+    used: bool = False
     acquired_at: str | None
 
 
@@ -409,9 +411,69 @@ def list_user_potions(
             description=recipe.description if recipe else None,
             image_url=recipe.image_url if recipe else None,
             activated=up.activated,
+            used=up.used,
             acquired_at=up.acquired_at.isoformat() if up.acquired_at else None,
         ))
     return result
+
+
+class BonusCatalogItem(BaseModel):
+    code: str
+    label: str
+    kind: str
+    owned: bool
+    activated: bool
+    used: bool
+    potion_id: int | None = None
+
+
+@router.get("/bonuses", response_model=list[BonusCatalogItem])
+def list_bonuses(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    potions = db.query(UserPotion).filter(UserPotion.user_id == user.vk_id).all()
+    by_code = {p.bonus_code: p for p in potions if p.bonus_code}
+    result = []
+    for code in POTION_BONUS_LABELS.keys():
+        p = by_code.get(code)
+        result.append(BonusCatalogItem(
+            code=code,
+            label=_bonus_label(code),
+            kind="instant" if code in INSTANT_BONUSES else "conditional",
+            owned=p is not None,
+            activated=p.activated if p else False,
+            used=p.used if p else False,
+            potion_id=p.id if p else None,
+        ))
+    return result
+
+
+def _apply_instant_bonus(user: User, code: str, db: Session) -> None:
+    u = db.query(User).filter(User.vk_id == user.vk_id).first()
+    if u is None:
+        return
+    if code == "free_pet":
+        from models import Pet, UserPet
+        owned = {up.pet_id for up in db.query(UserPet).filter(UserPet.user_id == user.vk_id).all()}
+        pets = db.query(Pet).order_by(Pet.id.asc()).all()
+        free = next((p for p in pets if p.id not in owned), None)
+        if free is not None:
+            db.add(UserPet(user_id=user.vk_id, pet_id=free.id))
+        else:
+            u.unlocked_pets = (u.unlocked_pets or 0) + 1
+    elif code == "early_level_up":
+        u.level = (u.level or 0) + 1
+        if u.round < u.level:
+            u.round = u.level
+    elif code == "extra_barnyard_slot":
+        u.unlocked_barnyard = (u.unlocked_barnyard or 0) + 1
+    elif code == "unlock_garden_l3":
+        if (u.unlocked_plot_level or 1) < 3:
+            u.unlocked_plot_level = 3
+    elif code == "unlock_orchard_l3":
+        if (u.unlocked_garden_level or 0) < 3:
+            u.unlocked_garden_level = 3
 
 
 @router.post("/{potion_id}/activate", response_model=UserPotionOut)
@@ -423,12 +485,18 @@ def activate_potion(
     up = db.query(UserPotion).filter(UserPotion.id == potion_id, UserPotion.user_id == user.vk_id).first()
     if up is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Зелье не найдено")
+    if up.used:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Бонус уже использован")
     if up.activated:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Бонус уже активирован")
     if not up.bonus_code:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У этого зелья нет бонуса")
 
     up.activated = True
+    if up.bonus_code in INSTANT_BONUSES:
+        _apply_instant_bonus(user, up.bonus_code, db)
+        up.used = True
+
     db.commit()
     recipe = db.query(PotionRecipe).filter(PotionRecipe.id == up.potion_recipe_id).first()
     return UserPotionOut(
@@ -438,6 +506,7 @@ def activate_potion(
         description=recipe.description if recipe else None,
         image_url=recipe.image_url if recipe else None,
         activated=up.activated,
+        used=up.used,
         acquired_at=up.acquired_at.isoformat() if up.acquired_at else None,
     )
 

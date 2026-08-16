@@ -42,6 +42,11 @@ def migrated_db(tmp_path, monkeypatch):
                 level VARCHAR NOT NULL, ingredient_slots TEXT NOT NULL,
                 bonus_code VARCHAR, reward_coins INTEGER NOT NULL DEFAULT 100,
                 image_url VARCHAR);
+            CREATE TABLE user_potions (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL,
+                potion_recipe_id INTEGER NOT NULL, bonus_code VARCHAR,
+                activated BOOLEAN NOT NULL DEFAULT 0,
+                acquired_at DATETIME NOT NULL);
             CREATE TABLE orders (
                 id INTEGER PRIMARY KEY, user_id INTEGER, product_id INTEGER NOT NULL,
                 qty INTEGER NOT NULL, reward_coins INTEGER NOT NULL DEFAULT 0,
@@ -158,6 +163,9 @@ def test_migration_new_columns_exist(migrated_db):
 
     order_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(orders)")]
     assert "customer_phrase" in order_cols
+
+    potion_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(user_potions)")]
+    assert "used" in potion_cols
 
 
 def test_migration_seeds_customers(migrated_db):

@@ -502,3 +502,117 @@ def test_user_potion_shows_bonus_description(admin_client, uploads_tmp):
         rec = [r2 for r2 in recipes if r2["id"] == 1][0]
         assert rec["description"] == "Позволяет вырастить растение без вышивки нормы."
         assert rec["image_url"] is not None
+
+
+# ── Бонусы зелий: каталог, активация и эффекты ──
+
+def _seed_potion(vk_id: int, bonus_code: str, activated: bool = False, used: bool = False, recipe_id: int = 1) -> int:
+    from models import UserPotion
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        up = UserPotion(user_id=vk_id, potion_recipe_id=recipe_id, bonus_code=bonus_code,
+                        activated=activated, used=used)
+        s.add(up)
+        s.commit()
+        s.refresh(up)
+        return up.id
+    finally:
+        s.close()
+
+
+def _field_with_bed(admin_client):
+    r = admin_client.post("/api/admin/fields", json={"name": "Поле бонусов", "code": "test_bonus", "cols": 3, "rows": 2})
+    assert r.status_code == 201
+    fid = r.json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}/cells/blocked", json={"cells": [{"col": 1, "row": 1}], "kind": "bed"})
+    admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [1]})
+    return fid
+
+
+def _credit(c, amount):
+    c.post("/api/stitches/reports", data={"amount": str(amount)},
+           files={"photo_after": ("r.png", io.BytesIO(_img_bytes()), "image/png")})
+
+
+def test_bonuses_catalog(admin_client):
+    with make_user_client(123, "player") as c:
+        r = c.get("/api/potions/bonuses")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 15
+        by_code = {b["code"]: b for b in data}
+        assert by_code["early_level_up"]["label"] == "+1 уровень маршрутного листа"
+        assert by_code["early_level_up"]["kind"] == "instant"
+        assert by_code["double_order_reward"]["kind"] == "conditional"
+
+
+def test_activate_instant_bonus(admin_client):
+    _seed_potion(123, "early_level_up", activated=False, used=False)
+    with make_user_client(123, "player") as c:
+        pid = c.get("/api/potions").json()[0]["id"]
+        r = c.post(f"/api/potions/{pid}/activate")
+        assert r.status_code == 200
+        assert r.json()["activated"] is True
+        assert r.json()["used"] is True
+        assert c.get("/api/me").json()["level"] == 1
+
+
+def test_activate_conditional_bonus_arms(admin_client):
+    _seed_potion(123, "double_order_reward", activated=False, used=False)
+    with make_user_client(123, "player") as c:
+        pid = c.get("/api/potions").json()[0]["id"]
+        r = c.post(f"/api/potions/{pid}/activate")
+        assert r.status_code == 200
+        assert r.json()["activated"] is True
+        assert r.json()["used"] is False
+
+
+def test_double_order_reward(admin_client):
+    _seed_product_inventory(123, 1, 2)
+    _seed_potion(123, "double_order_reward", activated=True, used=False)
+    with make_user_client(123, "player") as c:
+        oid = c.post("/api/orders/generate", json={"product_id": 1, "qty": 2}).json()["id"]
+        r = c.post(f"/api/orders/{oid}/fulfill")
+        assert r.status_code == 200
+        assert c.get("/api/me").json()["coins"] == 180
+        assert c.get("/api/potions").json()[0]["used"] is True
+
+
+def test_partial_order_full_reward(admin_client):
+    _seed_product_inventory(123, 1, 1)
+    _seed_potion(123, "partial_order", activated=True, used=False)
+    with make_user_client(123, "player") as c:
+        oid = c.post("/api/orders/generate", json={"product_id": 1, "qty": 2}).json()["id"]
+        r = c.post(f"/api/orders/{oid}/fulfill")
+        assert r.status_code == 200
+        assert r.json()["status"] == "fulfilled"
+        assert c.get("/api/me").json()["coins"] == 90
+        assert c.get("/api/potions").json()[0]["used"] is True
+
+
+def test_skip_plant_stitch_grows_instantly(admin_client):
+    fid = _field_with_bed(admin_client)
+    _seed_potion(123, "skip_plant_stitch", activated=True, used=False)
+    with make_user_client(123, "player") as c:
+        r = c.post(f"/api/fields/{fid}/cells/1/1/plant", json={"plant_id": 1})
+        assert r.status_code == 201
+        assert r.json()["plot"]["status"] == "grown"
+        assert r.json()["plot"]["required"] == 0
+        assert c.get("/api/potions").json()[0]["used"] is True
+
+
+def test_double_garden_harvest(admin_client, uploads_tmp):
+    fid = _field_with_bed(admin_client)
+    with make_user_client(123, "player") as c:
+        _credit(c, 1000)
+        planted = c.post(f"/api/fields/{fid}/cells/1/1/plant", json={"plant_id": 1}).json()
+        plot_id = planted["plot"]["id"]
+        c.post(f"/api/farm/plots/{plot_id}/invest", json={"amount": planted["plot"]["required"]})
+        _seed_potion(123, "double_garden_harvest", activated=True, used=False)
+        r = c.post(f"/api/fields/{fid}/cells/1/1/harvest")
+        assert r.status_code == 200
+        inv = c.get("/api/farm/inventory").json()
+        plant_inv = [i for i in inv if i["item_kind"] == "plant"][0]
+        assert plant_inv["qty"] == 2
+        assert c.get("/api/potions").json()[0]["used"] is True
