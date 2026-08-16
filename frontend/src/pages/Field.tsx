@@ -100,8 +100,8 @@ export default function FieldPage() {
   const [brewSlotIndex, setBrewSlotIndex] = useState<number | null>(null);
   const [brewWarehouse, setBrewWarehouse] = useState<SlotWarehouseItem[]>([]);
   const [brewWarehouseLoading, setBrewWarehouseLoading] = useState(false);
-  const [brewPlantImgs, setBrewPlantImgs] = useState<Record<number, string | null>>({});
-  const [brewProductImgs, setBrewProductImgs] = useState<Record<number, string | null>>({});
+  const [brewPlantItems, setBrewPlantItems] = useState<Record<number, { name: string | null; image: string | null }>>({});
+  const [brewProductItems, setBrewProductItems] = useState<Record<number, { name: string | null; image: string | null }>>({});
 
   const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string; norm?: number; qty?: number } | null>(null);
   const [showVideo, setShowVideo] = useState(false);
@@ -177,8 +177,8 @@ export default function FieldPage() {
       api.plants().catch(() => [] as Plant[]),
       api.products().catch(() => [] as Product[]),
     ]).then(([pls, prds]) => {
-      setBrewPlantImgs(Object.fromEntries(pls.map((p) => [p.id, p.image_harvested_url || p.image_grown_url || p.image_url || null])));
-      setBrewProductImgs(Object.fromEntries(prds.map((p) => [p.id, p.image_url || null])));
+      setBrewPlantItems(Object.fromEntries(pls.map((p) => [p.id, { name: p.name, image: p.image_harvested_url || p.image_grown_url || p.image_url || null }])));
+      setBrewProductItems(Object.fromEntries(prds.map((p) => [p.id, { name: p.name, image: p.image_url || null }])));
     });
   }, []);
 
@@ -232,12 +232,12 @@ export default function FieldPage() {
   const brewActiveRecipe = field?.potion_recipes?.find((r) => r.id === activeCauldron?.recipe_id) ?? null;
   const brewAllSlotsFilled = !!activeCauldron && activeCauldron.slots.length > 0 && activeCauldron.slots.every((s) => s.item_id != null);
 
-  function brewSlotItemImg(slotType: string | null | undefined, itemId: number | null | undefined): string | null {
+  function brewSlotItem(slotType: string | null | undefined, itemId: number | null | undefined): { name: string | null; image: string | null } | null {
     if (itemId == null || !slotType) return null;
     if (slotType === 'plant' || slotType === 'plant_garden' || slotType === 'plant_orchard') {
-      return brewPlantImgs[itemId] ?? null;
+      return brewPlantItems[itemId] ?? null;
     }
-    return brewProductImgs[itemId] ?? null;
+    return brewProductItems[itemId] ?? null;
   }
 
   async function installBrewCauldron(recipeId: number) {
@@ -1068,18 +1068,45 @@ export default function FieldPage() {
                       touchAction: 'manipulation', pointerEvents: activeCauldron && slot ? 'auto' : 'none',
                     }}
                   >
-                    <div style={{ fontSize: 'clamp(14px,4vw,24px)', lineHeight: 1, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-                      {filled
-                        ? (brewSlotItemImg(slotType, slot?.item_id)
-                            ? <img src={mediaUrl(brewSlotItemImg(slotType, slot?.item_id)!)} alt="" style={{ maxHeight: 'clamp(20px,5.5vw,34px)', maxWidth: '90%', objectFit: 'contain' }} />
-                            : '✅')
-                        : slotType ? (ING_ICON[slotType] || '❓') : '▫️'}
-                    </div>
-                    {activeCauldron && slot && (
-                      <div style={{ fontSize: 8, color: '#e6d9ff', textShadow: '0 1px 2px #000', pointerEvents: 'none', textAlign: 'center', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {filled ? 'убрать' : (slotType ? (ING_LABEL[slotType] || slotType) : '')}
-                      </div>
-                    )}
+                    {(() => {
+                      const placed = filled ? brewSlotItem(slotType, slot?.item_id) : null;
+                      if (placed && placed.image) {
+                        return (
+                          <>
+                            <img
+                              src={mediaUrl(placed.image)}
+                              alt=""
+                              style={{ width: '100%', flex: 1, minHeight: 0, objectFit: 'contain', padding: '2px 2px 0', pointerEvents: 'none' }}
+                            />
+                            <div
+                              style={{
+                                fontSize: 9, lineHeight: 1.25, color: '#e6d9ff',
+                                background: 'rgba(26,16,46,0.85)',
+                                border: '1px solid rgba(160,120,220,0.65)',
+                                borderRadius: 4, padding: '1px 4px',
+                                margin: '0 2px 2px', maxWidth: 'calc(100% - 4px)',
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                pointerEvents: 'none', textAlign: 'center',
+                              }}
+                            >
+                              {placed.name}
+                            </div>
+                          </>
+                        );
+                      }
+                      return (
+                        <>
+                          <div style={{ fontSize: 'clamp(14px,4vw,24px)', lineHeight: 1, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+                            {filled ? '✅' : slotType ? (ING_ICON[slotType] || '❓') : '▫️'}
+                          </div>
+                          {activeCauldron && slot && (
+                            <div style={{ fontSize: 8, color: '#e6d9ff', textShadow: '0 1px 2px #000', pointerEvents: 'none', textAlign: 'center', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {filled ? 'убрать' : (slotType ? (ING_LABEL[slotType] || slotType) : '')}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               );
@@ -1231,13 +1258,20 @@ export default function FieldPage() {
               return (
                 <div key={s.slot_index} className="fm-card" style={{ textAlign: 'center', fontSize: 13, background: s.item_id != null ? 'rgba(111,174,74,0.18)' : undefined }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 30 }}>
-                    {s.item_id != null
-                      ? (brewSlotItemImg(slotType, s.item_id)
-                          ? <img src={mediaUrl(brewSlotItemImg(slotType, s.item_id)!)} alt="" style={{ maxHeight: 28, maxWidth: '90%', objectFit: 'contain' }} />
-                          : '✅')
-                      : (slotType ? (ING_ICON[slotType] || '❓') : '▫️')}
+                    {(() => {
+                      const placed = s.item_id != null ? brewSlotItem(slotType, s.item_id) : null;
+                      if (placed && placed.image) {
+                        return <img src={mediaUrl(placed.image)} alt="" style={{ maxHeight: 28, maxWidth: '90%', objectFit: 'contain' }} />;
+                      }
+                      return s.item_id != null ? '✅' : (slotType ? (ING_ICON[slotType] || '❓') : '▫️');
+                    })()}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{slotType ? (ING_LABEL[slotType] || slotType) : 'слот'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {(() => {
+                      const placed = s.item_id != null ? brewSlotItem(slotType, s.item_id) : null;
+                      return placed && placed.name ? placed.name : (slotType ? (ING_LABEL[slotType] || slotType) : 'слот');
+                    })()}
+                  </div>
                 </div>
               );
             })}
