@@ -13,6 +13,22 @@ const TENT_KINDS: Record<string, string> = {
 
 const LEVEL_LABELS: Record<number, string> = { 1: 'I', 2: 'II', 3: 'III' };
 
+function SourceView({ r, size }: { r: LibraryRecipe; size: number }) {
+  const url = r.source_kind === 'animal_product' ? r.source_product_image : r.plant_image;
+  if (url) {
+    return <img src={mediaUrl(url)} alt="" style={{ height: size, maxWidth: size * 1.7, objectFit: 'contain' }} />;
+  }
+  const emoji = r.source_kind === 'animal_product' ? (r.source_product_emoji || '🥚') : (r.plant_emoji || '🌱');
+  return <div style={{ fontSize: size * 0.95, lineHeight: 1 }}>{emoji}</div>;
+}
+
+function ProductView({ r, size, dim }: { r: LibraryRecipe; size: number; dim?: boolean }) {
+  if (r.product_image) {
+    return <img src={mediaUrl(r.product_image)} alt="" style={{ height: size, maxWidth: size * 1.7, objectFit: 'contain', opacity: dim ? 0.5 : 1 }} />;
+  }
+  return <div style={{ fontSize: size * 0.85, lineHeight: 1, opacity: dim ? 0.5 : 1 }}>{r.product_emoji || '📦'}</div>;
+}
+
 export default function LibraryPage() {
   const [recipes, setRecipes] = useState<LibraryRecipe[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -142,8 +158,8 @@ export default function LibraryPage() {
                         opacity: r.status === 'studied' ? 1 : r.status === 'studying' ? 0.75 : 1,
                       }}
                     >
-                      <div style={{ fontSize: 28, flexShrink: 0 }}>
-                        {r.source_kind === 'animal_product' ? (r.source_product_emoji || '🥚') : (r.plant_emoji || '🌱')}
+                      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                        <SourceView r={r} size={32} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 600 }}>
@@ -156,17 +172,17 @@ export default function LibraryPage() {
 
                       <div style={{ fontSize: 20, color: 'var(--text-muted)', flexShrink: 0 }}>→</div>
 
-                      <div style={{ width: 60, textAlign: 'center', flexShrink: 0 }}>
+                      <div style={{ width: 60, textAlign: 'center', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                         {r.status === 'studied' ? (
                           <>
-                            <div style={{ fontSize: 24 }}>{r.product_emoji || '📦'}</div>
+                            <ProductView r={r} size={28} />
                             <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.15 }}>
                               {r.product_name}
                             </div>
                           </>
                         ) : r.status === 'studying' ? (
                           <>
-                            <div style={{ fontSize: 24, opacity: 0.5 }}>{r.product_emoji || '📦'}</div>
+                            <ProductView r={r} size={28} dim />
                             <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.15 }}>
                               {r.product_name}
                             </div>
@@ -193,14 +209,16 @@ export default function LibraryPage() {
       {studyRecipe && (
         <Modal title="📖 Начать изучение" onClose={() => setStudyRecipe(null)}>
           <div style={{ textAlign: 'center', marginBottom: 12 }}>
-            <div style={{ fontSize: 32 }}>
-              {studyRecipe.source_kind === 'animal_product' ? (studyRecipe.source_product_emoji || '🥚') : (studyRecipe.plant_emoji || '🌱')}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <SourceView r={studyRecipe} size={38} />
             </div>
             <div style={{ fontSize: 18, fontWeight: 600 }}>
               {studyRecipe.source_kind === 'animal_product' ? studyRecipe.source_product_name : studyRecipe.plant_name}
             </div>
             <div style={{ fontSize: 24, color: 'var(--text-muted)', marginTop: 4 }}>→</div>
-            <div style={{ fontSize: 32 }}>{studyRecipe.product_emoji || '📦'}</div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 2 }}>
+              <ProductView r={studyRecipe} size={38} />
+            </div>
             <div style={{ fontSize: 16 }}>{studyRecipe.product_name}</div>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center' }}>
@@ -222,14 +240,16 @@ export default function LibraryPage() {
       {finishRecipe && (
         <Modal title="📖 Завершить изучение" onClose={() => setFinishRecipe(null)}>
           <div style={{ textAlign: 'center', marginBottom: 12 }}>
-            <div style={{ fontSize: 32 }}>
-              {finishRecipe.source_kind === 'animal_product' ? (finishRecipe.source_product_emoji || '🥚') : (finishRecipe.plant_emoji || '🌱')}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <SourceView r={finishRecipe} size={38} />
             </div>
             <div style={{ fontSize: 18, fontWeight: 600 }}>
               {finishRecipe.source_kind === 'animal_product' ? finishRecipe.source_product_name : finishRecipe.plant_name}
             </div>
             <div style={{ fontSize: 24, color: 'var(--text-muted)', marginTop: 4 }}>→</div>
-            <div style={{ fontSize: 32 }}>{finishRecipe.product_emoji || '📦'}</div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 2 }}>
+              <ProductView r={finishRecipe} size={38} />
+            </div>
             <div style={{ fontSize: 16 }}>{finishRecipe.product_name}</div>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', margin: '0 0 10px' }}>

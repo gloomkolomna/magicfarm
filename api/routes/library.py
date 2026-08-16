@@ -16,12 +16,15 @@ class RecipeOut(BaseModel):
     plant_id: int | None
     plant_name: str | None
     plant_emoji: str | None
+    plant_image: str | None = None
     source_product_id: int | None
     source_product_name: str | None
     source_product_emoji: str | None
+    source_product_image: str | None = None
     product_id: int
     product_name: str
     product_emoji: str | None
+    product_image: str | None = None
     level: int
     status: str
 
@@ -31,17 +34,25 @@ def _recipe_to_out(r: Recipe, user_id: int, db: Session) -> RecipeOut:
         UserRecipe.user_id == user_id, UserRecipe.recipe_id == r.id
     ).first()
     status_val = ur.status if ur else "locked"
+    plant = r.plant if r.plant_id is not None else None
+    source_product = r.source_product if r.source_product_id is not None else None
+    plant_image = None
+    if plant is not None:
+        plant_image = plant.image_harvested_url or plant.image_url
     return RecipeOut(
         id=r.id,
         source_kind="animal_product" if r.source_product_id is not None else "plant",
         plant_id=r.plant_id,
-        plant_name=r.plant.name if r.plant else None,
-        plant_emoji=r.plant.emoji if r.plant else None,
+        plant_name=plant.name if plant else None,
+        plant_emoji=plant.emoji if plant else None,
+        plant_image=plant_image,
         source_product_id=r.source_product_id,
-        source_product_name=r.source_product.name if r.source_product else None,
-        source_product_emoji=r.source_product.emoji if r.source_product else None,
+        source_product_name=source_product.name if source_product else None,
+        source_product_emoji=source_product.emoji if source_product else None,
+        source_product_image=source_product.image_url if source_product else None,
         product_id=r.product_id,
         product_name=r.product.name, product_emoji=r.product.emoji,
+        product_image=r.product.image_url,
         level=r.level, status=status_val,
     )
 

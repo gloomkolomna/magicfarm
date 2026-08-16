@@ -258,12 +258,15 @@ export interface LibraryRecipe {
   plant_id: number | null;
   plant_name: string | null;
   plant_emoji: string | null;
+  plant_image?: string | null;
   source_product_id: number | null;
   source_product_name: string | null;
   source_product_emoji: string | null;
+  source_product_image?: string | null;
   product_id: number;
   product_name: string;
   product_emoji: string | null;
+  product_image?: string | null;
   level: number;
   status: string;
 }
