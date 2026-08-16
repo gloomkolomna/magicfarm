@@ -3,6 +3,7 @@ import { useSession } from '../context/SessionContext';
 import { api, type CrystalCard, type Pet } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import StitchReportForm from '../components/StitchReportForm';
+import Toast from '../components/Toast';
 
 interface UserPet {
   id: number;
@@ -83,7 +84,7 @@ export default function PetsPage() {
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
+      {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
       <div className="fm-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
         {slots.map((pet, i) => (

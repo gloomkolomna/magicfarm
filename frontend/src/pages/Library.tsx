@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type LibraryRecipe, type Product } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import Toast from '../components/Toast';
 
 const TENT_KINDS: Record<string, string> = {
   alchemy: '⚗️',
@@ -95,7 +96,7 @@ export default function LibraryPage() {
         </div>
       )}
 
-      {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
+      {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
       {loading ? (
         <div className="fm-card">Загрузка библиотеки…</div>

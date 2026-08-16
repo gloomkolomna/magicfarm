@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
 import { api, type Animal, type BarnyardPen, type BarnyardProduceResult, type CrystalCard } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import Toast from '../components/Toast';
 
 const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
@@ -117,7 +118,7 @@ export default function BarnyardPage() {
   return (
     <>
       <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
-        {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
+        {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
         {sorted.length === 0 ? (
           <div className="fm-card" style={{ color: 'var(--text-muted)' }}>

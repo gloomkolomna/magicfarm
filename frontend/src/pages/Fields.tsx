@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { api, type FieldInfo, type LevelGate } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import Toast from '../components/Toast';
 
 const FIELD_KIND_LABEL: Record<string, string> = {
   garden_beds: '🌱 Грядки',
@@ -92,7 +93,7 @@ export default function FieldsPage() {
           )}
         </div>
       )}
-      {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
+      {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
       {bgUrl && <img src={bgUrl} alt="" style={{ width: '100%', borderRadius: 12, marginBottom: 14 }} />}
       {loading ? (
         <div className="fm-card">Загрузка полей…</div>

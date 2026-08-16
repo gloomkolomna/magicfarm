@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
 import { api, potionBonusLabel, cauldronMaterialFor, CAULDRON_MATERIAL_LABELS, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type InventoryItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import Toast from '../components/Toast';
 
 function ingredientIcons(slots: string[]): string {
   const counts = new Map<string, number>();
@@ -187,9 +188,7 @@ export default function PotionsPage() {
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      {msg && (
-        <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }} role="status">{msg}</div>
-      )}
+      {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
       {loading ? (
         <div className="fm-card">Загрузка рецептов…</div>

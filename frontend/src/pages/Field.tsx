@@ -4,6 +4,7 @@ import { useSession } from '../context/SessionContext';
 import { api, type Animal, type CraftInfo, type CraftSessionInfo, type CrystalCard, type FieldCellDetail, type FieldDetail, type HouseState, type Pet, type PlantBed, type Product, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import StitchReportForm from '../components/StitchReportForm';
+import Toast from '../components/Toast';
 import plotUrl from '../assets/plot.png';
 
 const COLOR_LABEL: Record<string, string> = { green: '🟢', blue: '🔵', violet: '🟣' };
@@ -884,11 +885,7 @@ export default function FieldPage() {
         </h1>
       </div>
 
-      {msg && (
-        <div className="fm-card" style={{ position: 'fixed', top: '38px', left: 12, right: 12, zIndex: 20, fontSize: 14, background: 'rgba(15,22,12,0.85)' }}>
-          {msg}
-        </div>
-      )}
+      {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
       {/* Модалка посадки */}
       {plantCell && (

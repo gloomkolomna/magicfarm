@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
 import { api, type Order, type Product } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import Toast from '../components/Toast';
 
 const STATUS_LABEL: Record<string, { label: string; emoji: string }> = {
   open: { label: 'Открыт', emoji: '📋' },
@@ -70,9 +71,7 @@ export default function OrdersPage() {
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      {msg && (
-        <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }} role="status">{msg}</div>
-      )}
+      {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
       <button
         className="fm-btn"

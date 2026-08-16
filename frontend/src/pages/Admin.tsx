@@ -3,6 +3,7 @@ import { useSession } from '../context/SessionContext';
 import { api, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
+import Toast from '../components/Toast';
 import CrystalStandardEditor from '../components/CrystalStandardEditor';
 
 const BONUS_KIND_OPTIONS = [
@@ -1264,7 +1265,7 @@ export default function AdminPage() {
         <TabBtn active={tab === 'logs'} onClick={() => setTab('logs')}>📜 Логи</TabBtn>
       </div>
 
-      {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
+      {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
       {loading ? (
         <div className="fm-card">Загрузка…</div>

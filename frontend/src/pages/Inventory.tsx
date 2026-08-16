@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type InventoryItem } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import Toast from '../components/Toast';
 
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -55,7 +56,7 @@ export default function InventoryPage() {
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
+      {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
       {loading ? (
         <div className="fm-card">Загрузка…</div>

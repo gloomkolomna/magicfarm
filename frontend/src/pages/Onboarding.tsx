@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
 import { api, type CrystalColor, type CrystalNorms } from '../api/endpoints';
+import Toast from '../components/Toast';
 
 const COLORS: { color: CrystalColor; emoji: string; label: string }[] = [
   { color: 'green', emoji: '🟢', label: 'Зелёный' },
@@ -111,7 +112,7 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
         Ниже — ваша норма за одну точку кубика. Потом всё это можно изменить в любой момент.
       </p>
 
-      {msg && <div className="fm-card" style={{ marginBottom: 10, fontSize: 14 }}>{msg}</div>}
+      {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
       <div className="fm-card" style={{ marginBottom: 14 }}>
         <strong>Заполнить стандартом админа:</strong>
