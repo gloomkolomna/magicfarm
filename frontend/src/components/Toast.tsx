@@ -7,8 +7,9 @@ export default function Toast({ text, onClose }: { text: string | null; onClose:
       style={{
         position: 'fixed',
         top: 46,
-        left: '50%',
-        transform: 'translateX(-50%)',
+        left: 0,
+        right: 0,
+        margin: '0 auto',
         zIndex: 110,
         width: 'max-content',
         maxWidth: 'calc(var(--shell-max-width) - 24px)',
