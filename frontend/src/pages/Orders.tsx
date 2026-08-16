@@ -104,7 +104,8 @@ export default function OrdersPage() {
                         <img
                           src={mediaUrl(o.customer_image_url)}
                           alt=""
-                          style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--border)' }}
+                          style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--border)', cursor: 'zoom-in' }}
+                          onClick={(e) => { e.stopPropagation(); setZoomImg(mediaUrl(o.customer_image_url!)); }}
                         />
                       ) : (
                         <div
@@ -230,7 +231,8 @@ export default function OrdersPage() {
               <img
                 src={mediaUrl(detailOrder.customer_image_url)}
                 alt=""
-                style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--border)' }}
+                style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--border)', cursor: 'zoom-in' }}
+                onClick={() => setZoomImg(mediaUrl(detailOrder.customer_image_url!))}
               />
             ) : (
               <div
