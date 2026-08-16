@@ -718,13 +718,18 @@ export const api = {
       .then((r) => r.data),
   generateOrder: (product_id: number, qty?: number, customer?: string | null) =>
     client.post<Order>('/orders/generate', { product_id, qty, customer }).then((r) => r.data),
+  availableOrders: () =>
+    client.get<Order[]>('/orders/available').then((r) => r.data),
+  takeOrder: (id: number) =>
+    client.post<Order>(`/orders/${id}/take`).then((r) => r.data),
   customerNames: () =>
     client.get<string[]>('/orders/customers').then((r) => r.data),
   fulfillOrder: (id: number) => client.post<Order>(`/orders/${id}/fulfill`).then((r) => r.data),
   cancelOrder: (id: number) => client.post<Order>(`/orders/${id}/cancel`).then((r) => r.data),
-  uploadOrderImage: (orderId: number, file: File) => {
+  uploadOrderImage: async (orderId: number, file: File) => {
+    const compressed = await compressImage(file, 1280, 0.85).catch(() => file);
     const form = new FormData();
-    form.append('image', file);
+    form.append('image', compressed);
     return client.post<Order>(`/orders/${orderId}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
 
@@ -1010,9 +1015,10 @@ export const api = {
     client.post<AdminOrder>(`/admin/orders/${orderId}/cancel`).then((r) => r.data),
   adminDeleteOrder: (orderId: number) =>
     client.delete(`/admin/orders/${orderId}`).then((r) => r.data),
-  adminUploadOrderImage: (orderId: number, file: File) => {
+  adminUploadOrderImage: async (orderId: number, file: File) => {
+    const compressed = await compressImage(file, 1280, 0.85).catch(() => file);
     const form = new FormData();
-    form.append('image', file);
+    form.append('image', compressed);
     return client.put<AdminOrder>(`/admin/orders/${orderId}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
 
@@ -1025,9 +1031,10 @@ export const api = {
     client.put<OrderTemplate>(`/admin/order-templates/${id}`, data).then((r) => r.data),
   adminDeleteOrderTemplate: (id: number) =>
     client.delete(`/admin/order-templates/${id}`).then((r) => r.data),
-  adminUploadOrderTemplateImage: (id: number, image: File) => {
+  adminUploadOrderTemplateImage: async (id: number, image: File) => {
+    const compressed = await compressImage(image, 1280, 0.85).catch(() => image);
     const form = new FormData();
-    form.append('image', image);
+    form.append('image', compressed);
     return client.put<OrderTemplate>(`/admin/order-templates/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
 

@@ -166,7 +166,7 @@ def test_cell_plant_refused_in_orchard(admin_client):
 
 # ===== Заказы от посадки дерева =====
 
-def test_plant_tree_creates_orders(admin_client):
+def test_plant_tree_creates_no_orders(admin_client):
     fid, pid, pb_id = _setup_orchard(admin_client)
     prod = admin_client.get("/api/admin/catalog/products").json()[0]["id"]
     admin_client.post("/api/admin/order-templates", json={
@@ -176,7 +176,7 @@ def test_plant_tree_creates_orders(admin_client):
     with _player() as c:
         c.post(f"/api/fields/{fid}/plant-beds/{pb_id}/plant", json={"plant_id": pid})
         orders = c.get("/api/orders?status_filter=open").json()
-    assert any(o["product_id"] == prod for o in orders)
+    assert orders == []
 
 
 # ===== Сбор урожая =====

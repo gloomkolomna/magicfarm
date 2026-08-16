@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { api, type Order, type Product } from '../api/endpoints';
+import { api, type Order } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
 
@@ -12,31 +13,22 @@ const STATUS_LABEL: Record<string, { label: string; emoji: string }> = {
 
 export default function OrdersPage() {
   const { refresh, loading: sessionLoading } = useSession();
+  const nav = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [inventory, setInventory] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [showGen, setShowGen] = useState(false);
-  const [genProduct, setGenProduct] = useState<number | null>(null);
-  const [genQty, setGenQty] = useState('');
-  const [genCustomer, setGenCustomer] = useState('');
-  const [customerNames, setCustomerNames] = useState<string[]>([]);
-  const [genImage, setGenImage] = useState<File | null>(null);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [ord, pr, inv, names] = await Promise.all([
-        api.orders(), api.products(), api.inventory().catch(() => []),
-        api.customerNames().catch(() => [] as string[]),
+      const [ord, inv] = await Promise.all([
+        api.orders(), api.inventory().catch(() => []),
       ]);
       setOrders(ord);
-      setProducts(pr);
-      setCustomerNames(names);
       const invMap: Record<number, number> = {};
       for (const i of inv) invMap[i.item_id] = (invMap[i.item_id] || 0) + i.qty;
       setInventory(invMap);
@@ -77,13 +69,7 @@ export default function OrdersPage() {
         className="fm-btn"
         style={{ width: '100%', marginBottom: 14 }}
         disabled={busy}
-        onClick={() => {
-          setGenProduct(products[0]?.id ?? null);
-          setGenQty('');
-          setGenCustomer(customerNames[0] ?? '');
-          setGenImage(null);
-          setShowGen(true);
-        }}
+        onClick={() => nav('/orders/catalog')}
       >
         ➕ Взять новый заказ
       </button>
@@ -168,67 +154,6 @@ export default function OrdersPage() {
             </>
           )}
         </>
-      )}
-
-      {showGen && (
-        <Modal title="Взять заказ" onClose={() => setShowGen(false)}>
-          <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Товар</label>
-          <select
-            className="fm-input"
-            value={genProduct ?? ''}
-            onChange={(e) => setGenProduct(Number(e.target.value))}
-          >
-            <option value="">— выберите —</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>
-            ))}
-          </select>
-          <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Количество</label>
-          <input
-            className="fm-input"
-            type="number"
-            min={1}
-            value={genQty}
-            onChange={(e) => setGenQty(e.target.value)}
-            placeholder="по умолчанию"
-          />
-          <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Заказчик</label>
-          <select
-            className="fm-input"
-            value={genCustomer}
-            onChange={(e) => setGenCustomer(e.target.value)}
-          >
-            {customerNames.map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-          <label style={{ display: 'block', margin: '10px 0 6px', fontSize: 14 }}>Изображение</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setGenImage(e.target.files?.[0] ?? null)}
-            style={{ fontSize: 13 }}
-          />
-          <button
-            className="fm-btn"
-            style={{ width: '100%', marginTop: 14 }}
-            disabled={busy || !genProduct}
-            onClick={async () => {
-              const ok = await act(async () => {
-                const order = await api.generateOrder(genProduct!, genQty ? Number(genQty) : undefined, genCustomer || undefined);
-                if (genImage) {
-                  await api.uploadOrderImage(order.id, genImage);
-                }
-              }, 'Заказ получен!');
-              if (ok) {
-                setGenImage(null);
-                setShowGen(false);
-              }
-            }}
-          >
-            Взять заказ
-          </button>
-        </Modal>
       )}
 
       {detailOrder && (

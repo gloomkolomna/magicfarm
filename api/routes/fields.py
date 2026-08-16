@@ -435,24 +435,6 @@ def plant_on_cell(
 
     check_and_award(user.vk_id, "first_plant", db)
 
-    from models import OrderReq as OrderModel, OrderTemplate
-    templates = db.query(OrderTemplate).filter(
-        OrderTemplate.source_kind == "plant", OrderTemplate.source_id == req.plant_id
-    ).all()
-    for t in templates:
-        existing = db.query(OrderModel).filter(
-            OrderModel.user_id == user.vk_id,
-            OrderModel.product_id == t.product_id,
-            OrderModel.status == "open",
-        ).first()
-        if existing is None:
-            db.add(OrderModel(
-                user_id=user.vk_id, product_id=t.product_id, qty=t.qty,
-                reward_coins=t.reward_coins, customer=t.customer,
-                status="open", name=t.name, image_url=t.image_url,
-            ))
-    db.commit()
-
     return _cell_detail(cell, db, user, plot)
 
 
@@ -666,24 +648,6 @@ def plant_on_bed(
     db.refresh(pb)
 
     check_and_award(user.vk_id, "first_plant", db)
-
-    from models import OrderReq as OrderModel, OrderTemplate
-    templates = db.query(OrderTemplate).filter(
-        OrderTemplate.source_kind == "plant", OrderTemplate.source_id == req.plant_id
-    ).all()
-    for t in templates:
-        existing_order = db.query(OrderModel).filter(
-            OrderModel.user_id == user.vk_id,
-            OrderModel.product_id == t.product_id,
-            OrderModel.status == "open",
-        ).first()
-        if existing_order is None:
-            db.add(OrderModel(
-                user_id=user.vk_id, product_id=t.product_id, qty=t.qty,
-                reward_coins=t.reward_coins, customer=t.customer,
-                status="open", name=t.name, image_url=t.image_url,
-            ))
-    db.commit()
 
     return _plant_bed_detail(pb, db, user, plot)
 

@@ -84,8 +84,8 @@ def test_generate_order(player_client):
     assert data["qty"] == 3
     assert data["status"] == "open"
     assert data["customer"] == "Леди Бейлин"
-    # reward = qty * order_reward (default 5) = 15.
-    assert data["reward_coins"] == 15
+    # reward = (база растения ур.1 = 5 + надбавка alchemy = 40) * 3 = 135.
+    assert data["reward_coins"] == 135
 
 
 def test_generate_order_without_customer(player_client):
@@ -137,7 +137,7 @@ def test_fulfill_order_success(player_client, monkeypatch):
     assert data["fulfilled_at"] is not None
 
     me = player_client.get("/api/me").json()
-    assert me["coins"] == 10  # 2 * 5
+    assert me["coins"] == 90  # (5 + 40) * 2
 
     inv = player_client.get("/api/farm/inventory").json()
     assert inv[0]["qty"] == 1  # 3 - 2
@@ -213,7 +213,7 @@ def test_admin_generate_order(admin_client):
     assert data["qty"] == 3
     assert data["status"] == "open"
     assert data["customer"] is None
-    assert data["reward_coins"] == 15
+    assert data["reward_coins"] == 135
 
 
 def test_admin_generate_order_default_qty(admin_client):
@@ -251,50 +251,88 @@ def test_admin_generate_order_forbidden(player_client):
 
 
 # ═══════════════════════════════════════════════════════════════
-# Глобальные заказы: игрок видит, выполняет
+# Каталог свободных заказов и взятие
 # ═══════════════════════════════════════════════════════════════
 
 
-def test_global_order_visible_to_player(admin_client, monkeypatch):
+def test_available_orders_empty(player_client):
+    assert player_client.get("/api/orders/available").json() == []
+
+
+def test_global_order_not_in_my_list_but_in_available(admin_client):
     from tests.conftest import make_user_client
     pid = _poison_id(admin_client)
     admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2})
     with make_user_client(123, "player") as player:
-        _craft_poison(player, monkeypatch, cycles=1, qty=3)
-        orders = player.get("/api/orders").json()
-        assert len(orders) == 1
-        assert orders[0]["product_id"] == pid
-        assert orders[0]["status"] == "open"
+        assert player.get("/api/orders").json() == []
+        available = player.get("/api/orders/available").json()
+        assert len(available) == 1
+        assert available[0]["product_id"] == pid
+        assert available[0]["status"] == "open"
 
 
-def test_global_order_fulfill(admin_client, monkeypatch):
+def test_take_order_success(admin_client):
     from tests.conftest import make_user_client
     pid = _poison_id(admin_client)
-    admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2})
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
     with make_user_client(123, "player") as player:
-        _craft_poison(player, monkeypatch, cycles=1, qty=3)
-        oid = player.get("/api/orders").json()[-1]["id"]
-        res = player.post(f"/api/orders/{oid}/fulfill")
+        res = player.post(f"/api/orders/{oid}/take")
         assert res.status_code == 200, res.text
         assert res.json()["status"] == "open"
-        me = player.get("/api/me").json()
-        assert me["coins"] == 10
+
+        mine = player.get("/api/orders").json()
+        assert [o["id"] for o in mine] == [oid]
+        assert player.get("/api/orders/available").json() == []
 
 
-def test_global_order_fulfilled_by_both_players(admin_client, monkeypatch):
+def test_take_order_already_taken(admin_client):
     from tests.conftest import make_user_client
     pid = _poison_id(admin_client)
-    admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1})
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
     with make_user_client(123, "player") as player:
-        _craft_poison(player, monkeypatch, cycles=1, qty=5)
-        oid = player.get("/api/orders").json()[0]["id"]
+        assert player.post(f"/api/orders/{oid}/take").status_code == 200
+    with make_user_client(999, "player") as other:
+        res = other.post(f"/api/orders/{oid}/take")
+        assert res.status_code == 409
+        assert other.get("/api/orders").json() == []
+
+
+def test_take_order_not_open(admin_client):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    admin_client.post(f"/api/admin/orders/{oid}/cancel")
+    with make_user_client(123, "player") as player:
+        res = player.post(f"/api/orders/{oid}/take")
+        assert res.status_code == 409
+
+
+def test_take_order_not_found(player_client):
+    res = player_client.post("/api/orders/9999/take")
+    assert res.status_code == 404
+
+
+def test_taken_order_fulfill(admin_client, monkeypatch):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
+    with make_user_client(123, "player") as player:
+        _craft_poison(player, monkeypatch, cycles=1, qty=3)
+        assert player.post(f"/api/orders/{oid}/take").status_code == 200
         res = player.post(f"/api/orders/{oid}/fulfill")
         assert res.status_code == 200, res.text
-    with make_user_client(999, "player") as other:
-        oid2 = other.get("/api/orders").json()[0]["id"]
-        assert other.get("/api/orders").json()[0]["status"] == "open"
-        res2 = other.post(f"/api/orders/{oid2}/fulfill")
-        assert res2.status_code == 400  # нет товара на складе
+        assert res.json()["status"] == "fulfilled"
+        me = player.get("/api/me").json()
+        assert me["coins"] == 90  # (5 + 40) * 2
+
+
+def test_untaken_global_order_fulfill_forbidden(admin_client):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    with make_user_client(123, "player") as player:
+        res = player.post(f"/api/orders/{oid}/fulfill")
+        assert res.status_code == 403
 
 
 def test_global_order_cancel_forbidden(admin_client):
@@ -312,6 +350,77 @@ def test_global_order_admin_cancel(admin_client):
     res = admin_client.post(f"/api/admin/orders/{oid}/cancel")
     assert res.status_code == 200
     assert res.json()["status"] == "cancelled"
+
+
+def test_reward_includes_tent_surcharge(player_client):
+    """Лунная фасоль ур.1 (5 монет) + шатёр 30 → 35/шт; 10 шт → 350.
+
+    Сценарий из правил: цена товара = база уровня растения + надбавка шатра.
+    """
+    from models import Plant, Product
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        plant = Plant(code="moon_bean", name="Лунная фасоль", emoji="🫘",
+                      category="garden", level=1, norm_per_crystal=100)
+        s.add(plant)
+        s.flush()
+        prod = Product(code="magic_energy", name="Волшебный энергетик", emoji="⚡",
+                       plant_id=plant.id, stars=1, production_kind="sewing")
+        s.add(prod)
+        s.commit()
+        s.refresh(prod)
+        prod_id = prod.id
+    finally:
+        s.close()
+
+    res = player_client.post("/api/orders/generate", json={"product_id": prod_id, "qty": 10})
+    assert res.status_code == 201
+    assert res.json()["reward_coins"] == 350
+
+
+def test_reward_plant_level_scales(player_client):
+    """Растение ур.2 (10 монет) в том же шатре (30) → 40/шт."""
+    from models import Plant, Product
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        plant = Plant(code="gold_bean", name="Золотая фасоль", emoji="🌟",
+                      category="garden", level=2, norm_per_crystal=100)
+        s.add(plant)
+        s.flush()
+        prod = Product(code="gold_cloth", name="Золотая ткань", emoji="🧵", plant_id=plant.id,
+                       stars=1, production_kind="sewing")
+        s.add(prod)
+        s.commit()
+        s.refresh(prod)
+        prod_id = prod.id
+    finally:
+        s.close()
+
+    res = player_client.post("/api/orders/generate", json={"product_id": prod_id, "qty": 3})
+    assert res.status_code == 201
+    assert res.json()["reward_coins"] == 120  # (10 + 30) * 3
+
+
+def test_reward_product_without_plant_uses_level1_base(player_client):
+    """Товар без растения (продукт животного): база ур.1 (5) + надбавка производства."""
+    from models import Product
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        prod = Product(code="rainbow_wool", name="Радужная шерсть", emoji="🧶",
+                       stars=1, production_kind="workshop")
+        s.add(prod)
+        s.commit()
+        s.refresh(prod)
+        prod_id = prod.id
+    finally:
+        s.close()
+
+    res = player_client.post("/api/orders/generate", json={"product_id": prod_id, "qty": 4})
+    assert res.status_code == 201
+    assert res.json()["reward_coins"] == 160  # (5 + 35) * 4
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -24,6 +24,7 @@ const lazyPage = (load: () => Promise<{ default: React.ComponentType }>) =>
   lazy(() => load().catch(reloadOnStaleChunk));
 
 const OrdersPage = lazyPage(() => import('./pages/Orders'));
+const OrderCatalogPage = lazyPage(() => import('./pages/OrderCatalog'));
 const ProfilePage = lazyPage(() => import('./pages/Profile'));
 const AdminPage = lazyPage(() => import('./pages/Admin'));
 const FieldsPage = lazyPage(() => import('./pages/Fields'));
@@ -108,6 +109,7 @@ function App() {
           <Route path="/potions" element={<MiniAppShell><PotionsPage /></MiniAppShell>} />
           <Route path="/achievements" element={<MiniAppShell><AchievementsPage /></MiniAppShell>} />
           <Route path="/orders" element={<MiniAppShell><OrdersPage /></MiniAppShell>} />
+          <Route path="/orders/catalog" element={<MiniAppShell><OrderCatalogPage /></MiniAppShell>} />
           <Route path="/profile" element={<MiniAppShell><ProfilePage /></MiniAppShell>} />
           <Route path="/admin" element={<MiniAppShell><AdminPage /></MiniAppShell>} />
           <Route path="*" element={<Navigate to="/" replace />} />

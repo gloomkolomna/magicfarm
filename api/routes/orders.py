@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user, require_role
 from models import Inventory, OrderReq, Product, User, OrderTemplate
-from routes.settings import get_default_plant_qty, get_order_reward
+from routes.settings import get_default_plant_qty
 from services.achievements import check_and_award
 from services.pet_bonuses import apply_pet_bonus_fulfill
 from services.uploads import remove_upload, save_upload
@@ -48,9 +48,22 @@ def _get_order_or_404(order_id: int, db: Session) -> OrderReq:
 
 def _get_user_order(order_id: int, user: User, db: Session) -> OrderReq:
     o = _get_order_or_404(order_id, db)
-    if o.user_id is not None and o.user_id != user.vk_id:
+    if o.user_id != user.vk_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Это не ваш заказ")
     return o
+
+
+def _calc_order_reward(db: Session, product: Product, qty: int) -> int:
+    from services.pricing import calculate_product_price
+    from models import Plant
+
+    plant_level = 1
+    if product.plant_id is not None:
+        plant = db.query(Plant).filter(Plant.id == product.plant_id).first()
+        if plant is not None:
+            plant_level = plant.level
+    prod_kind = product.production_kind or "alchemy"
+    return calculate_product_price(plant_level, prod_kind, qty, db)
 
 
 class OrderOut(BaseModel):
@@ -93,14 +106,39 @@ def list_orders(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    from sqlalchemy import or_
-    q = db.query(OrderReq).filter(
-        or_(OrderReq.user_id == user.vk_id, OrderReq.user_id == None)
-    )
+    q = db.query(OrderReq).filter(OrderReq.user_id == user.vk_id)
     if status_filter is not None:
         q = q.filter(OrderReq.status == status_filter)
     rows = q.order_by(OrderReq.created_at.desc()).limit(200).all()
     return [_to_out(o) for o in rows]
+
+
+@router.get("/available", response_model=list[OrderOut])
+def list_available_orders(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    rows = db.query(OrderReq).filter(
+        OrderReq.user_id == None, OrderReq.status == "open"
+    ).order_by(OrderReq.created_at.desc()).limit(200).all()
+    return [_to_out(o) for o in rows]
+
+
+@router.post("/{order_id}/take", response_model=OrderOut)
+def take_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    o = _get_order_or_404(order_id, db)
+    if o.user_id is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже взят")
+    if o.status != "open":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен или отменён")
+    o.user_id = user.vk_id
+    db.commit()
+    db.refresh(o)
+    return _to_out(o)
 
 
 class GenerateRequest(BaseModel):
@@ -118,7 +156,8 @@ def generate_order(
     """Создаёт NPC-заказ для игрока.
 
     В правилах Фермы заказ приходит из игры (карточка). В цифре заказ генерируется
-    по запросу: заказчик выбирается из списка, награда = qty × order_reward_per_unit.
+    по запросу: заказчик выбирается из списка, награда = цена товара
+    (база уровня растения + надбавка шатра) × qty.
     """
     product = db.query(Product).filter(Product.id == req.product_id).first()
     if product is None:
@@ -130,7 +169,7 @@ def generate_order(
             detail=f"Количество должно быть от {MIN_QTY} до {MAX_QTY}",
         )
 
-    reward = qty * get_order_reward(db)
+    reward = _calc_order_reward(db, product, qty)
     o = OrderReq(
         user_id=user.vk_id, product_id=product.id, qty=qty,
         reward_coins=reward, customer=req.customer,
@@ -184,9 +223,8 @@ def fulfill_order(
     if bonus > 0:
         u.coins = (u.coins or 0) + bonus
 
-    if o.user_id is not None:
-        o.status = "fulfilled"
-        o.fulfilled_at = datetime.datetime.utcnow()
+    o.status = "fulfilled"
+    o.fulfilled_at = datetime.datetime.utcnow()
 
     db.commit()
     db.refresh(o)
@@ -207,8 +245,6 @@ def cancel_order(
     user: User = Depends(get_current_user),
 ):
     o = _get_user_order(order_id, user, db)
-    if o.user_id is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Глобальные заказы может отменять только администратор")
     if o.status != "open":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен или отменён")
     o.status = "cancelled"
@@ -261,7 +297,7 @@ def admin_generate_order(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Количество должно быть от {MIN_QTY} до {MAX_QTY}",
         )
-    reward = qty * get_order_reward(db)
+    reward = _calc_order_reward(db, product, qty)
     customer = req.customer
     o = OrderReq(
         user_id=None, product_id=product.id, qty=qty,

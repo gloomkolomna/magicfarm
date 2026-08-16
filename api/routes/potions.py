@@ -138,24 +138,6 @@ def create_cauldron(
     db.commit()
     db.refresh(c)
 
-    from models import OrderReq as OrderModel, OrderTemplate
-    templates = db.query(OrderTemplate).filter(
-        OrderTemplate.source_kind == "potion", OrderTemplate.source_id == recipe.id
-    ).all()
-    for t in templates:
-        existing_order = db.query(OrderModel).filter(
-            OrderModel.user_id == user.vk_id,
-            OrderModel.product_id == t.product_id,
-            OrderModel.status == "open",
-        ).first()
-        if existing_order is None:
-            db.add(OrderModel(
-                user_id=user.vk_id, product_id=t.product_id, qty=t.qty,
-                reward_coins=t.reward_coins, customer=t.customer,
-                status="open", name=t.name, image_url=t.image_url,
-            ))
-    db.commit()
-
     return _cauldron_detail(c, db)
 
 
