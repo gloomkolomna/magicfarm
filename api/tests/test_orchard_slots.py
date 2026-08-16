@@ -168,11 +168,6 @@ def test_cell_plant_refused_in_orchard(admin_client):
 
 def test_plant_tree_creates_no_orders(admin_client):
     fid, pid, pb_id = _setup_orchard(admin_client)
-    prod = admin_client.get("/api/admin/catalog/products").json()[0]["id"]
-    admin_client.post("/api/admin/order-templates", json={
-        "source_kind": "plant", "source_id": pid, "product_id": prod,
-        "qty": 2, "reward_coins": 50, "customer": "Русалка",
-    })
     with _player() as c:
         c.post(f"/api/fields/{fid}/plant-beds/{pb_id}/plant", json={"plant_id": pid})
         orders = c.get("/api/orders?status_filter=open").json()

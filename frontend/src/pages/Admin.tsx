@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type OrderTemplate, type OrderTemplateCreate, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
+import { api, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type Customer, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import Toast from '../components/Toast';
@@ -46,10 +46,11 @@ const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: 'production_required', label: 'Норма цикла производства', hint: 'Крестики за один цикл крафта' },
   { key: 'order_reward_per_unit', label: 'Награда за единицу заказа', hint: 'Монет за 1 товар' },
   { key: 'sale_price_ratio', label: 'Коэфф. продажи излишков (0.01–1.0)', hint: 'Доля от полной цены (0.5 = ½)' },
+  { key: 'customer_max_orders', label: 'Лимит активных заказов заказчика (0–50)', hint: 'Заказчики с этим числом открытых заказов скрываются при создании заказа' },
 ];
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'order-templates' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs'>('players');
+  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs'>('players');
   const [players, setPlayers] = useState<Player[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
@@ -148,20 +149,18 @@ export default function AdminPage() {
     if (tab === 'productions' && !r.has('productions')) { r.add('productions'); api.adminProductionTemplates().then(setProdTemplates).catch(() => {}); }
     if (tab === 'media' && !r.has('media')) { r.add('media'); api.adminGameMedia().then(setGameMedia).catch(() => {}); }
     if (tab === 'crystal-cards' && !r.has('crystal-cards')) { r.add('crystal-cards'); api.adminCrystalCards().then(setCrystalCards).catch(() => {}); }
-    if ((tab === 'orders' || tab === 'order-templates') && !r.has('orders')) {
+    if ((tab === 'orders' || tab === 'customers') && !r.has('orders')) {
       r.add('orders');
       Promise.all([
         api.adminOrders().catch(() => [] as AdminOrder[]),
         api.products().catch(() => [] as Product[]),
       ]).then(([ords, prods]) => { setAdminOrders(ords); setProducts(prods); });
     }
-    if ((tab === 'orders' || tab === 'order-templates') && !r.has('customer-names')) { r.add('customer-names'); api.customerNames().then(setCustomerNames).catch(() => {}); }
+    if ((tab === 'orders' || tab === 'customers') && !r.has('customers')) {
+      r.add('customers');
+      api.adminCustomers().then(setCustomers).catch(() => {});
+    }
   }, [tab]);
-
-  // ── Шаблоны заказов ──
-  const [orderTemplates, setOrderTemplates] = useState<OrderTemplate[]>([]);
-  const [tplForm, setTplForm] = useState<Partial<OrderTemplateCreate>>({ source_kind: 'plant', source_id: 0, product_id: 0, qty: 1, reward_coins: 5 });
-  const [tplEditingId, setTplEditingId] = useState<number | null>(null);
 
   // ── Уровни ──
   const [levels, setLevels] = useState<LevelGate[]>([]);
@@ -259,8 +258,14 @@ export default function AdminPage() {
   const [achEditingId, setAchEditingId] = useState<number | null>(null);
   const [achImage, setAchImage] = useState<File | null>(null);
 
-  // ── Заказчики (фиксированный список) ──
-  const [customerNames, setCustomerNames] = useState<string[]>([]);
+  // ── Заказчики ──
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerForm, setCustomerForm] = useState('');
+  const [customerEditingId, setCustomerEditingId] = useState<number | null>(null);
+  const customerNames = customers.map((c) => c.name);
+  const rawCustomerMax = Number(settings['customer_max_orders']);
+  const customerMaxOrders = Number.isFinite(rawCustomerMax) ? rawCustomerMax : 3;
+  const freeCustomerNames = customers.filter((c) => c.open_orders_count < customerMaxOrders).map((c) => c.name);
 
   // ── Фон ──
   const [bgUrl, setBgUrl] = useState('');
@@ -271,6 +276,9 @@ export default function AdminPage() {
   const [orderEditingId, setOrderEditingId] = useState<number | null>(null);
   const [orderForm, setOrderForm] = useState<Record<string, string>>({});
   const [orderImage, setOrderImage] = useState<File | null>(null);
+  const orderCustomerOptions = orderForm.customer && !freeCustomerNames.includes(orderForm.customer)
+    ? [orderForm.customer, ...freeCustomerNames]
+    : freeCustomerNames;
 
   const loadedRef = useRef<Set<string>>(new Set());
 
@@ -324,7 +332,6 @@ export default function AdminPage() {
       setProducts(prods);
       setCatalogProducts(catProds);
       setProdTemplates(ptsTmpl);
-      loadOrderTemplates();
       loadBg();
     } finally {
       setLoading(false);
@@ -552,6 +559,7 @@ export default function AdminPage() {
     setOrderImage(null);
     setOrderEditingId(null);
     setOrderFormOpen(true);
+    api.adminCustomers().then(setCustomers).catch(() => {});
   }
 
   function startEditOrder(o: AdminOrder) {
@@ -565,6 +573,7 @@ export default function AdminPage() {
     });
     setOrderEditingId(o.id);
     setOrderFormOpen(true);
+    api.adminCustomers().then(setCustomers).catch(() => {});
   }
 
   async function saveOrder() {
@@ -597,6 +606,7 @@ export default function AdminPage() {
       setOrderEditingId(null);
       setOrderImage(null);
       await load();
+      api.adminCustomers().then(setCustomers).catch(() => {});
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
@@ -657,96 +667,85 @@ export default function AdminPage() {
     finally { setBusy(false); }
   }
 
-  // ── Шаблоны заказов ──
-  async function loadOrderTemplates() {
-    try { setOrderTemplates(await api.adminOrderTemplates()); }
+  // ── Заказчики ──
+  async function loadCustomers() {
+    try { setCustomers(await api.adminCustomers()); }
     catch { /* ignore */ }
   }
-  async function saveOrderTemplate() {
-    if (!tplForm.source_kind || !tplForm.source_id || !tplForm.product_id || !tplForm.qty) { setMsg('✗ Заполните все поля'); return; }
+  async function saveCustomer() {
+    const name = customerForm.trim();
+    if (!name) { setMsg('✗ Введите имя заказчика'); return; }
     setBusy(true); setMsg(null);
     try {
-      if (tplEditingId) { await api.adminUpdateOrderTemplate(tplEditingId, tplForm as OrderTemplateCreate); }
-      else { await api.adminCreateOrderTemplate(tplForm as OrderTemplateCreate); }
-      await loadOrderTemplates();
-      setTplForm({ source_kind: 'plant', source_id: 0, product_id: 0, qty: 1, reward_coins: 5 });
-      setTplEditingId(null);
+      if (customerEditingId) { await api.adminUpdateCustomer(customerEditingId, name); }
+      else { await api.adminCreateCustomer(name); }
+      await loadCustomers();
+      setCustomerForm('');
+      setCustomerEditingId(null);
       setMsg('✓ Сохранено');
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
-  async function deleteOrderTemplate(id: number) {
-    if (!(await confirmDialog('Удалить шаблон?'))) return;
+  async function deleteCustomer(id: number) {
+    if (!(await confirmDialog('Удалить заказчика?'))) return;
     setBusy(true); setMsg(null);
-    try { await api.adminDeleteOrderTemplate(id); await loadOrderTemplates(); setMsg('✓ Удалено'); }
+    try { await api.adminDeleteCustomer(id); await loadCustomers(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
-  async function uploadTplImage(id: number, file: File) {
+  async function uploadCustomerImage(id: number, file: File) {
     setBusy(true); setMsg(null);
     try {
-      const compressed = await compressImage(file, 800);
-      await api.adminUploadOrderTemplateImage(id, compressed);
-      await loadOrderTemplates();
-      setMsg('✓ Картинка загружена');
+      await api.adminUploadCustomerImage(id, file);
+      await loadCustomers();
+      setMsg('✓ Фото загружено');
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
 
-  function renderOrderTemplates() {
+  function renderCustomers() {
     return (
       <div>
-        <h2>📋 Шаблоны заказов</h2>
-        <div className="fm-card" style={{ marginBottom: 10 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            <select className="fm-input" value={tplForm.source_kind || 'plant'} onChange={(e) => setTplForm({ ...tplForm, source_kind: e.target.value })}>
-              <option value="plant">Растение</option>
-              <option value="animal">Животное</option>
-              <option value="product">Товар</option>
-              <option value="potion">Зелье</option>
-            </select>
-            <input className="fm-input" type="number" placeholder="source_id" value={tplForm.source_id || ''} onChange={(e) => setTplForm({ ...tplForm, source_id: Number(e.target.value) })} />
-            <select className="fm-input" value={tplForm.product_id || ''} onChange={(e) => setTplForm({ ...tplForm, product_id: Number(e.target.value) })}>
-              <option value="">Товар</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <input className="fm-input" type="number" placeholder="Кол-во" value={tplForm.qty || ''} onChange={(e) => setTplForm({ ...tplForm, qty: Number(e.target.value) })} style={{ width: 80 }} />
-            <input className="fm-input" type="number" placeholder="Монет" value={tplForm.reward_coins || ''} onChange={(e) => setTplForm({ ...tplForm, reward_coins: Number(e.target.value) })} style={{ width: 80 }} />
-            <select className="fm-input" value={tplForm.customer || ''} onChange={(e) => setTplForm({ ...tplForm, customer: e.target.value })} style={{ width: 180 }}>
-              <option value="">Заказчик</option>
-              {customerNames.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            <input className="fm-input" placeholder="Название" value={tplForm.name || ''} onChange={(e) => setTplForm({ ...tplForm, name: e.target.value })} style={{ width: 140 }} />
-          </div>
-          <button className="fm-btn" disabled={busy} onClick={saveOrderTemplate}>
-            {tplEditingId ? '✎ Сохранить' : '➕ Создать'}
+        <h2>🧑 Заказчики</h2>
+        <div className="fm-card" style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            className="fm-input"
+            placeholder="Имя заказчика"
+            value={customerForm}
+            onChange={(e) => setCustomerForm(e.target.value)}
+            style={{ maxWidth: 280 }}
+          />
+          <button className="fm-btn" disabled={busy} onClick={saveCustomer}>
+            {customerEditingId ? '✎ Сохранить' : '➕ Добавить'}
           </button>
-          {tplEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setTplEditingId(null); setTplForm({ source_kind: 'plant', source_id: 0, product_id: 0, qty: 1, reward_coins: 5 }); }}>Отмена</button>}
+          {customerEditingId && (
+            <button className="fm-btn fm-btn-outline" onClick={() => { setCustomerEditingId(null); setCustomerForm(''); }}>Отмена</button>
+          )}
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
-          <thead><tr><th>ID</th><th>Тип</th><th>source_id</th><th>Товар</th><th>Кол-во</th><th>Монет</th><th>Заказчик</th><th>Картинка</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Имя</th><th>Открытых заказов</th><th>Фото</th><th></th></tr></thead>
           <tbody>
-            {orderTemplates.map((t) => (
-              <tr key={t.id}>
-                <td>{t.id}</td><td>{t.source_kind}</td><td>{t.source_id}</td>
-                <td>{products.find((p) => p.id === t.product_id)?.name || t.product_id}</td>
-                <td>{t.qty}</td><td>{t.reward_coins}</td><td>{t.customer || '—'}</td>
+            {customers.map((c) => (
+              <tr key={c.id} style={c.open_orders_count >= customerMaxOrders ? { opacity: 0.5 } : undefined}>
+                <td>{c.id}</td>
+                <td>{c.name}</td>
+                <td>{c.open_orders_count}{c.open_orders_count >= customerMaxOrders ? ' (лимит)' : ''}</td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {t.image_url && <img src={mediaUrl(t.image_url)} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4 }} />}
+                    {c.image_url && <img src={mediaUrl(c.image_url)} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4 }} />}
                     <label className="fm-btn fm-btn-sm" style={{ cursor: 'pointer', margin: 0 }}>
                       🖼
                       <input type="file" accept="image/*" hidden onChange={(e) => {
                         const f = e.target.files?.[0];
-                        if (f) uploadTplImage(t.id, f);
+                        if (f) uploadCustomerImage(c.id, f);
                         e.target.value = '';
                       }} />
                     </label>
                   </div>
                 </td>
                 <td>
-                  <button className="fm-btn fm-btn-sm" onClick={() => { setTplEditingId(t.id); setTplForm({ source_kind: t.source_kind, source_id: t.source_id, product_id: t.product_id, qty: t.qty, reward_coins: t.reward_coins, customer: t.customer, name: t.name }); }}>✎</button>
-                  <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteOrderTemplate(t.id)}>🗑</button>
+                  <button className="fm-btn fm-btn-sm" onClick={() => { setCustomerEditingId(c.id); setCustomerForm(c.name); }}>✎</button>
+                  <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteCustomer(c.id)}>🗑</button>
                 </td>
               </tr>
             ))}
@@ -1282,7 +1281,7 @@ export default function AdminPage() {
         <TabBtn active={tab === 'products'} onClick={() => setTab('products')}>📦 Товары</TabBtn>
         <TabBtn active={tab === 'productions'} onClick={() => setTab('productions')}>🏭 Производства</TabBtn>
         <TabBtn active={tab === 'recipes'} onClick={() => { setTab('recipes'); loadRecipes(); }}>📚 Рецепты</TabBtn>
-        <TabBtn active={tab === 'order-templates'} onClick={() => { setTab('order-templates'); loadOrderTemplates(); }}>📋 Шаблоны заказов</TabBtn>
+        <TabBtn active={tab === 'customers'} onClick={() => { setTab('customers'); loadCustomers(); }}>🧑 Заказчики</TabBtn>
         <TabBtn active={tab === 'levels'} onClick={() => { setTab('levels'); loadLevels(); }}>📊 Уровни</TabBtn>
         <TabBtn active={tab === 'potion-recipes'} onClick={() => { setTab('potion-recipes'); loadPotionRecipes(); }}>🧪 Рецепты зелий</TabBtn>
         <TabBtn active={tab === 'media'} onClick={() => setTab('media')}>🎬 Медиа</TabBtn>
@@ -1674,7 +1673,7 @@ export default function AdminPage() {
           )}
 
           {tab === 'recipes' && renderRecipes()}
-          {tab === 'order-templates' && renderOrderTemplates()}
+          {tab === 'customers' && renderCustomers()}
           {tab === 'levels' && renderLevels()}
           {tab === 'potion-recipes' && renderPotionRecipes()}
 
@@ -1707,10 +1706,15 @@ export default function AdminPage() {
                     <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Заказчик</label>
                     <select className="fm-input" value={orderForm.customer || ''} onChange={(e) => setOrderForm({ ...orderForm, customer: e.target.value })}>
                       <option value="">— не указан —</option>
-                      {customerNames.map((n) => (
+                      {orderCustomerOptions.map((n) => (
                         <option key={n} value={n}>{n}</option>
                       ))}
                     </select>
+                    {customers.some((c) => c.open_orders_count >= customerMaxOrders) && orderEditingId === null && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                        Заказчики с {customerMaxOrders} открытыми заказами скрыты
+                      </div>
+                    )}
                   </div>
                   {orderEditingId !== null && (
                     <>

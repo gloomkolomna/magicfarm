@@ -83,6 +83,12 @@ def seed_farm():
             "((SELECT id FROM plants WHERE code='poison_mush'), "
             "(SELECT id FROM products WHERE code='poison'), 1)"
         ))
+        conn.execute(text(
+            "INSERT INTO customers (name) VALUES "
+            "('Леди Бейлин'), "
+            "('Русалка Марин'), "
+            "('Маг Годвин')"
+        ))
         for color in ("green", "blue", "violet"):
             for value in range(1, 6):
                 conn.execute(text(

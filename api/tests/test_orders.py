@@ -3,7 +3,6 @@ import io
 from PIL import Image
 
 import config
-from routes.orders import CUSTOMER_NAMES
 
 
 def _img_bytes():
@@ -98,11 +97,7 @@ def test_generate_order_without_customer(player_client):
 def test_list_customer_names(player_client):
     data = player_client.get("/api/orders/customers").json()
     assert isinstance(data, list)
-    assert len(data) == len(CUSTOMER_NAMES)
-    assert "Леди Бейлин" in data
-    assert "Профессор Кларисса" in data
-    assert "Мышиный воин Осборт" in data
-    assert "Ледяная Сванекильда" in data
+    assert data == ["Леди Бейлин", "Русалка Марин", "Маг Годвин"]
 
 
 def test_generate_order_default_qty(player_client):
@@ -310,6 +305,100 @@ def test_take_order_not_open(admin_client):
 def test_take_order_not_found(player_client):
     res = player_client.post("/api/orders/9999/take")
     assert res.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════
+# Выполнил заказ — больше не может взять/выполнить его снова
+# ═══════════════════════════════════════════════════════════════
+
+
+def _return_order_to_pool(order_id: int):
+    from models import OrderReq
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        o = s.query(OrderReq).filter(OrderReq.id == order_id).first()
+        o.user_id = None
+        o.status = "open"
+        s.commit()
+    finally:
+        s.close()
+
+
+def test_fulfill_sets_fulfilled_by(admin_client, monkeypatch):
+    from tests.conftest import make_user_client
+    from models import OrderReq
+    from tests.conftest import TestingSessionLocal
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
+    with make_user_client(123, "player") as player:
+        _craft_poison(player, monkeypatch, cycles=1, qty=3)
+        player.post(f"/api/orders/{oid}/take")
+        assert player.post(f"/api/orders/{oid}/fulfill").status_code == 200
+    s = TestingSessionLocal()
+    try:
+        o = s.query(OrderReq).filter(OrderReq.id == oid).first()
+        assert o.fulfilled_by == 123
+    finally:
+        s.close()
+
+
+def test_fulfilled_order_not_retakeable_by_same_player(admin_client, monkeypatch):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
+    with make_user_client(123, "player") as player:
+        _craft_poison(player, monkeypatch, cycles=1, qty=3)
+        player.post(f"/api/orders/{oid}/take")
+        player.post(f"/api/orders/{oid}/fulfill")
+
+        _return_order_to_pool(oid)
+        available = player.get("/api/orders/available").json()
+        assert all(a["id"] != oid for a in available)
+        res = player.post(f"/api/orders/{oid}/take")
+        assert res.status_code == 409
+        assert res.json()["detail"] == "Вы уже выполняли этот заказ"
+
+
+def test_fulfilled_order_takeable_by_other_player(admin_client, monkeypatch):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
+    with make_user_client(123, "player") as player:
+        _craft_poison(player, monkeypatch, cycles=1, qty=3)
+        player.post(f"/api/orders/{oid}/take")
+        player.post(f"/api/orders/{oid}/fulfill")
+
+    _return_order_to_pool(oid)
+    with make_user_client(999, "player") as other:
+        available = other.get("/api/orders/available").json()
+        assert any(a["id"] == oid for a in available)
+        res = other.post(f"/api/orders/{oid}/take")
+        assert res.status_code == 200
+
+
+def test_refulfill_after_reopen_forbidden(admin_client, monkeypatch):
+    from tests.conftest import make_user_client
+    from models import OrderReq
+    from tests.conftest import TestingSessionLocal
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
+    with make_user_client(123, "player") as player:
+        _craft_poison(player, monkeypatch, cycles=1, qty=5)
+        player.post(f"/api/orders/{oid}/take")
+        player.post(f"/api/orders/{oid}/fulfill")
+
+        s = TestingSessionLocal()
+        try:
+            o = s.query(OrderReq).filter(OrderReq.id == oid).first()
+            o.status = "open"
+            s.commit()
+        finally:
+            s.close()
+
+        res = player.post(f"/api/orders/{oid}/fulfill")
+        assert res.status_code == 409
+        assert res.json()["detail"] == "Вы уже выполняли этот заказ"
 
 
 def test_taken_order_fulfill(admin_client, monkeypatch):

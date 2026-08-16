@@ -17,26 +17,11 @@ export interface Plant {
   image_harvested_url: string | null;
 }
 
-export interface OrderTemplate {
+export interface Customer {
   id: number;
-  source_kind: string;
-  source_id: number;
-  product_id: number;
-  qty: number;
-  reward_coins: number;
-  customer: string | null;
-  name: string | null;
+  name: string;
   image_url: string | null;
-}
-
-export interface OrderTemplateCreate {
-  source_kind: string;
-  source_id: number;
-  product_id: number;
-  qty: number;
-  reward_coins?: number;
-  customer?: string | null;
-  name?: string | null;
+  open_orders_count: number;
 }
 
 export interface LevelGate {
@@ -1023,20 +1008,20 @@ export const api = {
     return client.put<AdminOrder>(`/admin/orders/${orderId}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
 
-  // ── Админ: шаблоны заказов ──
-  adminOrderTemplates: (sourceKind?: string, sourceId?: number) =>
-    client.get<OrderTemplate[]>('/admin/order-templates', { params: { source_kind: sourceKind, source_id: sourceId } }).then((r) => r.data),
-  adminCreateOrderTemplate: (data: OrderTemplateCreate) =>
-    client.post<OrderTemplate>('/admin/order-templates', data).then((r) => r.data),
-  adminUpdateOrderTemplate: (id: number, data: OrderTemplateCreate) =>
-    client.put<OrderTemplate>(`/admin/order-templates/${id}`, data).then((r) => r.data),
-  adminDeleteOrderTemplate: (id: number) =>
-    client.delete(`/admin/order-templates/${id}`).then((r) => r.data),
-  adminUploadOrderTemplateImage: async (id: number, image: File) => {
-    const compressed = await compressImage(image, 1280, 0.85).catch(() => image);
+  // ── Админ: заказчики ──
+  adminCustomers: () =>
+    client.get<Customer[]>('/admin/customers').then((r) => r.data),
+  adminCreateCustomer: (name: string) =>
+    client.post<Customer>('/admin/customers', { name }).then((r) => r.data),
+  adminUpdateCustomer: (id: number, name: string) =>
+    client.put<Customer>(`/admin/customers/${id}`, { name }).then((r) => r.data),
+  adminDeleteCustomer: (id: number) =>
+    client.delete(`/admin/customers/${id}`).then((r) => r.data),
+  adminUploadCustomerImage: async (id: number, image: File) => {
+    const compressed = await compressImage(image, 400, 0.85).catch(() => image);
     const form = new FormData();
     form.append('image', compressed);
-    return client.put<OrderTemplate>(`/admin/order-templates/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    return client.put<Customer>(`/admin/customers/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
 
   // ── Админ: уровни ──

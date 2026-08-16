@@ -3,37 +3,18 @@ import datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_role
-from models import Inventory, OrderReq, Product, User, OrderTemplate
+from models import Customer, Inventory, OrderReq, Product, User
 from routes.settings import get_default_plant_qty
 from services.achievements import check_and_award
 from services.pet_bonuses import apply_pet_bonus_fulfill
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
-
-CUSTOMER_NAMES = (
-    "Леди Бейлин", "Иллюзионист Мерлин", "Крестьянка Бэт", "Крестьянин Том",
-    "Травница Свентана", "Профессор Дамболдор", "Волшебница Альвева", "Палач Мор",
-    "Ведьма Бригида", "Волшебник Рандольф", "Ученица Гильда", "Профессор Рон",
-    "Господин Иоханн", "Поэт Вальтер", "Цветочница Колетта", "Маг Годвин",
-    "Ведьма Груда", "Ведьма Доротея", "Водяная Акварис", "Тролль Гослин",
-    "Воин Стасий", "Водяной Дионисий", "Болотная Иса", "Прокажённый Гус",
-    "Хамон", "Разбойница Томасина", "Эльф Эверард", "Бусли",
-    "Разбойник Гольём", "Библиотекарь Летард", "Книжница Элоиза", "Циркач Белкс",
-    "Старец Эдрик", "Изобретатель Нигель", "Розамунда", "Гуннильда",
-    "Фей Алан", "Прометеус", "Гном Дремотун", "Гном Гром",
-    "Гном Плясун", "Султан Арагим", "Султан Эфиос", "Красавица Ева",
-    "Художница Стефания", "Сэр Аорон", "Фея Аврора", "Король Артур",
-    "Оборотень Рандус", "Старец Симонус", "Эльф Анарендил", "Эльфийка Хиварра",
-    "Эльф Фараун", "Астроном Сириус", "Русалка Марин", "Профессор Сусанна",
-    "Гадалка Сванекильда", "Ученица Холли", "Русалка Оресия", "Русалка Эделина",
-    "Профессор Гилотта", "Иллюзионист Сфериус", "Волшебница Идонея", "Учёный Томас",
-    "Профессор Кларисса", "Оборотень Уолк", "Мышиный воин Осборт", "Ледяная Сванекильда",
-)
 
 MIN_QTY = 1
 MAX_QTY = 20
@@ -95,9 +76,10 @@ def _to_out(o: OrderReq) -> OrderOut:
 
 @router.get("/customers", response_model=list[str])
 def list_customer_names(
+    db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    return list(CUSTOMER_NAMES)
+    return [c.name for c in db.query(Customer).order_by(Customer.id.asc()).all()]
 
 
 @router.get("", response_model=list[OrderOut])
@@ -119,7 +101,8 @@ def list_available_orders(
     user: User = Depends(get_current_user),
 ):
     rows = db.query(OrderReq).filter(
-        OrderReq.user_id == None, OrderReq.status == "open"
+        OrderReq.user_id == None, OrderReq.status == "open",
+        (OrderReq.fulfilled_by == None) | (OrderReq.fulfilled_by != user.vk_id),
     ).order_by(OrderReq.created_at.desc()).limit(200).all()
     return [_to_out(o) for o in rows]
 
@@ -131,6 +114,8 @@ def take_order(
     user: User = Depends(get_current_user),
 ):
     o = _get_order_or_404(order_id, db)
+    if o.fulfilled_by == user.vk_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Вы уже выполняли этот заказ")
     if o.user_id is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже взят")
     if o.status != "open":
@@ -203,6 +188,8 @@ def fulfill_order(
     user: User = Depends(get_current_user),
 ):
     o = _get_user_order(order_id, user, db)
+    if o.fulfilled_by == user.vk_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Вы уже выполняли этот заказ")
     if o.status != "open":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен или отменён")
 
@@ -224,6 +211,7 @@ def fulfill_order(
         u.coins = (u.coins or 0) + bonus
 
     o.status = "fulfilled"
+    o.fulfilled_by = user.vk_id
     o.fulfilled_at = datetime.datetime.utcnow()
 
     db.commit()
@@ -398,132 +386,116 @@ def upload_order_image(
     return _admin_to_out(o)
 
 
-# ── Order Templates (admin) ──
+# ── Customers (admin) ──
 
-template_router = APIRouter(prefix="/api/admin/order-templates", tags=["admin-order-templates"])
+customer_router = APIRouter(prefix="/api/admin/customers", tags=["admin-customers"])
 
 
-class OrderTemplateOut(BaseModel):
+class CustomerOut(BaseModel):
     id: int
-    source_kind: str
-    source_id: int
-    product_id: int
-    qty: int
-    reward_coins: int
-    customer: str | None
-    name: str | None
+    name: str
     image_url: str | None
+    open_orders_count: int = 0
 
 
-def _tpl_out(t: OrderTemplate) -> OrderTemplateOut:
-    return OrderTemplateOut(
-        id=t.id, source_kind=t.source_kind, source_id=t.source_id,
-        product_id=t.product_id, qty=t.qty, reward_coins=t.reward_coins,
-        customer=t.customer, name=t.name, image_url=t.image_url,
+def _customer_out(c: Customer, open_orders_count: int = 0) -> CustomerOut:
+    return CustomerOut(id=c.id, name=c.name, image_url=c.image_url, open_orders_count=open_orders_count)
+
+
+class CustomerCreate(BaseModel):
+    name: str
+
+
+def _get_customer_or_404(customer_id: int, db: Session) -> Customer:
+    c = db.query(Customer).filter(Customer.id == customer_id).first()
+    if c is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказчик не найден")
+    return c
+
+
+def _ensure_name_free(name: str, db: Session, exclude_id: int | None = None):
+    q = db.query(Customer).filter(Customer.name == name)
+    if exclude_id is not None:
+        q = q.filter(Customer.id != exclude_id)
+    if q.first() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказчик с таким именем уже есть")
+
+
+@customer_router.get("", response_model=list[CustomerOut])
+def list_customers(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    counts = dict(
+        db.query(OrderReq.customer, func.count(OrderReq.id))
+        .filter(OrderReq.status == "open", OrderReq.customer.isnot(None))
+        .group_by(OrderReq.customer)
+        .all()
     )
+    return [
+        _customer_out(c, counts.get(c.name, 0))
+        for c in db.query(Customer).order_by(Customer.id.asc()).all()
+    ]
 
 
-class OrderTemplateCreate(BaseModel):
-    source_kind: str
-    source_id: int
-    product_id: int
-    qty: int
-    reward_coins: int = 0
-    customer: str | None = None
-    name: str | None = None
-
-
-@template_router.get("", response_model=list[OrderTemplateOut])
-def list_templates(
-    source_kind: str | None = None,
-    source_id: int | None = None,
+@customer_router.post("", response_model=CustomerOut, status_code=status.HTTP_201_CREATED)
+def create_customer(
+    req: CustomerCreate,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
-    q = db.query(OrderTemplate).order_by(OrderTemplate.id.asc())
-    if source_kind is not None:
-        q = q.filter(OrderTemplate.source_kind == source_kind)
-    if source_id is not None:
-        q = q.filter(OrderTemplate.source_id == source_id)
-    return [_tpl_out(t) for t in q.limit(200).all()]
-
-
-@template_router.post("", response_model=OrderTemplateOut, status_code=status.HTTP_201_CREATED)
-def create_template(
-    req: OrderTemplateCreate,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin")),
-):
-    if req.source_kind not in ("plant", "animal", "product", "potion"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="source_kind: plant/animal/product/potion")
-    if req.qty < 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="qty >= 1")
-    product = db.query(Product).filter(Product.id == req.product_id).first()
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
-    t = OrderTemplate(
-        source_kind=req.source_kind, source_id=req.source_id,
-        product_id=req.product_id, qty=req.qty, reward_coins=req.reward_coins,
-        customer=req.customer, name=req.name,
-    )
-    db.add(t)
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Имя не может быть пустым")
+    _ensure_name_free(name, db)
+    c = Customer(name=name)
+    db.add(c)
     db.commit()
-    db.refresh(t)
-    return _tpl_out(t)
+    db.refresh(c)
+    return _customer_out(c)
 
 
-@template_router.put("/{template_id}", response_model=OrderTemplateOut)
-def update_template(
-    template_id: int,
-    req: OrderTemplateCreate,
+@customer_router.put("/{customer_id}", response_model=CustomerOut)
+def update_customer(
+    customer_id: int,
+    req: CustomerCreate,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
-    t = db.query(OrderTemplate).filter(OrderTemplate.id == template_id).first()
-    if t is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Шаблон не найден")
-    if req.source_kind not in ("plant", "animal", "product", "potion"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="source_kind: plant/animal/product/potion")
-    if req.qty < 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="qty >= 1")
-    t.source_kind = req.source_kind
-    t.source_id = req.source_id
-    t.product_id = req.product_id
-    t.qty = req.qty
-    t.reward_coins = req.reward_coins
-    t.customer = req.customer
-    t.name = req.name
+    c = _get_customer_or_404(customer_id, db)
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Имя не может быть пустым")
+    _ensure_name_free(name, db, exclude_id=c.id)
+    c.name = name
     db.commit()
-    db.refresh(t)
-    return _tpl_out(t)
+    db.refresh(c)
+    return _customer_out(c)
 
 
-@template_router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_template(
-    template_id: int,
+@customer_router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_customer(
+    customer_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
-    t = db.query(OrderTemplate).filter(OrderTemplate.id == template_id).first()
-    if t is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Шаблон не найден")
-    db.delete(t)
+    c = _get_customer_or_404(customer_id, db)
+    remove_upload(c.image_url)
+    db.delete(c)
     db.commit()
     return None
 
 
-@template_router.put("/{template_id}/image", response_model=OrderTemplateOut)
-def upload_template_image(
-    template_id: int,
+@customer_router.put("/{customer_id}/image", response_model=CustomerOut)
+def upload_customer_image(
+    customer_id: int,
     image: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
-    t = db.query(OrderTemplate).filter(OrderTemplate.id == template_id).first()
-    if t is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Шаблон не найден")
-    remove_upload(t.image_url)
-    t.image_url = save_upload(image, f"order_template_{template_id}", max_size=800)
+    c = _get_customer_or_404(customer_id, db)
+    remove_upload(c.image_url)
+    c.image_url = save_upload(image, f"customer_{customer_id}", max_size=400)
     db.commit()
-    db.refresh(t)
-    return _tpl_out(t)
+    db.refresh(c)
+    return _customer_out(c)

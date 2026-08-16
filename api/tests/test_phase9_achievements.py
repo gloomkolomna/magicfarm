@@ -371,38 +371,3 @@ def test_admin_achievement_image_upload_404(admin_client):
         files={"image": ("test.jpg", img_buf, "image/jpeg")},
     )
     assert res.status_code == 404
-
-
-def test_admin_order_template_potion(admin_client):
-    res = admin_client.post("/api/admin/order-templates", json={
-        "source_kind": "potion",
-        "source_id": 1,
-        "product_id": 1,
-        "qty": 1,
-        "reward_coins": 5,
-    })
-    assert res.status_code == 201, res.text
-    assert res.json()["source_kind"] == "potion"
-
-
-def test_admin_order_template_invalid_source(admin_client):
-    res = admin_client.post("/api/admin/order-templates", json={
-        "source_kind": "invalid",
-        "source_id": 1,
-        "product_id": 1,
-        "qty": 1,
-    })
-    assert res.status_code == 400
-
-
-def test_admin_order_template_with_customer(admin_client):
-    res = admin_client.post("/api/admin/order-templates", json={
-        "source_kind": "plant",
-        "source_id": 1,
-        "product_id": 1,
-        "qty": 1,
-        "reward_coins": 5,
-        "customer": "Леди Бейлин",
-    })
-    assert res.status_code == 201
-    assert res.json()["customer"] == "Леди Бейлин"

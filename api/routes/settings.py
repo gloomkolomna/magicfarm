@@ -34,6 +34,11 @@ DEFAULT_REWARD = 5
 ANIMAL_BUILD_NORM_KEY = "animal_build_norm"
 DEFAULT_ANIMAL_BUILD = 1000
 
+CUSTOMER_MAX_ORDERS_KEY = "customer_max_orders"
+MIN_CUSTOMER_ORDERS = 0
+MAX_CUSTOMER_ORDERS = 50
+DEFAULT_CUSTOMER_ORDERS = 3
+
 SALE_PRICE_RATIO_KEY = "sale_price_ratio"
 DEFAULT_SALE_RATIO = 0.5
 
@@ -143,6 +148,16 @@ def get_animal_build_norm(db: Session) -> int:
         return DEFAULT_ANIMAL_BUILD
 
 
+def get_customer_max_orders(db: Session) -> int:
+    s = db.query(Setting).filter(Setting.key == CUSTOMER_MAX_ORDERS_KEY).first()
+    if s is None:
+        return DEFAULT_CUSTOMER_ORDERS
+    try:
+        return max(MIN_CUSTOMER_ORDERS, min(MAX_CUSTOMER_ORDERS, int(s.value)))
+    except (TypeError, ValueError):
+        return DEFAULT_CUSTOMER_ORDERS
+
+
 def get_sale_price_ratio(db: Session) -> float:
     s = db.query(Setting).filter(Setting.key == SALE_PRICE_RATIO_KEY).first()
     if s is None:
@@ -236,6 +251,7 @@ _SETTING_META = {
     ORDER_REWARD_KEY: (MIN_REWARD, MAX_REWARD, DEFAULT_REWARD),
     AUTO_CREDIT_KEY: (0, 1, 1 if DEFAULT_AUTO_CREDIT else 0),
     ANIMAL_BUILD_NORM_KEY: (1, 100000, DEFAULT_ANIMAL_BUILD),
+    CUSTOMER_MAX_ORDERS_KEY: (MIN_CUSTOMER_ORDERS, MAX_CUSTOMER_ORDERS, DEFAULT_CUSTOMER_ORDERS),
 }
 
 
@@ -258,6 +274,8 @@ def get_setting(key: str, db: Session = Depends(get_db), user: User = Depends(ge
         return SettingOut(key=key, value=str(get_order_reward(db)))
     if key == SALE_PRICE_RATIO_KEY:
         return SettingOut(key=key, value=str(get_sale_price_ratio(db)))
+    if key == CUSTOMER_MAX_ORDERS_KEY:
+        return SettingOut(key=key, value=str(get_customer_max_orders(db)))
     s = _get_setting_or_404(key, db)
     return SettingOut(key=s.key, value=s.value)
 

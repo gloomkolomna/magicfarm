@@ -15,7 +15,7 @@ from routes.settings import router as settings_router
 from routes.stitches import router as stitches_router
 from routes.plants import router as plants_router
 from routes.farm import router as farm_router
-from routes.orders import router as orders_router, admin_router as admin_orders_router, template_router as order_templates_router
+from routes.orders import router as orders_router, admin_router as admin_orders_router, customer_router as admin_customers_router
 from routes.admin_fields import router as admin_fields_router
 from routes.admin_catalog import router as admin_catalog_router, public_router as crystal_cards_public_router
 from routes.admin_players import router as admin_players_router
@@ -62,7 +62,7 @@ app.include_router(plants_router)
 app.include_router(farm_router)
 app.include_router(orders_router)
 app.include_router(admin_orders_router)
-app.include_router(order_templates_router)
+app.include_router(admin_customers_router)
 app.include_router(admin_fields_router)
 app.include_router(admin_catalog_router)
 app.include_router(admin_players_router)

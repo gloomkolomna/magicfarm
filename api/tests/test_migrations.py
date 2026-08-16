@@ -42,6 +42,12 @@ def migrated_db(tmp_path, monkeypatch):
                 level VARCHAR NOT NULL, ingredient_slots TEXT NOT NULL,
                 bonus_code VARCHAR, reward_coins INTEGER NOT NULL DEFAULT 100,
                 image_url VARCHAR);
+            CREATE TABLE orders (
+                id INTEGER PRIMARY KEY, user_id INTEGER, product_id INTEGER NOT NULL,
+                qty INTEGER NOT NULL, reward_coins INTEGER NOT NULL DEFAULT 0,
+                customer VARCHAR, status VARCHAR NOT NULL DEFAULT 'open',
+                name VARCHAR, image_url VARCHAR,
+                created_at DATETIME, fulfilled_at DATETIME);
         """)
         conn.execute("INSERT INTO alembic_version (version_num) VALUES (:r)", {"r": OLD_REV})
         conn.execute("INSERT INTO settings (key, value) VALUES ('house_material_norm', '150')")
@@ -71,6 +77,14 @@ def migrated_db(tmp_path, monkeypatch):
         conn.execute(
             "INSERT INTO plots (user_id, plant_id, qty, required, created_at) VALUES "
             "(1, 7, 3, 101, '2026-01-02 00:00:00')"
+        )
+        conn.execute(
+            "INSERT INTO orders (user_id, product_id, qty, status, fulfilled_at) VALUES "
+            "(1, 9, 2, 'fulfilled', '2026-01-03 00:00:00')"
+        )
+        conn.execute(
+            "INSERT INTO orders (user_id, product_id, qty, status) VALUES "
+            "(NULL, 9, 1, 'open')"
         )
         conn.commit()
     finally:
@@ -141,3 +155,19 @@ def test_migration_new_columns_exist(migrated_db):
 
     pt_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(production_templates)")]
     assert "processing_crystal" in pt_cols
+
+
+def test_migration_seeds_customers(migrated_db):
+    rows = _fetch(migrated_db, "SELECT COUNT(*) FROM customers")
+    assert rows[0][0] == 68
+    names = {r[0] for r in _fetch(migrated_db, "SELECT name FROM customers")}
+    assert "Леди Бейлин" in names
+    assert "Ледяная Сванекильда" in names
+
+
+def test_migration_backfills_fulfilled_by(migrated_db):
+    rows = _fetch(
+        migrated_db,
+        "SELECT id, fulfilled_by FROM orders ORDER BY id",
+    )
+    assert rows == [(1, 1), (2, None)]
