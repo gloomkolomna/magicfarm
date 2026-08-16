@@ -6,6 +6,13 @@ import FieldEditor from '../components/FieldEditor';
 import Toast from '../components/Toast';
 import CrystalStandardEditor from '../components/CrystalStandardEditor';
 import { confirmDialog } from '../components/Confirm';
+import SpritePedestal from '../components/SpritePedestal';
+
+const ORDER_STATUS_LABEL: Record<string, { label: string; color: string }> = {
+  open: { label: 'Открыт', color: 'var(--accent-warm)' },
+  fulfilled: { label: 'Выполнен', color: 'var(--success)' },
+  cancelled: { label: 'Отменён', color: 'var(--text-muted)' },
+};
 
 const BONUS_KIND_OPTIONS = [
   { value: 'harvest_orchard', label: '🍎 +1 к урожаю сада' },
@@ -1741,48 +1748,63 @@ export default function AdminPage() {
                 <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Заказов нет.</div>
               ) : (
                 <div className="fm-grid">
-                  {adminOrders.map((o) => (
-                    <div key={o.id} className="fm-card fm-rise">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <strong>{o.product_emoji} {o.product_name} ×{o.qty}</strong>
-                          {o.name && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{o.name}</div>}
-                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{o.customer || '—'}</div>
-                          <div className="fm-chip" style={{ background: 'rgba(224,168,62,0.18)', marginTop: 4 }}>
-                            🪙 {o.reward_coins} монет
-                          </div>
+                  {adminOrders.map((o) => {
+                    const st = ORDER_STATUS_LABEL[o.status] || ORDER_STATUS_LABEL.open;
+                    return (
+                      <div key={o.id} className="fm-card fm-rise" style={{ textAlign: 'center' }}>
+                        <SpritePedestal url={o.image_url ? mediaUrl(o.image_url) : null} emoji={o.product_emoji} height={100} />
+                        <strong style={{ display: 'block', marginBottom: 6 }}>{o.product_name} ×{o.qty}</strong>
+                        {o.name && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>{o.name}</div>}
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                          {o.customer || '—'}
+                          {o.user_id != null && <span> · игрок #{o.user_id}</span>}
                         </div>
-                        {o.image_url && (
-                          <img src={mediaUrl(o.image_url)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, marginLeft: 8 }} />
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                        <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => startEditOrder(o)}>✎</button>
-                        {o.status === 'open' && (
-                          <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => cancelOrder(o.id)}>
-                            ✖️
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: 8,
+                            fontSize: 13,
+                            borderTop: '1px solid var(--border)',
+                            paddingTop: 8,
+                            marginBottom: 8,
+                          }}
+                        >
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: st.color, whiteSpace: 'nowrap' }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: st.color, flexShrink: 0 }} />
+                            {st.label}
+                          </span>
+                          <span style={{ color: 'var(--accent-warm)', fontWeight: 600, whiteSpace: 'nowrap' }}>🪙 {o.reward_coins}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button className="fm-btn fm-btn-xs" style={{ flex: 1 }} disabled={busy} onClick={() => startEditOrder(o)}>✎</button>
+                          {o.status === 'open' && (
+                            <button className="fm-btn fm-btn-xs fm-btn-danger" style={{ flex: 1 }} disabled={busy} onClick={() => cancelOrder(o.id)}>
+                              ✖️
+                            </button>
+                          )}
+                          <button className="fm-btn fm-btn-xs fm-btn-danger" style={{ flex: 1 }} disabled={busy} onClick={() => deleteOrder(o.id)}>
+                            🗑
                           </button>
-                        )}
-                        <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteOrder(o.id)}>
-                          🗑
-                        </button>
-                        <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
-                          🖼️
-                          <input type="file" accept="image/*" style={{ display: 'none' }}
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                setBusy(true); setMsg(null);
-                                try { await api.adminUploadOrderImage(o.id, file); await load(); setMsg('✓ Картинка загружена'); }
-                                catch (e2: any) { setMsg('✗ ' + (e2?.response?.data?.detail || 'Ошибка')); }
-                                finally { setBusy(false); }
-                              }
-                            }}
-                          />
-                        </label>
+                          <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer', flex: 1 }}>
+                            🖼️
+                            <input type="file" accept="image/*" style={{ display: 'none' }}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setBusy(true); setMsg(null);
+                                  try { await api.adminUploadOrderImage(o.id, file); await load(); setMsg('✓ Картинка загружена'); }
+                                  catch (e2: any) { setMsg('✗ ' + (e2?.response?.data?.detail || 'Ошибка')); }
+                                  finally { setBusy(false); }
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

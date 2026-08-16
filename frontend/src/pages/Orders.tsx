@@ -4,11 +4,18 @@ import { useSession } from '../context/SessionContext';
 import { api, type Order } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
+import SpritePedestal from '../components/SpritePedestal';
 
 const STATUS_LABEL: Record<string, { label: string; emoji: string }> = {
   open: { label: 'Открыт', emoji: '📋' },
   fulfilled: { label: 'Выполнен', emoji: '✅' },
   cancelled: { label: 'Отменён', emoji: '✖️' },
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  open: 'var(--accent-warm)',
+  fulfilled: 'var(--success)',
+  cancelled: 'var(--text-muted)',
 };
 
 export default function OrdersPage() {
@@ -89,29 +96,28 @@ export default function OrdersPage() {
                 const need = o.qty;
                 const ok = have >= need;
                 return (
-                  <div key={o.id} className="fm-card fm-rise" style={{ cursor: 'pointer' }} onClick={() => setDetailOrder(o)}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <strong>{o.product_emoji} {o.product_name}</strong>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                          ×{o.qty} · <span style={{ color: ok ? 'var(--success)' : 'var(--danger)' }}>{have}/{need} на складе</span>
-                        </div>
-                        {o.name && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{o.name}</div>}
-                        <div style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0' }}>
-                          Заказчик: {o.customer}
-                        </div>
-                        <div className="fm-chip" style={{ background: 'rgba(224,168,62,0.18)' }}>
-                          🪙 {o.reward_coins} монет
-                        </div>
-                      </div>
-                      {o.image_url && (
-                        <img
-                          src={mediaUrl(o.image_url)}
-                          alt=""
-                          style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, marginLeft: 8 }}
-                          onClick={(e) => { e.stopPropagation(); setZoomImg(mediaUrl(o.image_url!)); }}
-                        />
-                      )}
+                  <div key={o.id} className="fm-card fm-rise" style={{ textAlign: 'center', cursor: 'pointer' }} onClick={() => setDetailOrder(o)}>
+                    <SpritePedestal url={o.image_url ? mediaUrl(o.image_url) : null} emoji={o.product_emoji} height={110} />
+                    <strong style={{ display: 'block', marginBottom: 8 }}>{o.product_name}</strong>
+                    {o.name && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>{o.name}</div>}
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Заказчик: {o.customer || '—'}
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 8,
+                        fontSize: 13,
+                        borderTop: '1px solid var(--border)',
+                        paddingTop: 8,
+                      }}
+                    >
+                      <span style={{ color: ok ? 'var(--success)' : 'var(--danger)', whiteSpace: 'nowrap' }}>
+                        {have}/{need} на складе
+                      </span>
+                      <span style={{ color: 'var(--accent-warm)', fontWeight: 600, whiteSpace: 'nowrap' }}>🪙 {o.reward_coins}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                       <button
@@ -138,17 +144,30 @@ export default function OrdersPage() {
 
           {doneOrders.length > 0 && (
             <>
-              <h3 style={{ color: 'var(--text-muted)' }}>История</h3>
+              <h2 style={{ fontSize: 16, margin: '18px 0 10px' }}>История</h2>
               <div className="fm-grid">
                 {doneOrders.map((o) => {
                   const s = STATUS_LABEL[o.status] || STATUS_LABEL.open;
                   return (
-                    <div key={o.id} className="fm-card" style={{ opacity: 0.75 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>{o.product_emoji} {o.product_name} ×{o.qty}</span>
-                        <span>{s.emoji}</span>
+                    <div key={o.id} className="fm-card" style={{ textAlign: 'center', opacity: 0.8 }}>
+                      <SpritePedestal url={o.image_url ? mediaUrl(o.image_url) : null} emoji={o.product_emoji} height={80} onZoom={setZoomImg} />
+                      <strong style={{ display: 'block', marginBottom: 6 }}>{o.product_name}</strong>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+                        ×{o.qty} · {o.customer || '—'}
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{o.customer}</div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          fontSize: 13,
+                          color: STATUS_COLOR[o.status] || 'var(--text-muted)',
+                        }}
+                      >
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLOR[o.status] || 'var(--text-muted)', flexShrink: 0 }} />
+                        {s.label} {s.emoji}
+                      </div>
                     </div>
                   );
                 })}
@@ -160,16 +179,9 @@ export default function OrdersPage() {
 
       {detailOrder && (
         <Modal title="Детали заказа" onClose={() => setDetailOrder(null)}>
-          {detailOrder.image_url && (
-            <img
-              src={mediaUrl(detailOrder.image_url)}
-              alt=""
-              style={{ width: '100%', maxHeight: 280, objectFit: 'contain', borderRadius: 'var(--radius)', marginBottom: 12, cursor: 'pointer' }}
-              onClick={() => setZoomImg(mediaUrl(detailOrder.image_url))}
-            />
-          )}
+          <SpritePedestal url={detailOrder.image_url ? mediaUrl(detailOrder.image_url) : null} emoji={detailOrder.product_emoji} height={160} onZoom={setZoomImg} />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <strong style={{ fontSize: 18 }}>{detailOrder.product_emoji} {detailOrder.product_name}</strong>
+            <strong style={{ fontSize: 18 }}>{detailOrder.product_name}</strong>
             <span className="fm-chip" style={{ fontSize: 16 }}>×{detailOrder.qty}</span>
           </div>
           <div style={{ fontSize: 14, marginBottom: 4 }}>
@@ -186,8 +198,19 @@ export default function OrdersPage() {
           <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>
             Заказчик: {detailOrder.customer}
           </div>
-          <div className="fm-chip" style={{ background: 'rgba(224,168,62,0.18)', marginBottom: 14 }}>
-            🪙 {detailOrder.reward_coins} монет
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: 15,
+              borderTop: '1px solid var(--border)',
+              paddingTop: 8,
+              marginBottom: 14,
+            }}
+          >
+            <span style={{ color: 'var(--text-muted)' }}>Награда</span>
+            <span style={{ color: 'var(--accent-warm)', fontWeight: 600 }}>🪙 {detailOrder.reward_coins}</span>
           </div>
           {detailOrder.status === 'open' && (
             <div style={{ display: 'flex', gap: 8 }}>

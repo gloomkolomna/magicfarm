@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, type InventoryItem } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
+import SpritePedestal from '../components/SpritePedestal';
 
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -82,21 +83,27 @@ export default function InventoryPage() {
           ) : (
             <div className="fm-grid">
               {filtered.map((i) => (
-                <div key={`${i.item_kind}-${i.item_id}`} className="fm-card fm-rise">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <strong>
-                        {i.item_emoji} {i.item_name}
-                        {i.ingredient_icon && <span style={{ marginLeft: 6, fontSize: 14 }} title={i.ingredient_type || ''}>{i.ingredient_icon}</span>}
-                      </strong>
-                      <div className="fm-chip" style={{ marginTop: 4 }}>×{i.qty}</div>
-                    </div>
-                    {i.item_image && (
-                      <img src={mediaUrl(i.item_image)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, marginLeft: 8 }} />
-                    )}
+                <div key={`${i.item_kind}-${i.item_id}`} className="fm-card fm-rise" style={{ textAlign: 'center' }}>
+                  <SpritePedestal url={i.item_image ? mediaUrl(i.item_image) : null} emoji={i.item_emoji} height={110} />
+                  <strong style={{ display: 'block', marginBottom: 6 }}>
+                    {i.item_name}
+                    {i.ingredient_icon && <span style={{ marginLeft: 6, fontSize: 14 }} title={i.ingredient_type || ''}>{i.ingredient_icon}</span>}
+                  </strong>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 13,
+                      borderTop: '1px solid var(--border)',
+                      paddingTop: 8,
+                    }}
+                  >
+                    <span className="fm-chip">×{i.qty}</span>
                   </div>
                   <button
-                    className="fm-btn fm-btn-xs fm-btn-outline"
+                    className="fm-btn fm-btn-sm fm-btn-outline"
                     style={{ marginTop: 10, width: '100%' }}
                     disabled={busy}
                     onClick={() => { setSellItem(i); setSellQty('1'); setSellResult(null); }}

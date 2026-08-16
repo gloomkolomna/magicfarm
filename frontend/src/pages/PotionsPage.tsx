@@ -3,6 +3,7 @@ import { useSession } from '../context/SessionContext';
 import { api, potionBonusLabel, cauldronMaterialFor, CAULDRON_MATERIAL_LABELS, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type SlotWarehouseItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
+import SpritePedestal from '../components/SpritePedestal';
 
 function ingredientIcons(slots: string[]): string {
   const counts = new Map<string, number>();
@@ -462,27 +463,6 @@ export default function PotionsPage() {
           )}
         </Modal>
       )}
-    </div>
-  );
-}
-
-function SpritePedestal({ url, height, onZoom }: { url: string; height: number; onZoom: (u: string) => void }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--surface-strong)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-md)',
-        padding: '10px 8px',
-        marginBottom: 10,
-        cursor: 'zoom-in',
-      }}
-      onClick={() => onZoom(url)}
-    >
-      <img src={url} alt="" style={{ height, maxWidth: '100%', objectFit: 'contain' }} />
     </div>
   );
 }

@@ -14,6 +14,7 @@ from models import (
     PotionRecipe, ProductionTemplate, Tent, User, WITCH_HOUSE_KIND,
 )
 from services.uploads import remove_upload, save_upload
+from routes.potions import _recipe_out
 
 router = APIRouter(prefix="/api/admin/fields", tags=["admin-fields"])
 
@@ -193,6 +194,7 @@ class FieldDetailOut(FieldOut):
     animal_ids: list[int] = []
     pet_ids: list[int] = []
     brewery_zones: list[BreweryZoneOut] = []
+    potion_recipes: list = []
     potion_recipe_ids: list[int] = []
 
 
@@ -608,6 +610,7 @@ def _detail(f: Field) -> FieldDetailOut:
                            image_url=z.image_url, recipe_id=z.recipe_id)
             for z in f.brewery_zones
         ],
+        potion_recipes=[_recipe_out(fpr.recipe) for fpr in f.potion_recipes],
         potion_recipe_ids=[fpr.recipe_id for fpr in f.potion_recipes],
     )
 

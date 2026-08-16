@@ -898,17 +898,25 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                   Карточка рецепта на карте локации. Клик по ней у игрока — превью зелья и установка котла.
                 </p>
-                <label style={lbl}>Зелье</label>
-                <select
-                  className="fm-input"
-                  value={brewCardRecipeId ?? ''}
-                  onChange={(e) => setBrewCardRecipeId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">— выберите зелье —</option>
-                  {(field?.potion_recipes ?? []).map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
+                {(field?.potion_recipes ?? []).length === 0 ? (
+                  <p style={{ fontSize: 13, color: 'var(--danger)' }}>
+                    Сначала отметьте зелья в разделе «Зелья локации» ниже — карточки размещаются только из этого списка.
+                  </p>
+                ) : (
+                  <>
+                    <label style={lbl}>Зелье</label>
+                    <select
+                      className="fm-input"
+                      value={brewCardRecipeId ?? ''}
+                      onChange={(e) => setBrewCardRecipeId(e.target.value ? Number(e.target.value) : null)}
+                    >
+                      <option value="">— выберите зелье —</option>
+                      {(field?.potion_recipes ?? []).map((r) => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
               </>
             ) : isTentBrush(brush) ? (
               <>

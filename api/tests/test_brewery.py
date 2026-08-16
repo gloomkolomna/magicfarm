@@ -101,6 +101,23 @@ def test_recipe_card_requires_linked_recipe(admin_client):
     assert r.json()["recipe_id"] == 1
 
 
+def test_admin_field_detail_returns_potion_recipes(admin_client):
+    fid = _create_brewery_field(admin_client)
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    assert detail["potion_recipes"] == []
+    assert detail["potion_recipe_ids"] == []
+
+    admin_client.put(f"/api/admin/fields/{fid}/potion-recipes", json={"recipe_ids": [1]})
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+
+    assert detail["potion_recipe_ids"] == [1]
+    recipes = detail["potion_recipes"]
+    assert len(recipes) == 1
+    assert recipes[0]["id"] == 1
+    assert recipes[0]["name"] == "Сонное пророчество"
+    assert recipes[0]["ingredient_slots"] == ["plant_garden", "plant_garden", "plant_garden", "alchemy"]
+
+
 def test_recipe_id_only_for_card(admin_client):
     fid = _create_brewery_field(admin_client)
     r = _create_zone(admin_client, fid, "cauldron", 0, 0, 1, 1, recipe_id=1)
