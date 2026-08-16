@@ -96,9 +96,9 @@ export function potionBonusLabel(code: string | null | undefined): string | null
 export const POTION_INGREDIENT_ICONS: Record<string, string> = {
   plant: '🌿',
   product: '📦',
-  plant_garden: '🌱',
+  plant_garden: '🍃',
   plant_orchard: '🍎',
-  animal_product: '🐄',
+  animal_product: '🥚',
   workshop: '🔨',
   sewing: '🧵',
   alchemy: '🔮',
@@ -121,6 +121,19 @@ export function potionIngredientLabel(code: string): string {
   return POTION_INGREDIENT_LABELS[code] || code;
 }
 
+export function cauldronMaterialFor(slots: string[]): 'tin' | 'silver' | 'gold' {
+  const n = slots.length;
+  if (n >= 6) return 'gold';
+  if (n === 5) return 'silver';
+  return 'tin';
+}
+
+export const CAULDRON_MATERIAL_LABELS: Record<string, string> = {
+  tin: 'Оловянный котёл',
+  silver: 'Серебряный котёл',
+  gold: 'Золотой котёл',
+};
+
 export interface PotionRecipeCreate {
   name: string;
   level: string;
@@ -140,7 +153,7 @@ export interface Cauldron {
   id: number;
   recipe_id: number;
   recipe_name: string;
-  material: string | null;
+  material: string;
   capacity: number;
   status: string;
   slots: CauldronSlot[];

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, potionBonusLabel, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type InventoryItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
+import { api, potionBonusLabel, cauldronMaterialFor, CAULDRON_MATERIAL_LABELS, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type InventoryItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 
 function ingredientIcons(slots: string[]): string {
@@ -40,6 +40,21 @@ export default function PotionsPage() {
 
   const [levelPage, setLevelPage] = useState(0);
   const [zoomedImg, setZoomedImg] = useState<string | null>(null);
+  const [cauldronImages, setCauldronImages] = useState<Record<string, string | null>>({});
+
+  useEffect(() => {
+    const materials = ['tin', 'silver', 'gold'];
+    Promise.all(
+      materials.map(async (m) => {
+        try {
+          const gm = await api.gameMediaByCode(`cauldron_${m}`);
+          return [m, gm.url ? mediaUrl(gm.url) : null] as const;
+        } catch {
+          return [m, null] as const;
+        }
+      }),
+    ).then((entries) => setCauldronImages(Object.fromEntries(entries)));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -168,7 +183,6 @@ export default function PotionsPage() {
   const safeLevelPage = Math.max(0, Math.min(levelPage, Math.max(0, totalLevelPages - 1)));
   const currentLevel = sortedLevels[safeLevelPage];
 
-  const cauldronMaterial = cauldron?.material === 'tin' ? 'олово' : cauldron?.material === 'silver' ? 'серебро' : cauldron?.material === 'gold' ? 'золото' : '';
   const cauldronStatus = cauldron ? CAULDRON_STATUS[cauldron.status] || { label: cauldron.status, color: 'var(--text-muted)' } : null;
 
   return (
@@ -184,7 +198,15 @@ export default function PotionsPage() {
           {cauldron ? (
             <div className="fm-card fm-rise" style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <strong>{cauldron.recipe_name}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <CauldronView material={cauldron.material} imageUrl={cauldronImages[cauldron.material] || null} height={56} />
+                  <div style={{ minWidth: 0 }}>
+                    <strong style={{ display: 'block' }}>{cauldron.recipe_name}</strong>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      {CAULDRON_MATERIAL_LABELS[cauldron.material] || cauldron.material} · {cauldron.capacity} ингр.
+                    </span>
+                  </div>
+                </div>
                 {cauldronStatus && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap', color: cauldronStatus.color }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: cauldronStatus.color, flexShrink: 0 }} />
@@ -249,7 +271,6 @@ export default function PotionsPage() {
               <button disabled={safeLevelPage === 0} onClick={() => setLevelPage(safeLevelPage - 1)} style={{ cursor: safeLevelPage === 0 ? 'default' : 'pointer', opacity: safeLevelPage === 0 ? 0.4 : 1, padding: '6px 14px', fontSize: 18, background: 'transparent', border: 'none', color: 'inherit' }}>◀</button>
               <span style={{ fontWeight: 600 }}>
                 {LEVEL_LABELS[currentLevel] || currentLevel}
-                {cauldronMaterial && ` (${cauldronMaterial})`}
               </span>
               <button disabled={safeLevelPage >= totalLevelPages - 1} onClick={() => setLevelPage(safeLevelPage + 1)} style={{ cursor: safeLevelPage >= totalLevelPages - 1 ? 'default' : 'pointer', opacity: safeLevelPage >= totalLevelPages - 1 ? 0.4 : 1, padding: '6px 14px', fontSize: 18, background: 'transparent', border: 'none', color: 'inherit' }}>▶</button>
             </div>
@@ -266,6 +287,30 @@ export default function PotionsPage() {
                       <SpritePedestal url={mediaUrl(r.image_url)} height={120} onZoom={setZoomedImg} />
                     )}
                     <strong style={{ display: 'block', marginBottom: 8 }}>{r.name}</strong>
+                    {(() => {
+                      const material = cauldronMaterialFor(r.ingredient_slots);
+                      return (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '6px 8px',
+                            marginBottom: 8,
+                            background: 'var(--surface-strong)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-md)',
+                            textAlign: 'left',
+                          }}
+                        >
+                          <CauldronView material={material} imageUrl={cauldronImages[material] || null} height={44} />
+                          <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.3 }}>
+                            {CAULDRON_MATERIAL_LABELS[material]}
+                            <span style={{ color: 'var(--text-muted)' }}> · {r.ingredient_slots.length} ингр.</span>
+                          </span>
+                        </div>
+                      );
+                    })()}
                     <div
                       style={{
                         display: 'flex',
@@ -436,6 +481,39 @@ function SpritePedestal({ url, height, onZoom }: { url: string; height: number; 
       onClick={() => onZoom(url)}
     >
       <img src={url} alt="" style={{ height, maxWidth: '100%', objectFit: 'contain' }} />
+    </div>
+  );
+}
+
+const CAULDRON_FALLBACK_COLORS: Record<string, string> = {
+  tin: '#9aa3ad',
+  silver: '#c8d2dc',
+  gold: '#e0b34a',
+};
+
+function CauldronView({ material, imageUrl, height }: { material: string; imageUrl: string | null; height: number }) {
+  if (imageUrl) {
+    return (
+      <img src={imageUrl} alt="" style={{ height, maxWidth: 96, objectFit: 'contain', flexShrink: 0 }} />
+    );
+  }
+  const color = CAULDRON_FALLBACK_COLORS[material] || CAULDRON_FALLBACK_COLORS.tin;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: height,
+        height,
+        flexShrink: 0,
+        fontSize: Math.round(height * 0.55),
+        background: `radial-gradient(circle, ${color}33 0%, ${color}11 100%)`,
+        border: `1px solid ${color}66`,
+        borderRadius: 'var(--radius-md)',
+      }}
+    >
+      🍲
     </div>
   );
 }

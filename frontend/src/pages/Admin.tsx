@@ -233,6 +233,9 @@ export default function AdminPage() {
     { code: 'house_material_pipes', kind: 'image', label: '🚰 Стройматериал: трубы' },
     { code: 'house_material_bricks', kind: 'image', label: '🧱 Стройматериал: кирпичи' },
     { code: 'house_material_paint', kind: 'image', label: '🎨 Стройматериал: краска' },
+    { code: 'cauldron_tin', kind: 'image', label: '🍲 Котёл: оловянный (4 ингредиента)' },
+    { code: 'cauldron_silver', kind: 'image', label: '🍲 Котёл: серебряный (5 ингредиентов)' },
+    { code: 'cauldron_gold', kind: 'image', label: '🍲 Котёл: золотой (6 ингредиентов)' },
   ];
 
   const [gameMedia, setGameMedia] = useState<GameMedia[]>([]);
