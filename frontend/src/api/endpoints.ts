@@ -159,6 +159,14 @@ export interface Cauldron {
   slots: CauldronSlot[];
 }
 
+export interface SlotWarehouseItem {
+  item_kind: string;
+  item_id: number;
+  item_name: string;
+  item_emoji: string | null;
+  qty: number;
+}
+
 export interface UserPotion {
   id: number;
   potion_recipe_id: number;
@@ -1003,6 +1011,10 @@ export const api = {
     client.post<Cauldron>('/potions/cauldrons', { recipe_id: recipeId }).then((r) => r.data),
   getCauldron: (id: number) =>
     client.get<Cauldron>(`/potions/cauldrons/${id}`).then((r) => r.data),
+  activeCauldron: () =>
+    client.get<Cauldron | null>('/potions/cauldrons/active').then((r) => r.data),
+  cauldronSlotWarehouse: (cauldronId: number, slotIndex: number) =>
+    client.get<SlotWarehouseItem[]>(`/potions/cauldrons/${cauldronId}/slot/${slotIndex}/warehouse`).then((r) => r.data),
   fillCauldronSlot: (cauldronId: number, slotIndex: number, itemKind: string, itemId: number) =>
     client.post<Cauldron>(`/potions/cauldrons/${cauldronId}/slot/${slotIndex}`, { item_kind: itemKind, item_id: itemId }).then((r) => r.data),
   clearCauldronSlot: (cauldronId: number, slotIndex: number) =>

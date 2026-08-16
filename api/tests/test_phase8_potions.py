@@ -128,6 +128,172 @@ def test_activate_potion(admin_client):
         assert r.json()["activated"] is True
 
 
+def test_active_cauldron_none(admin_client):
+    with make_user_client(123, "player") as c:
+        r = c.get("/api/potions/cauldrons/active")
+        assert r.status_code == 200
+        assert r.json() is None
+
+
+def test_active_cauldron_returns_created(admin_client):
+    with make_user_client(123, "player") as c:
+        c.post("/api/potions/cauldrons", json={"recipe_id": 1})
+        r = c.get("/api/potions/cauldrons/active")
+        assert r.status_code == 200
+        assert r.json()["recipe_id"] == 1
+        assert r.json()["status"] == "empty"
+        assert len(r.json()["slots"]) == 4
+
+
+def test_active_cauldron_null_after_brew(admin_client):
+    _seed_plant_inventory(123, 1, 5)
+    _seed_product_inventory(123, 1, 5)
+    with make_user_client(123, "player") as c:
+        r = c.post("/api/potions/cauldrons", json={"recipe_id": 1})
+        cid = r.json()["id"]
+        for i in range(3):
+            c.post(f"/api/potions/cauldrons/{cid}/slot/{i}", json={"item_kind": "plant", "item_id": 1})
+        c.post(f"/api/potions/cauldrons/{cid}/slot/3", json={"item_kind": "product", "item_id": 1})
+        c.post(f"/api/potions/cauldrons/{cid}/brew")
+        r = c.get("/api/potions/cauldrons/active")
+        assert r.status_code == 200
+        assert r.json() is None
+
+
+def test_active_cauldron_requires_auth(client):
+    r = client.get("/api/potions/cauldrons/active")
+    assert r.status_code == 401
+
+
+def test_active_cauldron_isolated_between_players(admin_client):
+    with make_user_client(123, "player") as c:
+        c.post("/api/potions/cauldrons", json={"recipe_id": 1})
+    with make_user_client(124, "player") as c:
+        r = c.get("/api/potions/cauldrons/active")
+        assert r.status_code == 200
+        assert r.json() is None
+
+
+_recipe_seq = 0
+
+
+def _seed_recipe(name: str, slots: list[str]) -> int:
+    import json
+    from models import PotionRecipe
+    from tests.conftest import TestingSessionLocal
+    global _recipe_seq
+    _recipe_seq += 1
+    s = TestingSessionLocal()
+    try:
+        r = PotionRecipe(
+            code=f"test_auto_{_recipe_seq}", name=name, level="green",
+            ingredient_slots=json.dumps(slots), bonus_code=None, reward_coins=100,
+        )
+        s.add(r)
+        s.commit()
+        s.refresh(r)
+        return r.id
+    finally:
+        s.close()
+
+
+def _seed_catalog_extras() -> dict:
+    from models import Plant, Product
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        apple = Plant(code="apple_tree_t", name="Яблоня", emoji="🍎",
+                      category="orchard", level=1, norm_per_crystal=100)
+        dragon = Product(code="dragon_scale_t", name="Чешуя дракона", emoji="🐉",
+                         stars=1, production_kind="barnyard", animal_id=1)
+        vial = Product(code="vial_t", name="Фиал", emoji="⚗️",
+                       stars=1, production_kind="shatyor_zelevareniya")
+        mantle = Product(code="mantle_t", name="Мантия", emoji="🧥",
+                         stars=1, production_kind="shatyor_masterskaya")
+        amulet = Product(code="amulet_t", name="Амулет", emoji="📿",
+                         stars=1, production_kind="shatyor_masterskaya_3")
+        for obj in (apple, dragon, vial, mantle, amulet):
+            s.add(obj)
+        s.commit()
+        for obj in (apple, dragon, vial, mantle, amulet):
+            s.refresh(obj)
+        return {
+            "apple": apple.id, "dragon": dragon.id, "vial": vial.id,
+            "mantle": mantle.id, "amulet": amulet.id,
+        }
+    finally:
+        s.close()
+
+
+def _make_cauldron(c, slots: list[str]) -> int:
+    rid = _seed_recipe("Тестовое зелье", slots)
+    r = c.post("/api/potions/cauldrons", json={"recipe_id": rid})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_slot_warehouse_animal_product(admin_client):
+    ids = _seed_catalog_extras()
+    _seed_plant_inventory(123, 1, 5)
+    _seed_product_inventory(123, 1, 5)
+    _seed_product_inventory(123, ids["dragon"], 3)
+    with make_user_client(123, "player") as c:
+        cid = _make_cauldron(c, ["animal_product"])
+        r = c.get(f"/api/potions/cauldrons/{cid}/slot/0/warehouse")
+        assert r.status_code == 200
+        items = r.json()
+        assert len(items) == 1
+        assert items[0]["item_id"] == ids["dragon"]
+        assert items[0]["item_kind"] == "product"
+        assert items[0]["item_emoji"] == "🐉"
+
+
+def test_slot_warehouse_real_production_kinds(admin_client):
+    ids = _seed_catalog_extras()
+    _seed_product_inventory(123, ids["vial"], 2)
+    _seed_product_inventory(123, ids["mantle"], 2)
+    _seed_product_inventory(123, ids["amulet"], 2)
+    _seed_product_inventory(123, ids["dragon"], 2)
+    with make_user_client(123, "player") as c:
+        cid = _make_cauldron(c, ["workshop", "sewing", "alchemy", "barnyard"])
+        w = c.get(f"/api/potions/cauldrons/{cid}/slot/0/warehouse").json()
+        assert [i["item_id"] for i in w] == [ids["amulet"]]
+        w = c.get(f"/api/potions/cauldrons/{cid}/slot/1/warehouse").json()
+        assert [i["item_id"] for i in w] == [ids["mantle"]]
+        w = c.get(f"/api/potions/cauldrons/{cid}/slot/2/warehouse").json()
+        assert [i["item_id"] for i in w] == [ids["vial"]]
+        w = c.get(f"/api/potions/cauldrons/{cid}/slot/3/warehouse").json()
+        assert [i["item_id"] for i in w] == [ids["dragon"]]
+
+
+def test_slot_warehouse_plant_categories(admin_client):
+    ids = _seed_catalog_extras()
+    _seed_plant_inventory(123, 1, 5)
+    _seed_plant_inventory(123, ids["apple"], 5)
+    with make_user_client(123, "player") as c:
+        cid = _make_cauldron(c, ["plant_garden", "plant_orchard"])
+        w = c.get(f"/api/potions/cauldrons/{cid}/slot/0/warehouse").json()
+        assert [i["item_id"] for i in w] == [1]
+        w = c.get(f"/api/potions/cauldrons/{cid}/slot/1/warehouse").json()
+        assert [i["item_id"] for i in w] == [ids["apple"]]
+
+
+def test_fill_slot_rejects_wrong_type(admin_client):
+    ids = _seed_catalog_extras()
+    _seed_plant_inventory(123, 1, 5)
+    _seed_product_inventory(123, 1, 5)
+    _seed_product_inventory(123, ids["dragon"], 3)
+    with make_user_client(123, "player") as c:
+        cid = _make_cauldron(c, ["animal_product"])
+        r = c.post(f"/api/potions/cauldrons/{cid}/slot/0", json={"item_kind": "plant", "item_id": 1})
+        assert r.status_code == 400
+        r = c.post(f"/api/potions/cauldrons/{cid}/slot/0", json={"item_kind": "product", "item_id": 1})
+        assert r.status_code == 400
+        r = c.post(f"/api/potions/cauldrons/{cid}/slot/0", json={"item_kind": "product", "item_id": ids["dragon"]})
+        assert r.status_code == 200
+        assert r.json()["slots"][0]["item_id"] == ids["dragon"]
+
+
 def test_admin_crud_recipes(admin_client):
     r = admin_client.get("/api/admin/potion-recipes")
     assert r.status_code == 200

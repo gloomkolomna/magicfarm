@@ -157,6 +157,17 @@ def create_cauldron(
     return _cauldron_detail(c, db)
 
 
+@router.get("/cauldrons/active", response_model=CauldronOut | None)
+def get_active_cauldron(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    c = db.query(Cauldron).filter(
+        Cauldron.user_id == user.vk_id, Cauldron.status != "done"
+    ).first()
+    return _cauldron_detail(c, db) if c is not None else None
+
+
 @router.get("/cauldrons/{cauldron_id}", response_model=CauldronOut)
 def get_cauldron(
     cauldron_id: int,
@@ -181,15 +192,28 @@ def _cauldron_detail(c: Cauldron, db: Session) -> CauldronOut:
 
 # ── Slot warehouse filter ──
 
-INGREDIENT_TYPE_TO_INVENTORY = {
-    "plant_garden": "plant",
-    "plant_orchard": "plant",
-    "animal_product": "product",
-    "workshop": "product",
-    "sewing": "product",
-    "alchemy": "product",
-    "barnyard": "product",
+SLOT_TYPE_TO_PRODUCTION_KINDS = {
+    "workshop": ("workshop", "shatyor_masterskaya_3"),
+    "sewing": ("sewing", "shatyor_masterskaya"),
+    "alchemy": ("alchemy", "shatyor_zelevareniya"),
+    "barnyard": ("barnyard",),
 }
+
+
+def _item_matches_slot(item_type: str, inv: Inventory) -> bool:
+    if item_type in ("plant_garden", "plant_orchard"):
+        if inv.plant_id is None or inv.plant is None:
+            return False
+        expected = "garden" if item_type == "plant_garden" else "orchard"
+        return inv.plant.category == expected
+    if inv.product_id is None or inv.product is None:
+        return False
+    if item_type == "animal_product":
+        return inv.product.animal_id is not None
+    kinds = SLOT_TYPE_TO_PRODUCTION_KINDS.get(item_type)
+    if kinds is not None:
+        return inv.product.production_kind in kinds
+    return True
 
 
 @router.get("/cauldrons/{cauldron_id}/slot/{slot_index}/warehouse")
@@ -212,31 +236,17 @@ def slot_warehouse(
     inv = db.query(Inventory).filter(Inventory.user_id == user.vk_id, Inventory.qty > 0)
 
     if slot.item_type in ("plant_garden", "plant_orchard"):
-        from models import Plant as PlantModel
         inv = inv.filter(Inventory.plant_id.isnot(None))
-        if slot.item_type == "plant_garden":
-            rows = inv.all()
-            rows = [i for i in rows if i.plant and i.plant.category == "garden"]
-        else:
-            rows = inv.all()
-            rows = [i for i in rows if i.plant and i.plant.category == "orchard"]
     else:
         inv = inv.filter(Inventory.product_id.isnot(None))
-        from models import Product as ProductModel
-        rows = inv.all()
-        kind_map = {"workshop": "workshop", "sewing": "sewing", "alchemy": "alchemy", "barnyard": "barnyard"}
-        target_kind = kind_map.get(slot.item_type)
-        if target_kind:
-            rows = [i for i in rows if i.product and i.product.production_kind == target_kind]
-        elif slot.item_type == "animal_product":
-            rows = []
+    rows = [i for i in inv.all() if _item_matches_slot(slot.item_type, i)]
 
     result = []
     for i in rows:
         if i.plant_id:
-            result.append({"item_kind": "plant", "item_id": i.plant_id, "item_name": i.plant.name, "qty": i.qty})
+            result.append({"item_kind": "plant", "item_id": i.plant_id, "item_name": i.plant.name, "item_emoji": i.plant.emoji, "qty": i.qty})
         else:
-            result.append({"item_kind": "product", "item_id": i.product_id, "item_name": i.product.name, "qty": i.qty})
+            result.append({"item_kind": "product", "item_id": i.product_id, "item_name": i.product.name, "item_emoji": i.product.emoji, "qty": i.qty})
     return result
 
 
@@ -275,6 +285,8 @@ def fill_slot(
     inv = inv.first()
     if inv is None or inv.qty < 1:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недостаточно на складе")
+    if not _item_matches_slot(slot.item_type, inv):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Предмет не подходит для этого слота")
 
     slot.item_id = req.item_id
     c.status = "filling"

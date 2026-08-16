@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, potionBonusLabel, cauldronMaterialFor, CAULDRON_MATERIAL_LABELS, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type InventoryItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
+import { api, potionBonusLabel, cauldronMaterialFor, CAULDRON_MATERIAL_LABELS, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type SlotWarehouseItem, type PotionRecipe, type UserPotion } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
 
@@ -36,7 +36,7 @@ export default function PotionsPage() {
   const [warehouseOpen, setWarehouseOpen] = useState(false);
   const [warehouseSlot, setWarehouseSlot] = useState<number | null>(null);
   const [warehouseKind, setWarehouseKind] = useState<string | null>(null);
-  const [warehouseItems, setWarehouseItems] = useState<InventoryItem[]>([]);
+  const [warehouseItems, setWarehouseItems] = useState<SlotWarehouseItem[]>([]);
   const [warehouseLoading, setWarehouseLoading] = useState(false);
 
   const [levelPage, setLevelPage] = useState(0);
@@ -60,12 +60,14 @@ export default function PotionsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [rec, pots] = await Promise.all([
+      const [rec, pots, active] = await Promise.all([
         api.potionRecipes(),
         api.userPotions().catch(() => [] as UserPotion[]),
+        api.activeCauldron().catch(() => null),
       ]);
       setRecipes(rec);
       setUserPotions(pots);
+      setCauldron(active);
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка загрузки'));
     } finally {
@@ -97,12 +99,13 @@ export default function PotionsPage() {
   }
 
   async function openWarehouse(slotIndex: number, itemKind: string) {
+    if (!cauldron) return;
     setWarehouseSlot(slotIndex);
     setWarehouseKind(itemKind);
     setWarehouseOpen(true);
     setWarehouseLoading(true);
     try {
-      const items = await api.inventory(itemKind);
+      const items = await api.cauldronSlotWarehouse(cauldron.id, slotIndex);
       setWarehouseItems(items);
     } catch {
       setWarehouseItems([]);
@@ -111,12 +114,12 @@ export default function PotionsPage() {
     }
   }
 
-  async function selectWarehouseItem(itemId: number) {
-    if (warehouseSlot == null || !warehouseKind || !cauldron) return;
+  async function selectWarehouseItem(itemKind: string, itemId: number) {
+    if (warehouseSlot == null || !cauldron) return;
     setBusy(true);
     setMsg(null);
     try {
-      const c = await api.fillCauldronSlot(cauldron.id, warehouseSlot, warehouseKind, itemId);
+      const c = await api.fillCauldronSlot(cauldron.id, warehouseSlot, itemKind, itemId);
       setCauldron(c);
       setWarehouseOpen(false);
       setWarehouseSlot(null);
@@ -447,7 +450,7 @@ export default function PotionsPage() {
                   key={item.item_id}
                   className="fm-card fm-rise"
                   style={{ cursor: 'pointer' }}
-                  onClick={() => selectWarehouseItem(item.item_id)}
+                  onClick={() => selectWarehouseItem(item.item_kind, item.item_id)}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>{item.item_emoji} {item.item_name}</span>
