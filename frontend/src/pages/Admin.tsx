@@ -5,6 +5,7 @@ import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import Toast from '../components/Toast';
 import CrystalStandardEditor from '../components/CrystalStandardEditor';
+import { confirmDialog } from '../components/Confirm';
 
 const BONUS_KIND_OPTIONS = [
   { value: 'harvest_orchard', label: '🍎 +1 к урожаю сада' },
@@ -188,7 +189,7 @@ export default function AdminPage() {
   }
 
   async function clearLogs() {
-    if (!confirm('Удалить ВСЕ логи безвозвратно?')) return;
+    if (!(await confirmDialog('Удалить ВСЕ логи безвозвратно?'))) return;
     setBusy(true); setMsg(null);
     try {
       await api.adminClearLogs();
@@ -352,8 +353,8 @@ export default function AdminPage() {
 
   async function restartPlayer() {
     if (!selectedPlayer) return;
-    if (!confirm(`Удалить ВЕСЬ прогресс игрока #${selectedPlayer.vk_id} (грядки, склад, заказы, отчёты, достижения, нормы)?`)) return;
-    if (!confirm('Точно? Действие необратимо.')) return;
+    if (!(await confirmDialog(`Удалить ВЕСЬ прогресс игрока #${selectedPlayer.vk_id} (грядки, склад, заказы, отчёты, достижения, нормы)?`))) return;
+    if (!(await confirmDialog('Точно? Действие необратимо.'))) return;
     setBusy(true); setMsg(null);
     try {
       const updated = await api.adminRestartPlayer(selectedPlayer.vk_id);
@@ -429,7 +430,7 @@ export default function AdminPage() {
   }
 
   async function deleteField(id: number) {
-    if (!confirm('Удалить локацию со всеми клетками и шатрами?')) return;
+    if (!(await confirmDialog('Удалить локацию со всеми клетками и шатрами?'))) return;
     setBusy(true); setMsg(null);
     try {
       await api.adminDeleteField(id);
@@ -478,7 +479,7 @@ export default function AdminPage() {
   }
 
   async function deletePlant(id: number) {
-    if (!confirm('Удалить растение?')) return;
+    if (!(await confirmDialog('Удалить растение?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeletePlant(id); await load(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -498,7 +499,7 @@ export default function AdminPage() {
   }
 
   async function deleteAnimal(id: number) {
-    if (!confirm('Удалить животное?')) return;
+    if (!(await confirmDialog('Удалить животное?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeleteAnimal(id); await load(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -523,7 +524,7 @@ export default function AdminPage() {
   }
 
   async function cancelOrder(id: number) {
-    if (!confirm('Отменить заказ?')) return;
+    if (!(await confirmDialog('Отменить заказ?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminCancelOrder(id); await load(); setMsg('✓ Отменён'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -531,7 +532,7 @@ export default function AdminPage() {
   }
 
   async function deleteOrder(id: number) {
-    if (!confirm('Удалить заказ?')) return;
+    if (!(await confirmDialog('Удалить заказ?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeleteOrder(id); await load(); setMsg('✓ Удалён'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -594,7 +595,7 @@ export default function AdminPage() {
   }
 
   async function deletePet(id: number) {
-    if (!confirm('Удалить питомца?')) return;
+    if (!(await confirmDialog('Удалить питомца?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeletePet(id); await load(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -622,7 +623,7 @@ export default function AdminPage() {
   }
 
   async function deleteProduct(id: number) {
-    if (!confirm('Удалить товар?')) return;
+    if (!(await confirmDialog('Удалить товар?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeleteProduct(id); await load(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -642,7 +643,7 @@ export default function AdminPage() {
   }
 
   async function deleteProduction(id: number) {
-    if (!confirm('Удалить производство?')) return;
+    if (!(await confirmDialog('Удалить производство?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeleteProductionTemplate(id); await load(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -668,7 +669,7 @@ export default function AdminPage() {
     finally { setBusy(false); }
   }
   async function deleteOrderTemplate(id: number) {
-    if (!confirm('Удалить шаблон?')) return;
+    if (!(await confirmDialog('Удалить шаблон?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeleteOrderTemplate(id); await loadOrderTemplates(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -774,7 +775,7 @@ export default function AdminPage() {
     finally { setBusy(false); }
   }
   async function deleteLevel(level: number) {
-    if (!confirm(`Удалить уровень ${level}?`)) return;
+    if (!(await confirmDialog(`Удалить уровень ${level}?`))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeleteLevel(level); await loadLevels(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -862,7 +863,7 @@ export default function AdminPage() {
   }
 
   async function deletePotionRecipe(id: number) {
-    if (!confirm('Удалить рецепт?')) return;
+    if (!(await confirmDialog('Удалить рецепт?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeletePotionRecipe(id); await loadPotionRecipes(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -1016,7 +1017,7 @@ export default function AdminPage() {
     finally { setBusy(false); }
   }
   async function deleteRecipe(id: number) {
-    if (!confirm('Удалить рецепт?')) return;
+    if (!(await confirmDialog('Удалить рецепт?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeleteRecipe(id); await loadRecipes(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -1195,7 +1196,7 @@ export default function AdminPage() {
   }
 
   async function deleteGameMedia(id: number) {
-    if (!confirm('Удалить медиа?')) return;
+    if (!(await confirmDialog('Удалить медиа?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeleteGameMedia(id); setGameMedia(await api.adminGameMedia()); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -1248,7 +1249,7 @@ export default function AdminPage() {
     finally { setBusy(false); }
   }
   async function deleteAchievement(id: number) {
-    if (!confirm('Удалить достижение?')) return;
+    if (!(await confirmDialog('Удалить достижение?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeleteAchievement(id); await loadAchievements(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -1486,7 +1487,8 @@ export default function AdminPage() {
               <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
                 <FieldGridView field={viewField} playerVkId={selectedPlayer?.vk_id}
                   onResetNorm={async (plotId) => {
-                    if (!selectedPlayer || !confirm('Сбросить норму? Игроку выпадут новые случайные карты.')) return;
+                    if (!selectedPlayer) return;
+                    if (!(await confirmDialog('Сбросить норму? Игроку выпадут новые случайные карты.'))) return;
                     setBusy(true);
                     try {
                       await api.adminResetPlotNorm(selectedPlayer.vk_id, plotId);
@@ -1498,7 +1500,8 @@ export default function AdminPage() {
                     } finally { setBusy(false); }
                   }}
                   onDeletePlot={async (plotId) => {
-                    if (!selectedPlayer || !confirm('Удалить грядку игрока? Растение и прогресс будут потеряны.')) return;
+                    if (!selectedPlayer) return;
+                    if (!(await confirmDialog('Удалить грядку игрока? Растение и прогресс будут потеряны.'))) return;
                     setBusy(true);
                     try {
                       await api.adminDeletePlayerPlot(selectedPlayer.vk_id, plotId);
@@ -1740,42 +1743,43 @@ export default function AdminPage() {
                 <div className="fm-grid">
                   {adminOrders.map((o) => (
                     <div key={o.id} className="fm-card fm-rise">
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                        {o.image_url && (
-                          <img src={mediaUrl(o.image_url)} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 'var(--radius-sm)', flexShrink: 0 }} />
-                        )}
-                        <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
                           <strong>{o.product_emoji} {o.product_name} ×{o.qty}</strong>
                           {o.name && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{o.name}</div>}
-                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                            {o.customer || '—'} · 🪙 {o.reward_coins} монет
-                          </div>
-                          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                            <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => startEditOrder(o)}>✎</button>
-                            {o.status === 'open' && (
-                              <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => cancelOrder(o.id)}>
-                                ✖️
-                              </button>
-                            )}
-                            <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteOrder(o.id)}>
-                              🗑
-                            </button>
-                            <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
-                              🖼️
-                              <input type="file" accept="image/*" style={{ display: 'none' }}
-                                onChange={async (e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    setBusy(true); setMsg(null);
-                                    try { await api.adminUploadOrderImage(o.id, file); await load(); setMsg('✓ Картинка загружена'); }
-                                    catch (e2: any) { setMsg('✗ ' + (e2?.response?.data?.detail || 'Ошибка')); }
-                                    finally { setBusy(false); }
-                                  }
-                                }}
-                              />
-                            </label>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{o.customer || '—'}</div>
+                          <div className="fm-chip" style={{ background: 'rgba(224,168,62,0.18)', marginTop: 4 }}>
+                            🪙 {o.reward_coins} монет
                           </div>
                         </div>
+                        {o.image_url && (
+                          <img src={mediaUrl(o.image_url)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, marginLeft: 8 }} />
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                        <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => startEditOrder(o)}>✎</button>
+                        {o.status === 'open' && (
+                          <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => cancelOrder(o.id)}>
+                            ✖️
+                          </button>
+                        )}
+                        <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteOrder(o.id)}>
+                          🗑
+                        </button>
+                        <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
+                          🖼️
+                          <input type="file" accept="image/*" style={{ display: 'none' }}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setBusy(true); setMsg(null);
+                                try { await api.adminUploadOrderImage(o.id, file); await load(); setMsg('✓ Картинка загружена'); }
+                                catch (e2: any) { setMsg('✗ ' + (e2?.response?.data?.detail || 'Ошибка')); }
+                                finally { setBusy(false); }
+                              }
+                            }}
+                          />
+                        </label>
                       </div>
                     </div>
                   ))}

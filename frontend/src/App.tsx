@@ -4,6 +4,7 @@ import { useVkBridge } from './context/VkBridgeContext';
 import { useSession } from './context/SessionContext';
 import Background from './components/Background';
 import MiniAppShell from './components/MiniAppShell';
+import { ConfirmHost } from './components/Confirm';
 import { isAdminAllowed } from './auth/adminGate';
 import { installGlobalErrorReporters } from './api/vkLogger';
 
@@ -115,6 +116,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
+      <ConfirmHost />
     </>
   );
 }

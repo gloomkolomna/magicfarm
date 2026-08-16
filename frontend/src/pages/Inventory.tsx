@@ -83,17 +83,21 @@ export default function InventoryPage() {
             <div className="fm-grid">
               {filtered.map((i) => (
                 <div key={`${i.item_kind}-${i.item_id}`} className="fm-card fm-rise">
-                  {i.item_image && (
-                    <img src={mediaUrl(i.item_image)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: 6 }} />
-                  )}
-                  <strong>
-                    {i.item_emoji} {i.item_name}
-                    {i.ingredient_icon && <span style={{ marginLeft: 6, fontSize: 14 }} title={i.ingredient_type || ''}>{i.ingredient_icon}</span>}
-                  </strong>
-                  <div className="fm-chip" style={{ marginTop: 6 }}>×{i.qty}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <strong>
+                        {i.item_emoji} {i.item_name}
+                        {i.ingredient_icon && <span style={{ marginLeft: 6, fontSize: 14 }} title={i.ingredient_type || ''}>{i.ingredient_icon}</span>}
+                      </strong>
+                      <div className="fm-chip" style={{ marginTop: 4 }}>×{i.qty}</div>
+                    </div>
+                    {i.item_image && (
+                      <img src={mediaUrl(i.item_image)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, marginLeft: 8 }} />
+                    )}
+                  </div>
                   <button
                     className="fm-btn fm-btn-xs fm-btn-outline"
-                    style={{ marginTop: 8, width: '100%' }}
+                    style={{ marginTop: 10, width: '100%' }}
                     disabled={busy}
                     onClick={() => { setSellItem(i); setSellQty('1'); setSellResult(null); }}
                   >

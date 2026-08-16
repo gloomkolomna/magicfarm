@@ -84,53 +84,55 @@ export default function OrdersPage() {
             </div>
           ) : (
             <div className="fm-grid" style={{ marginBottom: 14 }}>
-              {openOrders.map((o) => (
-                <div key={o.id} className="fm-card fm-rise" style={{ cursor: 'pointer' }} onClick={() => setDetailOrder(o)}>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                    {o.image_url && (
-                      <img src={mediaUrl(o.image_url)} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 'var(--radius-sm)', flexShrink: 0 }} />
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              {openOrders.map((o) => {
+                const have = inventory[o.product_id] || 0;
+                const need = o.qty;
+                const ok = have >= need;
+                return (
+                  <div key={o.id} className="fm-card fm-rise" style={{ cursor: 'pointer' }} onClick={() => setDetailOrder(o)}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <strong>{o.product_emoji} {o.product_name}</strong>
-                        <span className="fm-chip">×{o.qty}</span>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          ×{o.qty} · <span style={{ color: ok ? 'var(--success)' : 'var(--danger)' }}>{have}/{need} на складе</span>
+                        </div>
+                        {o.name && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{o.name}</div>}
+                        <div style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0' }}>
+                          Заказчик: {o.customer}
+                        </div>
+                        <div className="fm-chip" style={{ background: 'rgba(224,168,62,0.18)' }}>
+                          🪙 {o.reward_coins} монет
+                        </div>
                       </div>
-                      <div style={{ fontSize: 12, marginTop: 2 }}>
-                        {(() => {
-                          const have = inventory[o.product_id] || 0;
-                          const need = o.qty;
-                          const ok = have >= need;
-                          return <span style={{ color: ok ? 'var(--success)' : 'var(--danger)' }}>{have}/{need} на складе</span>;
-                        })()}
-                      </div>
-                      {o.name && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{o.name}</div>}
-                      <div style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0' }}>
-                        Заказчик: {o.customer}
-                      </div>
-                      <div className="fm-chip" style={{ background: 'rgba(224,168,62,0.18)' }}>
-                        🪙 {o.reward_coins} монет
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                        <button
-                          className="fm-btn fm-btn-sm"
-                          style={{ flex: 1 }}
-                          disabled={busy}
-                          onClick={(e) => { e.stopPropagation(); act(() => api.fulfillOrder(o.id), `Заказ выполнен! +${o.reward_coins} монет`); }}
-                        >
-                          Выполнить
-                        </button>
-                        <button
-                          className="fm-btn fm-btn-sm fm-btn-outline"
-                          disabled={busy}
-                          onClick={(e) => { e.stopPropagation(); act(() => api.cancelOrder(o.id), 'Заказ отменён'); }}
-                        >
-                          Отмена
-                        </button>
-                      </div>
+                      {o.image_url && (
+                        <img
+                          src={mediaUrl(o.image_url)}
+                          alt=""
+                          style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, marginLeft: 8 }}
+                          onClick={(e) => { e.stopPropagation(); setZoomImg(mediaUrl(o.image_url!)); }}
+                        />
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                      <button
+                        className="fm-btn fm-btn-sm"
+                        style={{ flex: 1 }}
+                        disabled={busy}
+                        onClick={(e) => { e.stopPropagation(); act(() => api.fulfillOrder(o.id), `Заказ выполнен! +${o.reward_coins} монет`); }}
+                      >
+                        Выполнить
+                      </button>
+                      <button
+                        className="fm-btn fm-btn-sm fm-btn-outline"
+                        disabled={busy}
+                        onClick={(e) => { e.stopPropagation(); act(() => api.cancelOrder(o.id), 'Заказ отменён'); }}
+                      >
+                        Отмена
+                      </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

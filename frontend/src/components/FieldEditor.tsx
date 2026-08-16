@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type Animal, type BreweryZone, type FieldCell, type FieldDetail, type Pet, type Plant, type PlantBed, type PetZone, type PotionRecipe, type ProductionTemplate, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import { confirmDialog } from './Confirm';
 
 type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house' | 'brew_cauldron' | 'brew_jar' | 'brew_ingredient' | 'brew_card';
 
@@ -270,7 +271,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   }
 
   async function deleteBreweryZone(zoneId: number) {
-    if (!confirm('Удалить зону зельеварни?')) return;
+    if (!(await confirmDialog('Удалить зону зельеварни?'))) return;
     setBusy(true);
     try {
       await api.adminDeleteBreweryZone(fieldId, zoneId);
@@ -301,7 +302,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   }
 
   async function deleteTent(tentId: number) {
-    if (!confirm('Удалить шатёр? Клетки освободятся.')) return;
+    if (!(await confirmDialog('Удалить шатёр? Клетки освободятся.'))) return;
     setBusy(true);
     try {
       await api.adminDeleteTent(fieldId, tentId);
@@ -315,7 +316,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   }
 
   async function deletePlantBed(bedId: number) {
-    if (!confirm('Удалить слот дерева? Клетки освободятся.')) return;
+    if (!(await confirmDialog('Удалить слот дерева? Клетки освободятся.'))) return;
     setBusy(true);
     try {
       await api.adminDeletePlantBed(fieldId, bedId);
