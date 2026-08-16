@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, type LibraryRecipe, type Product } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
+import StitchReportForm from '../components/StitchReportForm';
 
 const TENT_KINDS: Record<string, string> = {
   alchemy: '⚗️',
@@ -21,6 +22,7 @@ export default function LibraryPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const [studyRecipe, setStudyRecipe] = useState<LibraryRecipe | null>(null);
+  const [finishRecipe, setFinishRecipe] = useState<LibraryRecipe | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -52,11 +54,17 @@ export default function LibraryPage() {
     try {
       const updated = await api.studyRecipe(studyRecipe.id);
       setRecipes((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-      setMsg('✓ Изучение начато!');
+      setMsg('✓ Изучение начато! Вышейте норму и вернитесь к карточке рецепта, чтобы отчитаться.');
       setStudyRecipe(null);
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally { setBusy(false); }
+  }
+
+  async function afterStudyReport() {
+    setFinishRecipe(null);
+    setMsg('✓ Отчёт отправлен! После зачёта рецепт станет изученным.');
+    await load();
   }
 
   function findProduct(recipe: LibraryRecipe): Product | undefined {
@@ -124,9 +132,10 @@ export default function LibraryPage() {
                       className={`fm-card fm-rise ${r.status === 'locked' ? '' : 'fm-card-studied'}`}
                       onClick={() => {
                         if (r.status === 'locked') setStudyRecipe(r);
+                        else if (r.status === 'studying') setFinishRecipe(r);
                       }}
                       style={{
-                        cursor: r.status === 'locked' ? 'pointer' : 'default',
+                        cursor: r.status === 'studied' ? 'default' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         gap: 10,
@@ -141,7 +150,7 @@ export default function LibraryPage() {
                           {r.source_kind === 'animal_product' ? r.source_product_name : r.plant_name}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                          {r.status === 'studied' ? 'изучен' : r.status === 'studying' ? 'изучается…' : 'закрыт'}
+                          {r.status === 'studied' ? 'изучен' : r.status === 'studying' ? 'изучается… · нажмите для отчёта' : 'закрыт'}
                         </div>
                       </div>
 
@@ -196,7 +205,8 @@ export default function LibraryPage() {
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center' }}>
             Для изучения потребуется {norms[`lvl${studyRecipe.level}`] ?? '—'} крестиков.
-            После начала изучения вы сможете завершить его через фото-отчёт вышивки.
+            Нажмите «Начать» → вышейте норму → вернитесь к карточке рецепта:
+            она станет кликабельной, внутри — фото-отчёт «Завершить изучение».
           </p>
           <button
             className="fm-btn"
@@ -206,6 +216,34 @@ export default function LibraryPage() {
           >
             Начать изучение
           </button>
+        </Modal>
+      )}
+
+      {finishRecipe && (
+        <Modal title="📖 Завершить изучение" onClose={() => setFinishRecipe(null)}>
+          <div style={{ textAlign: 'center', marginBottom: 12 }}>
+            <div style={{ fontSize: 32 }}>
+              {finishRecipe.source_kind === 'animal_product' ? (finishRecipe.source_product_emoji || '🥚') : (finishRecipe.plant_emoji || '🌱')}
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 600 }}>
+              {finishRecipe.source_kind === 'animal_product' ? finishRecipe.source_product_name : finishRecipe.plant_name}
+            </div>
+            <div style={{ fontSize: 24, color: 'var(--text-muted)', marginTop: 4 }}>→</div>
+            <div style={{ fontSize: 32 }}>{finishRecipe.product_emoji || '📦'}</div>
+            <div style={{ fontSize: 16 }}>{finishRecipe.product_name}</div>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', margin: '0 0 10px' }}>
+            Вышейте норму {norms[`lvl${finishRecipe.level}`] ?? '—'} крестиков, сфотографируйте
+            результат до/после и отправьте отчёт. После зачёта рецепт станет изученным.
+          </p>
+          <StitchReportForm
+            contextType="recipe_study"
+            contextId={finishRecipe.id}
+            required={norms[`lvl${finishRecipe.level}`] ?? null}
+            busy={busy}
+            onDone={afterStudyReport}
+            buttonText="Отправить отчёт и завершить"
+          />
         </Modal>
       )}
     </div>
