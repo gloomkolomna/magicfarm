@@ -5,6 +5,7 @@ import { api, POTION_INGREDIENT_ICONS as ING_ICON, POTION_INGREDIENT_LABELS as I
 import { mediaUrl } from '../api/media';
 import StitchReportForm from '../components/StitchReportForm';
 import Toast from '../components/Toast';
+import { confirmDialog } from '../components/Confirm';
 import plotUrl from '../assets/plot.png';
 
 const COLOR_LABEL: Record<string, string> = { green: '🟢', blue: '🔵', violet: '🟣' };
@@ -1051,10 +1052,18 @@ export default function FieldPage() {
                   }}
                 >
                   <div
-                    onClick={() => {
+                    onClick={async () => {
                       if (!activeCauldron || !slot) return;
-                      if (filled) clearBrewSlot(i);
-                      else openBrewSlot(i);
+                      if (filled) {
+                        const placed = brewSlotItem(slotType, slot?.item_id);
+                        const ok = await confirmDialog(
+                          placed?.name ? `Убрать «${placed.name}» из котла?` : 'Убрать ингредиент из котла?',
+                          'Убрать ингредиент',
+                        );
+                        if (ok) clearBrewSlot(i);
+                      } else {
+                        openBrewSlot(i);
+                      }
                     }}
                     style={{
                       gridColumn: `${z.col1 + 1} / span 1`,
