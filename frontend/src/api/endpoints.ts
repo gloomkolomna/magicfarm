@@ -390,6 +390,7 @@ export interface Order {
   product_code: string;
   product_name: string;
   product_emoji: string | null;
+  product_image_url: string | null;
   qty: number;
   reward_coins: number;
   customer: string | null;

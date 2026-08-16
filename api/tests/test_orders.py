@@ -283,6 +283,29 @@ def test_order_customer_phrase_and_image_visible_to_player(admin_client, uploads
         assert o2["customer_image_url"] is None
 
 
+def test_order_product_image_url_visible_to_player(admin_client):
+    from models import Product
+    from tests.conftest import TestingSessionLocal
+
+    pid = _poison_id(admin_client)
+    s = TestingSessionLocal()
+    try:
+        p = s.query(Product).filter(Product.id == pid).first()
+        p.image_url = "/api/uploads/product_test.png"
+        s.commit()
+    finally:
+        s.close()
+
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+
+    from tests.conftest import make_user_client
+    with make_user_client(123, "player") as player:
+        assert player.post(f"/api/orders/{oid}/take").status_code == 200
+        mine = player.get("/api/orders").json()
+        o = next(x for x in mine if x["id"] == oid)
+        assert o["product_image_url"] == "/api/uploads/product_test.png"
+
+
 def test_admin_generate_order_unknown_product(admin_client):
     res = admin_client.post("/api/admin/orders/generate", json={"product_id": 9999})
     assert res.status_code == 404

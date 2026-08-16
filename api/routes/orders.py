@@ -53,6 +53,7 @@ class OrderOut(BaseModel):
     product_code: str
     product_name: str
     product_emoji: str | None
+    product_image_url: str | None = None
     qty: int
     reward_coins: int
     customer: str | None
@@ -74,6 +75,7 @@ def _to_out(o: OrderReq, customer_images: dict[str, str] | None = None) -> Order
     return OrderOut(
         id=o.id, product_id=o.product_id, product_code=o.product.code,
         product_name=o.product.name, product_emoji=o.product.emoji,
+        product_image_url=o.product.image_url,
         qty=o.qty, reward_coins=o.reward_coins,
         customer=o.customer,
         customer_phrase=o.customer_phrase,

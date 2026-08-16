@@ -97,6 +97,7 @@ export default function OrdersPage() {
                 const have = inventory[o.product_id] || 0;
                 const need = o.qty;
                 const ok = have >= need;
+                const orderImg = o.image_url || o.product_image_url;
                 return (
                   <div key={o.id} className="fm-card fm-rise" style={{ cursor: 'pointer' }} onClick={() => setDetailOrder(o)}>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -104,15 +105,15 @@ export default function OrdersPage() {
                         <img
                           src={mediaUrl(o.customer_image_url)}
                           alt=""
-                          style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--border)', cursor: 'zoom-in' }}
+                          style={{ maxHeight: 64, maxWidth: 140, width: 'auto', height: 'auto', objectFit: 'contain', borderRadius: 8, flexShrink: 0, cursor: 'zoom-in' }}
                           onClick={(e) => { e.stopPropagation(); setZoomImg(mediaUrl(o.customer_image_url!)); }}
                         />
                       ) : (
                         <div
                           style={{
-                            width: 56, height: 56, borderRadius: '50%', flexShrink: 0,
+                            width: 48, height: 48, borderRadius: 8, flexShrink: 0,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 26, background: 'var(--bg-secondary, rgba(0,0,0,0.08))',
+                            fontSize: 24, background: 'var(--bg-secondary, rgba(0,0,0,0.08))',
                             border: '2px solid var(--border)',
                           }}
                         >
@@ -140,8 +141,17 @@ export default function OrdersPage() {
                         marginTop: 10,
                       }}
                     >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-                        <span style={{ fontSize: 17 }}>{o.product_emoji || '📦'}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        {orderImg ? (
+                          <img
+                            src={mediaUrl(orderImg)}
+                            alt=""
+                            style={{ height: 40, maxWidth: 64, width: 'auto', objectFit: 'contain', borderRadius: 6, flexShrink: 0, cursor: 'zoom-in' }}
+                            onClick={(e) => { e.stopPropagation(); setZoomImg(mediaUrl(orderImg!)); }}
+                          />
+                        ) : (
+                          <span style={{ fontSize: 17 }}>{o.product_emoji || '📦'}</span>
+                        )}
                         <strong style={{ whiteSpace: 'nowrap' }}>{o.product_name}</strong>
                         <span className="fm-chip" style={{ fontSize: 12 }}>×{need}</span>
                       </span>
@@ -181,7 +191,7 @@ export default function OrdersPage() {
                   const s = STATUS_LABEL[o.status] || STATUS_LABEL.open;
                   return (
                     <div key={o.id} className="fm-card" style={{ textAlign: 'center', opacity: 0.8 }}>
-                      <SpritePedestal url={o.image_url ? mediaUrl(o.image_url) : null} emoji={o.product_emoji} height={80} onZoom={setZoomImg} />
+                      <SpritePedestal url={(o.image_url || o.product_image_url) ? mediaUrl(o.image_url || o.product_image_url) : null} emoji={o.product_emoji} height={80} onZoom={setZoomImg} />
                       <strong style={{ display: 'block', marginBottom: 6 }}>{o.product_name}</strong>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
                         ×{o.qty} · {o.customer || '—'}
@@ -210,7 +220,7 @@ export default function OrdersPage() {
 
       {detailOrder && (
         <Modal title="Детали заказа" onClose={() => setDetailOrder(null)}>
-          <SpritePedestal url={detailOrder.image_url ? mediaUrl(detailOrder.image_url) : null} emoji={detailOrder.product_emoji} height={160} onZoom={setZoomImg} />
+          <SpritePedestal url={(detailOrder.image_url || detailOrder.product_image_url) ? mediaUrl(detailOrder.image_url || detailOrder.product_image_url) : null} emoji={detailOrder.product_emoji} height={160} onZoom={setZoomImg} />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <strong style={{ fontSize: 18 }}>{detailOrder.product_name}</strong>
             <span className="fm-chip" style={{ fontSize: 16 }}>×{detailOrder.qty}</span>
@@ -231,13 +241,13 @@ export default function OrdersPage() {
               <img
                 src={mediaUrl(detailOrder.customer_image_url)}
                 alt=""
-                style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--border)', cursor: 'zoom-in' }}
+                style={{ maxHeight: 96, maxWidth: 160, width: 'auto', height: 'auto', objectFit: 'contain', borderRadius: 8, flexShrink: 0, cursor: 'zoom-in' }}
                 onClick={() => setZoomImg(mediaUrl(detailOrder.customer_image_url!))}
               />
             ) : (
               <div
                 style={{
-                  width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+                  width: 44, height: 44, borderRadius: 8, flexShrink: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 20, background: 'var(--bg-secondary, rgba(0,0,0,0.08))',
                   border: '2px solid var(--border)',
