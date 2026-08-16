@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { api, POTION_INGREDIENT_ICONS as ING_ICON, POTION_INGREDIENT_LABELS as ING_LABEL, potionBonusLabel, type Animal, type BreweryZoneView, type CraftInfo, type CraftSessionInfo, type CrystalCard, type FieldCellDetail, type FieldDetail, type HouseState, type Pet, type PlantBed, type Product, type SlotWarehouseItem, type Tent } from '../api/endpoints';
+import { api, POTION_INGREDIENT_ICONS as ING_ICON, POTION_INGREDIENT_LABELS as ING_LABEL, potionBonusLabel, type Animal, type BreweryZoneView, type CraftInfo, type CraftSessionInfo, type CrystalCard, type FieldCellDetail, type FieldDetail, type HouseState, type Pet, type Plant, type PlantBed, type Product, type SlotWarehouseItem, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import StitchReportForm from '../components/StitchReportForm';
 import Toast from '../components/Toast';
@@ -100,6 +100,8 @@ export default function FieldPage() {
   const [brewSlotIndex, setBrewSlotIndex] = useState<number | null>(null);
   const [brewWarehouse, setBrewWarehouse] = useState<SlotWarehouseItem[]>([]);
   const [brewWarehouseLoading, setBrewWarehouseLoading] = useState(false);
+  const [brewPlantImgs, setBrewPlantImgs] = useState<Record<number, string | null>>({});
+  const [brewProductImgs, setBrewProductImgs] = useState<Record<number, string | null>>({});
 
   const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string; norm?: number; qty?: number } | null>(null);
   const [showVideo, setShowVideo] = useState(false);
@@ -171,6 +173,16 @@ export default function FieldPage() {
   useEffect(() => { loadVideo(); }, [loadVideo]);
 
   useEffect(() => {
+    Promise.all([
+      api.plants().catch(() => [] as Plant[]),
+      api.products().catch(() => [] as Product[]),
+    ]).then(([pls, prds]) => {
+      setBrewPlantImgs(Object.fromEntries(pls.map((p) => [p.id, p.image_harvested_url || p.image_grown_url || p.image_url || null])));
+      setBrewProductImgs(Object.fromEntries(prds.map((p) => [p.id, p.image_url || null])));
+    });
+  }, []);
+
+  useEffect(() => {
     if (careCell?.plot?.norm_revealed && careCell?.plot?.drawn_cards_json && !cardResult) {
       let cards: { color: string; value: number; is_treasure: boolean }[] = [];
       try { cards = JSON.parse(careCell.plot.drawn_cards_json); } catch {}
@@ -219,6 +231,14 @@ export default function FieldPage() {
   const brewCardZones = (field?.brewery_zones ?? []).filter((z) => z.zone_kind === 'recipe_card');
   const brewActiveRecipe = field?.potion_recipes?.find((r) => r.id === activeCauldron?.recipe_id) ?? null;
   const brewAllSlotsFilled = !!activeCauldron && activeCauldron.slots.length > 0 && activeCauldron.slots.every((s) => s.item_id != null);
+
+  function brewSlotItemImg(slotType: string | null | undefined, itemId: number | null | undefined): string | null {
+    if (itemId == null || !slotType) return null;
+    if (slotType === 'plant' || slotType === 'plant_garden' || slotType === 'plant_orchard') {
+      return brewPlantImgs[itemId] ?? null;
+    }
+    return brewProductImgs[itemId] ?? null;
+  }
 
   async function installBrewCauldron(recipeId: number) {
     setBusy(true); setMsg(null);
@@ -1048,8 +1068,12 @@ export default function FieldPage() {
                       touchAction: 'manipulation', pointerEvents: activeCauldron && slot ? 'auto' : 'none',
                     }}
                   >
-                    <div style={{ fontSize: 'clamp(14px,4vw,24px)', lineHeight: 1, pointerEvents: 'none' }}>
-                      {filled ? '✅' : slotType ? (ING_ICON[slotType] || '❓') : '▫️'}
+                    <div style={{ fontSize: 'clamp(14px,4vw,24px)', lineHeight: 1, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+                      {filled
+                        ? (brewSlotItemImg(slotType, slot?.item_id)
+                            ? <img src={mediaUrl(brewSlotItemImg(slotType, slot?.item_id)!)} alt="" style={{ maxHeight: 'clamp(20px,5.5vw,34px)', maxWidth: '90%', objectFit: 'contain' }} />
+                            : '✅')
+                        : slotType ? (ING_ICON[slotType] || '❓') : '▫️'}
                     </div>
                     {activeCauldron && slot && (
                       <div style={{ fontSize: 8, color: '#e6d9ff', textShadow: '0 1px 2px #000', pointerEvents: 'none', textAlign: 'center', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1065,7 +1089,7 @@ export default function FieldPage() {
             {field.field_kind === 'brewery' && brewCardZones.map((z) => {
               const spanCols = z.col2 - z.col1 + 1;
               const spanRows = z.row2 - z.row1 + 1;
-              const cardImg = z.recipe_card_image || z.recipe_image;
+              const cardImg = brewActiveRecipe?.card_image_url || brewActiveRecipe?.image_url || null;
               return (
                 <div
                   key={`bzc-${z.id}`}
@@ -1076,7 +1100,7 @@ export default function FieldPage() {
                   }}
                 >
                   <div
-                    onClick={() => setBrewCardModal(z)}
+                    onClick={() => (activeCauldron ? setBrewCardModal(z) : setBrewPickRecipe(true))}
                     style={{
                       gridColumn: `${z.col1 + 1} / span ${spanCols}`,
                       gridRow: `${z.row1 + 1} / span ${spanRows}`,
@@ -1092,7 +1116,7 @@ export default function FieldPage() {
                     )}
                     {!cardImg && (
                       <div style={{ fontSize: 'clamp(10px,2.4vw,14px)', color: '#e6d9ff', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600 }}>
-                        🃏 {z.recipe_name ?? 'Рецепт'}
+                        🃏 Выбрать зелье
                       </div>
                     )}
                   </div>
@@ -1165,10 +1189,10 @@ export default function FieldPage() {
 
       {/* Зельеварня: карточка рецепта */}
       {brewCardModal && (() => {
-        const r = (field.potion_recipes ?? []).find((x) => x.id === brewCardModal.recipe_id) ?? null;
-        const cardImg = brewCardModal.recipe_card_image || brewCardModal.recipe_image;
+        const r = activeCauldron ? ((field.potion_recipes ?? []).find((x) => x.id === activeCauldron.recipe_id) ?? null) : null;
+        const cardImg = r?.card_image_url || r?.image_url || null;
         return (
-          <Modal title={`🃏 ${brewCardModal.recipe_name ?? r?.name ?? 'Рецепт'}`} onClose={() => setBrewCardModal(null)}>
+          <Modal title={`🃏 ${r?.name ?? activeCauldron?.recipe_name ?? 'Рецепт'}`} onClose={() => setBrewCardModal(null)}>
             {cardImg && (
               <img src={mediaUrl(cardImg)} alt="" style={{ width: '100%', maxHeight: 260, objectFit: 'contain', marginBottom: 10, borderRadius: 8 }} onClick={() => setZoomedImg(mediaUrl(cardImg!))} />
             )}
@@ -1185,16 +1209,10 @@ export default function FieldPage() {
                 {r.description && <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0' }}>{r.description}</p>}
               </>
             )}
-            {activeCauldron ? (
+            {activeCauldron && (
               <div className="fm-card" style={{ fontSize: 13 }}>
-                {activeCauldron.recipe_id === brewCardModal.recipe_id
-                  ? 'Это зелье сейчас варится в вашем котле.'
-                  : `Сейчас варится «${activeCauldron.recipe_name}». Новый котёл — после варки.`}
+                Это зелье сейчас варится в вашем котле.
               </div>
-            ) : r && (
-              <button className="fm-btn" style={{ width: '100%', marginTop: 10 }} disabled={busy} onClick={() => installBrewCauldron(r.id)}>
-                🍲 Установить котёл с этим зельем
-              </button>
             )}
           </Modal>
         );
@@ -1212,7 +1230,13 @@ export default function FieldPage() {
               const slotType = brewActiveRecipe?.ingredient_slots?.[s.slot_index] ?? null;
               return (
                 <div key={s.slot_index} className="fm-card" style={{ textAlign: 'center', fontSize: 13, background: s.item_id != null ? 'rgba(111,174,74,0.18)' : undefined }}>
-                  <div style={{ fontSize: 22 }}>{s.item_id != null ? '✅' : (slotType ? (ING_ICON[slotType] || '❓') : '▫️')}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 30 }}>
+                    {s.item_id != null
+                      ? (brewSlotItemImg(slotType, s.item_id)
+                          ? <img src={mediaUrl(brewSlotItemImg(slotType, s.item_id)!)} alt="" style={{ maxHeight: 28, maxWidth: '90%', objectFit: 'contain' }} />
+                          : '✅')
+                      : (slotType ? (ING_ICON[slotType] || '❓') : '▫️')}
+                  </div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{slotType ? (ING_LABEL[slotType] || slotType) : 'слот'}</div>
                 </div>
               );
@@ -1239,10 +1263,20 @@ export default function FieldPage() {
               <div className="fm-grid">
                 {brewWarehouse.map((item) => (
                   <div key={`${item.item_kind}-${item.item_id}`} className="fm-card fm-rise" style={{ cursor: 'pointer' }} onClick={() => fillBrewSlot(item.item_kind, item.item_id)}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>{item.item_emoji} {item.item_name}</span>
-                      <span className="fm-chip">×{item.qty}</span>
-                    </div>
+                    {item.item_image ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <img src={mediaUrl(item.item_image)} alt="" style={{ height: 44, maxWidth: 60, objectFit: 'contain', flexShrink: 0 }} />
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.item_name}</div>
+                          <span className="fm-chip">×{item.qty}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>{item.item_emoji} {item.item_name}</span>
+                        <span className="fm-chip">×{item.qty}</span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

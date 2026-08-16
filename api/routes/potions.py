@@ -176,6 +176,8 @@ def _cauldron_detail(c: Cauldron, db: Session) -> CauldronOut:
 
 # ── Slot warehouse filter ──
 
+PLANT_SLOT_TYPES = ("plant", "plant_garden", "plant_orchard")
+
 SLOT_TYPE_TO_PRODUCTION_KINDS = {
     "workshop": ("workshop", "shatyor_masterskaya_3"),
     "sewing": ("sewing", "shatyor_masterskaya"),
@@ -225,12 +227,21 @@ def slot_warehouse(
         inv = inv.filter(Inventory.product_id.isnot(None))
     rows = [i for i in inv.all() if _item_matches_slot(slot.item_type, i)]
 
+    all_slots = db.query(CauldronSlot).filter(CauldronSlot.cauldron_id == c.id).all()
+    used_plants = {s.item_id for s in all_slots if s.item_id is not None and s.item_type in PLANT_SLOT_TYPES}
+    used_products = {s.item_id for s in all_slots if s.item_id is not None and s.item_type not in PLANT_SLOT_TYPES}
+
     result = []
     for i in rows:
         if i.plant_id:
-            result.append({"item_kind": "plant", "item_id": i.plant_id, "item_name": i.plant.name, "item_emoji": i.plant.emoji, "qty": i.qty})
+            if i.plant_id in used_plants:
+                continue
+            img = i.plant.image_harvested_url or i.plant.image_grown_url or i.plant.image_url
+            result.append({"item_kind": "plant", "item_id": i.plant_id, "item_name": i.plant.name, "item_emoji": i.plant.emoji, "item_image": img, "qty": i.qty})
         else:
-            result.append({"item_kind": "product", "item_id": i.product_id, "item_name": i.product.name, "item_emoji": i.product.emoji, "qty": i.qty})
+            if i.product_id in used_products:
+                continue
+            result.append({"item_kind": "product", "item_id": i.product_id, "item_name": i.product.name, "item_emoji": i.product.emoji, "item_image": i.product.image_url, "qty": i.qty})
     return result
 
 
@@ -260,6 +271,18 @@ def fill_slot(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Слот не найден")
     if slot.item_id is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Слот уже заполнен")
+
+    dup_q = db.query(CauldronSlot).filter(
+        CauldronSlot.cauldron_id == c.id,
+        CauldronSlot.slot_index != slot_index,
+        CauldronSlot.item_id == req.item_id,
+    )
+    if req.item_kind == "plant":
+        dup_q = dup_q.filter(CauldronSlot.item_type.in_(PLANT_SLOT_TYPES))
+    else:
+        dup_q = dup_q.filter(CauldronSlot.item_type.notin_(PLANT_SLOT_TYPES))
+    if dup_q.first() is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Этот ингредиент уже заложен в другой слот")
 
     inv = db.query(Inventory).filter(Inventory.user_id == user.vk_id, Inventory.qty > 0)
     if req.item_kind == "plant":

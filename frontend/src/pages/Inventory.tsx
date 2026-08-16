@@ -102,14 +102,16 @@ export default function InventoryPage() {
                   >
                     <span className="fm-chip">×{i.qty}</span>
                   </div>
-                  <button
-                    className="fm-btn fm-btn-sm fm-btn-outline"
-                    style={{ marginTop: 10, width: '100%' }}
-                    disabled={busy}
-                    onClick={() => { setSellItem(i); setSellQty('1'); setSellResult(null); }}
-                  >
-                    💰 Продать излишки
-                  </button>
+                  {i.item_kind !== 'potion' && (
+                    <button
+                      className="fm-btn fm-btn-sm fm-btn-outline fm-btn-wrap"
+                      style={{ marginTop: 10, width: '100%' }}
+                      disabled={busy}
+                      onClick={() => { setSellItem(i); setSellQty('1'); setSellResult(null); }}
+                    >
+                      💰 Продать излишки
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

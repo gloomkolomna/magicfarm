@@ -65,7 +65,6 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const [prodTemplates, setProdTemplates] = useState<ProductionTemplate[]>([]);
   const [allPotionRecipes, setAllPotionRecipes] = useState<PotionRecipe[]>([]);
   const [brewImage, setBrewImage] = useState<File | null>(null);
-  const [brewCardRecipeId, setBrewCardRecipeId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -224,7 +223,6 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     }
     setTentImage(null);
     setBrewImage(null);
-    setBrewCardRecipeId(field?.potion_recipes?.[0]?.id ?? null);
     setMultiModal({ c1, r1, c2, r2 });
   }
 
@@ -245,11 +243,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           fieldId,
           zoneKind,
           { col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2 },
-          zoneKind === 'cauldron'
-            ? { image: brewImage || undefined }
-            : zoneKind === 'recipe_card'
-              ? { recipeId: brewCardRecipeId ?? undefined }
-              : undefined,
+          zoneKind === 'cauldron' ? { image: brewImage || undefined } : undefined,
         );
         setMsg('✓ Зона зельеварни размещена');
       } else {
@@ -545,7 +539,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           : brush === 'brew_ingredient'
           ? 'Тап по клетке добавляет окошко ингредиента (максимум 6). Удаление — в списке зон ниже.'
           : brush === 'brew_card'
-          ? 'Выделите клетки под карточку рецепта и выберите привязанное к локации зелье.'
+          ? 'Выделите клетки под карточку рецепта — картинка подгрузится из зелья, выбранного игроком для варки.'
           : 'Тапайте по клеткам — тип меняется сразу (повторный тап убирает).'}
       </p>
 
@@ -616,8 +610,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           {field.brewery_zones?.map((z) => {
             const zw = (z.col2 - z.col1 + 1) * sz;
             const zh = (z.row2 - z.row1 + 1) * sz;
-            const label = z.zone_kind === 'recipe_card' && z.recipe_id
-              ? `🃏 ${allPotionRecipes.find((r) => r.id === z.recipe_id)?.name ?? 'рецепт'}`
+            const label = z.zone_kind === 'recipe_card' ? '🃏 Карточка'
               : z.zone_kind === 'cauldron' ? '🍲 Котёл'
               : z.zone_kind === 'jar' ? '🧪 Банка'
               : '🔲 Ингр.';
@@ -894,30 +887,9 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 Пока котёл стоит, на этих клетках показывается флакон варящегося зелья (картинка рецепта).
               </p>
             ) : brush === 'brew_card' ? (
-              <>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                  Карточка рецепта на карте локации. Клик по ней у игрока — превью зелья и установка котла.
-                </p>
-                {(field?.potion_recipes ?? []).length === 0 ? (
-                  <p style={{ fontSize: 13, color: 'var(--danger)' }}>
-                    Сначала отметьте зелья в разделе «Зелья локации» ниже — карточки размещаются только из этого списка.
-                  </p>
-                ) : (
-                  <>
-                    <label style={lbl}>Зелье</label>
-                    <select
-                      className="fm-input"
-                      value={brewCardRecipeId ?? ''}
-                      onChange={(e) => setBrewCardRecipeId(e.target.value ? Number(e.target.value) : null)}
-                    >
-                      <option value="">— выберите зелье —</option>
-                      {(field?.potion_recipes ?? []).map((r) => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
-                      ))}
-                    </select>
-                  </>
-                )}
-              </>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                Карточка задаёт только границу зоны. Картинка подгрузится автоматически из зелья, которое игрок выберет для варки (поле «Карточка рецепта» в редакторе зелий).
+              </p>
             ) : isTentBrush(brush) ? (
               <>
                 <label style={lbl}>Название</label>
@@ -937,7 +909,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 {brush === 'bed' ? 'Слот садового дерева: игрок сажает сюда 1 дерево (на весь прямоугольник).' : 'Мульти-клеточная зона для питомца.'}
               </p>
             )}
-            <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || (isTentBrush(brush) && !tentName.trim()) || (brush === 'brew_card' && !brewCardRecipeId)} onClick={saveMulti}>
+            <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || (isTentBrush(brush) && !tentName.trim())} onClick={saveMulti}>
               Разместить
             </button>
           </div>

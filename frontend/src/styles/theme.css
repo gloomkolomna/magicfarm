@@ -121,6 +121,7 @@ button.fm-card {
 
 .fm-btn-sm { padding: 6px 10px; font-size: 13px; }
 .fm-btn-xs { padding: 4px 8px; font-size: 12px; }
+.fm-btn-wrap { white-space: normal; line-height: 1.25; padding-top: 8px; padding-bottom: 8px; }
 .fm-btn-danger {
   background: linear-gradient(180deg, #d4685a 0%, #a8443a 100%);
   border-color: #8e3a31;

@@ -846,11 +846,10 @@ def create_brewery_zone(
             )
 
     if zone_kind == "recipe_card":
-        if recipe_id is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для карточки рецепта выберите зелье")
-        linked = {fpr.recipe_id for fpr in f.potion_recipes}
-        if recipe_id not in linked:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Зелье не привязано к этой локации")
+        if recipe_id is not None:
+            linked = {fpr.recipe_id for fpr in f.potion_recipes}
+            if recipe_id not in linked:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Зелье не привязано к этой локации")
     elif recipe_id is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="recipe_id задаётся только для карточки рецепта")
 
@@ -921,8 +920,7 @@ def set_field_potion_recipes(
             BreweryZone.field_id == f.id, BreweryZone.zone_kind == "recipe_card",
             BreweryZone.recipe_id.in_(removed),
         ).all():
-            remove_upload(z.image_url)
-            db.delete(z)
+            z.recipe_id = None
     db.query(FieldPotionRecipe).filter(FieldPotionRecipe.field_id == f.id).delete()
     for rid in req.recipe_ids:
         if rid in valid_ids:

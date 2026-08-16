@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user
 from models import CraftSession, Inventory, Plant, Plot, Production, Product, User, Recipe, UserRecipe
+from models import PotionRecipe, UserPotion
+from sqlalchemy import func
 
 router = APIRouter(prefix="/api/farm", tags=["farm"])
 
@@ -496,13 +498,32 @@ def list_inventory(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    q = db.query(Inventory).filter(Inventory.user_id == user.vk_id)
-    if item_kind == "plant":
-        q = q.filter(Inventory.plant_id.isnot(None))
-    elif item_kind == "product":
-        q = q.filter(Inventory.product_id.isnot(None))
-    rows = q.all()
-    return [_inv_to_out(i) for i in rows]
+    result: list[InventoryOut] = []
+    if item_kind in (None, "plant", "product"):
+        q = db.query(Inventory).filter(Inventory.user_id == user.vk_id)
+        if item_kind == "plant":
+            q = q.filter(Inventory.plant_id.isnot(None))
+        elif item_kind == "product":
+            q = q.filter(Inventory.product_id.isnot(None))
+        result = [_inv_to_out(i) for i in q.all()]
+
+    if item_kind in (None, "potion"):
+        potion_rows = (
+            db.query(PotionRecipe, func.count(UserPotion.id))
+            .join(UserPotion, UserPotion.potion_recipe_id == PotionRecipe.id)
+            .filter(UserPotion.user_id == user.vk_id)
+            .group_by(PotionRecipe.id)
+            .all()
+        )
+        for recipe, qty in potion_rows:
+            result.append(InventoryOut(
+                item_kind="potion", item_id=recipe.id, item_code=recipe.code,
+                item_name=recipe.name, item_emoji=None,
+                item_image=recipe.image_url, qty=qty,
+                ingredient_type=None, ingredient_icon=None,
+            ))
+
+    return result
 
 
 class ProductOut(BaseModel):
@@ -512,6 +533,7 @@ class ProductOut(BaseModel):
     emoji: str | None
     stars: int
     production_kind: str | None
+    image_url: str | None
 
 
 @router.get("/products", response_model=list[ProductOut])
@@ -524,6 +546,7 @@ def list_products(
         ProductOut(
             id=p.id, code=p.code, name=p.name, emoji=p.emoji,
             stars=p.stars, production_kind=p.production_kind,
+            image_url=p.image_url,
         )
         for p in rows
     ]

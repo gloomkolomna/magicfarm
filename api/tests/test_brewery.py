@@ -83,10 +83,11 @@ def test_ingredient_zone_max_six(admin_client):
     assert r.status_code == 400
 
 
-def test_recipe_card_requires_recipe(admin_client):
+def test_recipe_card_without_recipe_ok(admin_client):
     fid = _create_brewery_field(admin_client)
     r = _create_zone(admin_client, fid, "recipe_card", 4, 0, 5, 1)
-    assert r.status_code == 400
+    assert r.status_code == 201
+    assert r.json()["recipe_id"] is None
 
 
 def test_recipe_card_requires_linked_recipe(admin_client):
@@ -157,16 +158,17 @@ def test_zones_in_field_detail(admin_client):
     assert d["potion_recipe_ids"] == [1]
 
 
-def test_unlink_recipe_deletes_its_card_zone(admin_client):
+def test_unlink_recipe_keeps_card_zone(admin_client):
     fid = _create_brewery_field(admin_client)
     admin_client.put(f"/api/admin/fields/{fid}/potion-recipes", json={"recipe_ids": [1]})
     zid = _create_zone(admin_client, fid, "recipe_card", 4, 0, 5, 1, recipe_id=1).json()["id"]
     admin_client.put(f"/api/admin/fields/{fid}/potion-recipes", json={"recipe_ids": []})
     d = admin_client.get(f"/api/admin/fields/{fid}").json()
-    assert d["brewery_zones"] == []
     assert d["potion_recipe_ids"] == []
-    r = admin_client.delete(f"/api/admin/fields/{fid}/brewery-zones/{zid}")
-    assert r.status_code == 404
+    zones = [z for z in d["brewery_zones"] if z["zone_kind"] == "recipe_card"]
+    assert len(zones) == 1
+    assert zones[0]["id"] == zid
+    assert zones[0]["recipe_id"] is None
 
 
 def test_player_cannot_create_zone(admin_client):
@@ -220,7 +222,8 @@ def test_brewery_field_public_detail(admin_client):
 def test_brewery_field_active_cauldron(admin_client):
     from tests.test_phase8_potions import _seed_plant_inventory, _seed_product_inventory
     fid = _seed_brewery(admin_client)
-    _seed_plant_inventory(123, 1, 5)
+    for pid in (1, 2, 3):
+        _seed_plant_inventory(123, pid, 5)
     _seed_product_inventory(123, 1, 5)
     with make_user_client(123, "player") as c:
         r = c.post("/api/potions/cauldrons", json={"recipe_id": 1})
@@ -232,8 +235,8 @@ def test_brewery_field_active_cauldron(admin_client):
         assert len(d["active_cauldron"]["slots"]) == 4
 
         cid = d["active_cauldron"]["id"]
-        for i in range(3):
-            c.post(f"/api/potions/cauldrons/{cid}/slot/{i}", json={"item_kind": "plant", "item_id": 1})
+        for i, pid in enumerate((1, 2, 3)):
+            c.post(f"/api/potions/cauldrons/{cid}/slot/{i}", json={"item_kind": "plant", "item_id": pid})
         c.post(f"/api/potions/cauldrons/{cid}/slot/3", json={"item_kind": "product", "item_id": 1})
         c.post(f"/api/potions/cauldrons/{cid}/brew")
 

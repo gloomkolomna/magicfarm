@@ -37,7 +37,9 @@ export default function OrdersPage() {
       ]);
       setOrders(ord);
       const invMap: Record<number, number> = {};
-      for (const i of inv) invMap[i.item_id] = (invMap[i.item_id] || 0) + i.qty;
+      for (const i of inv) {
+        if (i.item_kind === 'product') invMap[i.item_id] = (invMap[i.item_id] || 0) + i.qty;
+      }
       setInventory(invMap);
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка загрузки'));

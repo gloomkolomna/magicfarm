@@ -348,7 +348,7 @@ export default function PotionsPage() {
                       </p>
                     )}
                     <button
-                      className="fm-btn fm-btn-sm"
+                      className="fm-btn fm-btn-sm fm-btn-wrap"
                       style={{ width: '100%', marginTop: 10 }}
                       disabled={busy || !!cauldron}
                       onClick={() => createCauldron(r.id)}
@@ -413,7 +413,7 @@ export default function PotionsPage() {
                     )}
                     {!p.activated && (
                       <button
-                        className="fm-btn fm-btn-sm"
+                        className="fm-btn fm-btn-sm fm-btn-wrap"
                         style={{ width: '100%', marginTop: 8 }}
                         disabled={busy}
                         onClick={() => activatePotion(p.id)}
@@ -453,10 +453,20 @@ export default function PotionsPage() {
                   style={{ cursor: 'pointer' }}
                   onClick={() => selectWarehouseItem(item.item_kind, item.item_id)}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>{item.item_emoji} {item.item_name}</span>
-                    <span className="fm-chip">×{item.qty}</span>
-                  </div>
+                  {item.item_image ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <img src={mediaUrl(item.item_image)} alt="" style={{ height: 44, maxWidth: 60, objectFit: 'contain', flexShrink: 0 }} />
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.item_name}</div>
+                        <span className="fm-chip">×{item.qty}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{item.item_emoji} {item.item_name}</span>
+                      <span className="fm-chip">×{item.qty}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
