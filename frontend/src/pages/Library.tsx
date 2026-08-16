@@ -14,7 +14,7 @@ const LEVEL_LABELS: Record<number, string> = { 1: 'I', 2: 'II', 3: 'III' };
 export default function LibraryPage() {
   const [recipes, setRecipes] = useState<LibraryRecipe[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [norms, setNorms] = useState<Record<string, number>>({});
+  const [norms, setNorms] = useState<Record<string, number | null>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -24,19 +24,17 @@ export default function LibraryPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [recs, prs, n1, n2, n3] = await Promise.all([
+      const [recs, prs, mine] = await Promise.all([
         api.library(),
         api.products(),
-        api.getSetting('study_norm_lvl1').catch(() => ({ key: 'study_norm_lvl1', value: '0' })),
-        api.getSetting('study_norm_lvl2').catch(() => ({ key: 'study_norm_lvl2', value: '0' })),
-        api.getSetting('study_norm_lvl3').catch(() => ({ key: 'study_norm_lvl3', value: '0' })),
+        api.myCrystalNorms(),
       ]);
       setRecipes(recs);
       setProducts(prs);
       setNorms({
-        lvl1: Number(n1.value) || 0,
-        lvl2: Number(n2.value) || 0,
-        lvl3: Number(n3.value) || 0,
+        lvl1: mine.study_norms?.level1 ?? null,
+        lvl2: mine.study_norms?.level2 ?? null,
+        lvl3: mine.study_norms?.level3 ?? null,
       });
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -89,6 +87,11 @@ export default function LibraryPage() {
               </span>
             ))}
           </div>
+          {(norms.lvl1 == null || norms.lvl2 == null || norms.lvl3 == null) && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+              Задайте личные нормы изучения в профиле (Настройки норм)
+            </div>
+          )}
         </div>
       )}
 

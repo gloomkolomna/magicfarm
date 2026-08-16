@@ -952,7 +952,7 @@ export const api = {
   adminUploadOrderTemplateImage: (id: number, image: File) => {
     const form = new FormData();
     form.append('image', image);
-    return client.put<OrderTemplate>(`/admin/order-templates/${id}/image`, form).then((r) => r.data);
+    return client.put<OrderTemplate>(`/admin/order-templates/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
 
   // ── Админ: уровни ──
