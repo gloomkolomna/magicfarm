@@ -156,6 +156,9 @@ def test_migration_new_columns_exist(migrated_db):
     pt_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(production_templates)")]
     assert "processing_crystal" in pt_cols
 
+    order_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(orders)")]
+    assert "customer_phrase" in order_cols
+
 
 def test_migration_seeds_customers(migrated_db):
     rows = _fetch(migrated_db, "SELECT COUNT(*) FROM customers")

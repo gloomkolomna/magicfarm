@@ -270,6 +270,7 @@ class OrderReq(Base):
     qty = Column(Integer, nullable=False)
     reward_coins = Column(Integer, nullable=False, default=0, server_default="0")
     customer = Column(String, nullable=True)
+    customer_phrase = Column(Text, nullable=True)
     status = Column(String, nullable=False, default="open", server_default="open")
     name = Column(String, nullable=True)
     image_url = Column(String, nullable=True)

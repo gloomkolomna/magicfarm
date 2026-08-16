@@ -92,18 +92,40 @@ export default function OrdersPage() {
               Нет активных заказов.
             </div>
           ) : (
-            <div className="fm-grid" style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
               {openOrders.map((o) => {
                 const have = inventory[o.product_id] || 0;
                 const need = o.qty;
                 const ok = have >= need;
                 return (
-                  <div key={o.id} className="fm-card fm-rise" style={{ textAlign: 'center', cursor: 'pointer' }} onClick={() => setDetailOrder(o)}>
-                    <SpritePedestal url={o.image_url ? mediaUrl(o.image_url) : null} emoji={o.product_emoji} height={110} />
-                    <strong style={{ display: 'block', marginBottom: 8 }}>{o.product_name}</strong>
-                    {o.name && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>{o.name}</div>}
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-                      Заказчик: {o.customer || '—'}
+                  <div key={o.id} className="fm-card fm-rise" style={{ cursor: 'pointer' }} onClick={() => setDetailOrder(o)}>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      {o.customer_image_url ? (
+                        <img
+                          src={mediaUrl(o.customer_image_url)}
+                          alt=""
+                          style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--border)' }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 56, height: 56, borderRadius: '50%', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 26, background: 'var(--bg-secondary, rgba(0,0,0,0.08))',
+                            border: '2px solid var(--border)',
+                          }}
+                        >
+                          🧑
+                        </div>
+                      )}
+                      <div style={{ minWidth: 0 }}>
+                        <strong style={{ display: 'block', fontSize: 15 }}>{o.customer || 'Заказчик не указан'}</strong>
+                        {o.customer_phrase && (
+                          <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--text-secondary)', marginTop: 2 }}>
+                            «{o.customer_phrase}»
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div
                       style={{
@@ -114,8 +136,14 @@ export default function OrdersPage() {
                         fontSize: 13,
                         borderTop: '1px solid var(--border)',
                         paddingTop: 8,
+                        marginTop: 10,
                       }}
                     >
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                        <span style={{ fontSize: 17 }}>{o.product_emoji || '📦'}</span>
+                        <strong style={{ whiteSpace: 'nowrap' }}>{o.product_name}</strong>
+                        <span className="fm-chip" style={{ fontSize: 12 }}>×{need}</span>
+                      </span>
                       <span style={{ color: ok ? 'var(--success)' : 'var(--danger)', whiteSpace: 'nowrap' }}>
                         {have}/{need} на складе
                       </span>
@@ -197,8 +225,33 @@ export default function OrdersPage() {
           {detailOrder.name && (
             <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>{detailOrder.name}</div>
           )}
-          <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>
-            Заказчик: {detailOrder.customer}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+            {detailOrder.customer_image_url ? (
+              <img
+                src={mediaUrl(detailOrder.customer_image_url)}
+                alt=""
+                style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--border)' }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 20, background: 'var(--bg-secondary, rgba(0,0,0,0.08))',
+                  border: '2px solid var(--border)',
+                }}
+              >
+                🧑
+              </div>
+            )}
+            <div style={{ minWidth: 0 }}>
+              <strong style={{ display: 'block' }}>{detailOrder.customer || 'Заказчик не указан'}</strong>
+              {detailOrder.customer_phrase && (
+                <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--text-secondary)' }}>
+                  «{detailOrder.customer_phrase}»
+                </div>
+              )}
+            </div>
           </div>
           <div
             style={{

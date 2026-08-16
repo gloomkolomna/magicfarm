@@ -56,6 +56,8 @@ class OrderOut(BaseModel):
     qty: int
     reward_coins: int
     customer: str | None
+    customer_phrase: str | None = None
+    customer_image_url: str | None = None
     status: str
     name: str | None = None
     image_url: str | None = None
@@ -63,12 +65,19 @@ class OrderOut(BaseModel):
     fulfilled_at: datetime.datetime | None
 
 
-def _to_out(o: OrderReq) -> OrderOut:
+def _customer_images(db: Session) -> dict[str, str]:
+    rows = db.query(Customer).filter(Customer.image_url.isnot(None)).all()
+    return {c.name: c.image_url for c in rows}
+
+
+def _to_out(o: OrderReq, customer_images: dict[str, str] | None = None) -> OrderOut:
     return OrderOut(
         id=o.id, product_id=o.product_id, product_code=o.product.code,
         product_name=o.product.name, product_emoji=o.product.emoji,
         qty=o.qty, reward_coins=o.reward_coins,
         customer=o.customer,
+        customer_phrase=o.customer_phrase,
+        customer_image_url=(customer_images or {}).get(o.customer) if o.customer else None,
         status=o.status, name=o.name, image_url=o.image_url,
         created_at=o.created_at, fulfilled_at=o.fulfilled_at,
     )
@@ -92,7 +101,8 @@ def list_orders(
     if status_filter is not None:
         q = q.filter(OrderReq.status == status_filter)
     rows = q.order_by(OrderReq.created_at.desc()).limit(200).all()
-    return [_to_out(o) for o in rows]
+    imgs = _customer_images(db)
+    return [_to_out(o, imgs) for o in rows]
 
 
 @router.get("/available", response_model=list[OrderOut])
@@ -104,7 +114,8 @@ def list_available_orders(
         OrderReq.user_id == None, OrderReq.status == "open",
         (OrderReq.fulfilled_by == None) | (OrderReq.fulfilled_by != user.vk_id),
     ).order_by(OrderReq.created_at.desc()).limit(200).all()
-    return [_to_out(o) for o in rows]
+    imgs = _customer_images(db)
+    return [_to_out(o, imgs) for o in rows]
 
 
 @router.post("/{order_id}/take", response_model=OrderOut)
@@ -123,7 +134,7 @@ def take_order(
     o.user_id = user.vk_id
     db.commit()
     db.refresh(o)
-    return _to_out(o)
+    return _to_out(o, _customer_images(db))
 
 
 class GenerateRequest(BaseModel):
@@ -163,7 +174,7 @@ def generate_order(
     db.add(o)
     db.commit()
     db.refresh(o)
-    return _to_out(o)
+    return _to_out(o, _customer_images(db))
 
 
 @router.post("/{order_id}/image", response_model=OrderOut)
@@ -178,7 +189,7 @@ def upload_own_order_image(
     o.image_url = save_upload(image, f"order_{order_id}", max_size=800)
     db.commit()
     db.refresh(o)
-    return _to_out(o)
+    return _to_out(o, _customer_images(db))
 
 
 @router.post("/{order_id}/fulfill", response_model=OrderOut)
@@ -223,7 +234,7 @@ def fulfill_order(
     from services.leveling import check_level_up
     check_level_up(db, u)
 
-    return _to_out(o)
+    return _to_out(o, _customer_images(db))
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
@@ -238,7 +249,7 @@ def cancel_order(
     o.status = "cancelled"
     db.commit()
     db.refresh(o)
-    return _to_out(o)
+    return _to_out(o, _customer_images(db))
 
 
 # ── Admin ──
@@ -248,8 +259,8 @@ admin_router = APIRouter(prefix="/api/admin/orders", tags=["admin-orders"])
 class AdminOrderOut(OrderOut):
     user_id: int | None = None
 
-def _admin_to_out(o: OrderReq) -> AdminOrderOut:
-    d = _to_out(o).model_dump()
+def _admin_to_out(o: OrderReq, customer_images: dict[str, str] | None = None) -> AdminOrderOut:
+    d = _to_out(o, customer_images).model_dump()
     d["user_id"] = o.user_id
     return AdminOrderOut(**d)
 
@@ -262,12 +273,14 @@ def admin_list_orders(
     q = db.query(OrderReq).order_by(OrderReq.id.desc())
     if user_id is not None:
         q = q.filter(OrderReq.user_id == user_id)
-    return [_admin_to_out(o) for o in q.limit(200).all()]
+    imgs = _customer_images(db)
+    return [_admin_to_out(o, imgs) for o in q.limit(200).all()]
 
 class AdminGenerateRequest(BaseModel):
     product_id: int
     qty: int | None = None
     customer: str | None = None
+    customer_phrase: str | None = None
 
 
 @admin_router.post("/generate", response_model=AdminOrderOut, status_code=status.HTTP_201_CREATED)
@@ -290,12 +303,13 @@ def admin_generate_order(
     o = OrderReq(
         user_id=None, product_id=product.id, qty=qty,
         reward_coins=reward, customer=customer,
+        customer_phrase=req.customer_phrase,
         status="open",
     )
     db.add(o)
     db.commit()
     db.refresh(o)
-    return _admin_to_out(o)
+    return _admin_to_out(o, _customer_images(db))
 
 
 class AdminUpdateOrder(BaseModel):
@@ -303,6 +317,7 @@ class AdminUpdateOrder(BaseModel):
     qty: int | None = None
     reward_coins: int | None = None
     customer: str | None = None
+    customer_phrase: str | None = None
     status: str | None = None
     name: str | None = None
 
@@ -328,6 +343,8 @@ def admin_update_order(
         o.reward_coins = data.reward_coins
     if data.customer is not None:
         o.customer = data.customer
+    if data.customer_phrase is not None:
+        o.customer_phrase = data.customer_phrase or None
     if data.status is not None:
         if data.status not in ("open", "fulfilled", "cancelled"):
             raise HTTPException(
@@ -341,7 +358,7 @@ def admin_update_order(
         o.name = data.name
     db.commit()
     db.refresh(o)
-    return _admin_to_out(o)
+    return _admin_to_out(o, _customer_images(db))
 
 
 @admin_router.post("/{order_id}/cancel", response_model=AdminOrderOut)
@@ -356,7 +373,7 @@ def admin_cancel_order(
     o.status = "cancelled"
     db.commit()
     db.refresh(o)
-    return _admin_to_out(o)
+    return _admin_to_out(o, _customer_images(db))
 
 
 @admin_router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -383,7 +400,7 @@ def upload_order_image(
     o.image_url = save_upload(image, f"order_{order_id}", max_size=800)
     db.commit()
     db.refresh(o)
-    return _admin_to_out(o)
+    return _admin_to_out(o, _customer_images(db))
 
 
 # ── Customers (admin) ──

@@ -226,6 +226,63 @@ def test_admin_generate_order_with_customer(admin_client):
     assert data["customer"] == "Леди Бейлин"
 
 
+def test_admin_generate_order_with_phrase(admin_client):
+    pid = _poison_id(admin_client)
+    res = admin_client.post("/api/admin/orders/generate", json={
+        "product_id": pid, "qty": 2, "customer": "Русалка Марин",
+        "customer_phrase": "Мне нужны три склянки яда до заката!",
+    })
+    assert res.status_code == 201, res.text
+    assert res.json()["customer_phrase"] == "Мне нужны три склянки яда до заката!"
+
+
+def test_admin_update_order_phrase(admin_client):
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    res = admin_client.put(f"/api/admin/orders/{oid}", json={"customer_phrase": "Первая реплика"})
+    assert res.status_code == 200
+    assert res.json()["customer_phrase"] == "Первая реплика"
+
+    res = admin_client.put(f"/api/admin/orders/{oid}", json={"customer_phrase": "Другая реплика"})
+    assert res.json()["customer_phrase"] == "Другая реплика"
+
+    res = admin_client.put(f"/api/admin/orders/{oid}", json={"customer_phrase": ""})
+    assert res.json()["customer_phrase"] is None
+
+
+def test_order_customer_phrase_and_image_visible_to_player(admin_client, uploads_tmp):
+    import io as _io
+
+    img = _img_bytes()
+    cid = admin_client.get("/api/admin/customers").json()[0]["id"]
+    assert admin_client.put(f"/api/admin/customers/{cid}/image", files=[
+        ("image", ("a.png", _io.BytesIO(img), "image/png")),
+    ]).status_code == 200
+    cust_name = admin_client.get("/api/admin/customers").json()[0]["name"]
+
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={
+        "product_id": pid, "qty": 2, "customer": cust_name,
+        "customer_phrase": "Жду заказ к полнолунию!",
+    }).json()["id"]
+
+    from tests.conftest import make_user_client
+    with make_user_client(123, "player") as player:
+        assert player.post(f"/api/orders/{oid}/take").status_code == 200
+        mine = player.get("/api/orders").json()
+        o = next(x for x in mine if x["id"] == oid)
+        assert o["customer_phrase"] == "Жду заказ к полнолунию!"
+        assert o["customer_image_url"]
+
+    pid2 = pid
+    oid2 = admin_client.post("/api/admin/orders/generate", json={"product_id": pid2, "qty": 1}).json()["id"]
+    with make_user_client(123, "player") as player:
+        assert player.post(f"/api/orders/{oid2}/take").status_code == 200
+        o2 = next(x for x in player.get("/api/orders").json() if x["id"] == oid2)
+        assert o2["customer_phrase"] is None
+        assert o2["customer_image_url"] is None
+
+
 def test_admin_generate_order_unknown_product(admin_client):
     res = admin_client.post("/api/admin/orders/generate", json={"product_id": 9999})
     assert res.status_code == 404

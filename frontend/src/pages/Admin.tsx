@@ -568,6 +568,7 @@ export default function AdminPage() {
       qty: String(o.qty),
       reward_coins: String(o.reward_coins),
       customer: o.customer || '',
+      customer_phrase: o.customer_phrase || '',
       status: o.status,
       name: o.name || '',
     });
@@ -590,12 +591,13 @@ export default function AdminPage() {
           qty: q,
           reward_coins: orderForm.reward_coins ? Number(orderForm.reward_coins) : undefined,
           customer: customer,
+          customer_phrase: orderForm.customer_phrase ?? undefined,
           status: orderForm.status || undefined,
           name: orderForm.name || undefined,
         });
         setMsg('✓ Заказ обновлён');
       } else {
-        const created = await api.adminGenerateOrder(pid, q, customer ?? null);
+        const created = await api.adminGenerateOrder(pid, q, customer ?? null, orderForm.customer_phrase?.trim() || undefined);
         targetId = created.id;
         setMsg('✓ Заказ создан');
       }
@@ -1716,6 +1718,16 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Реплика заказчика</label>
+                    <textarea
+                      className="fm-input"
+                      rows={3}
+                      value={orderForm.customer_phrase || ''}
+                      onChange={(e) => setOrderForm({ ...orderForm, customer_phrase: e.target.value })}
+                      placeholder="«Мне срочно нужны три склянки яда до заката!»"
+                    />
+                  </div>
                   {orderEditingId !== null && (
                     <>
                       <div style={{ marginBottom: 8 }}>
@@ -1759,10 +1771,18 @@ export default function AdminPage() {
                         <SpritePedestal url={o.image_url ? mediaUrl(o.image_url) : null} emoji={o.product_emoji} height={100} />
                         <strong style={{ display: 'block', marginBottom: 6 }}>{o.product_name} ×{o.qty}</strong>
                         {o.name && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>{o.name}</div>}
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-                          {o.customer || '—'}
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                          {o.customer_image_url
+                            ? <img src={mediaUrl(o.customer_image_url)} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
+                            : o.customer ? <span>🧑</span> : null}
+                          <span>{o.customer || '—'}</span>
                           {o.user_id != null && <span> · игрок #{o.user_id}</span>}
                         </div>
+                        {o.customer_phrase && (
+                          <div style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text-secondary)', marginBottom: 8 }}>
+                            «{(o.customer_phrase.length > 60 ? o.customer_phrase.slice(0, 60) + '…' : o.customer_phrase)}»
+                          </div>
+                        )}
                         <div
                           style={{
                             display: 'flex',

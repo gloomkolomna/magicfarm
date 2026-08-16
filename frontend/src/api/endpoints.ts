@@ -393,6 +393,8 @@ export interface Order {
   qty: number;
   reward_coins: number;
   customer: string | null;
+  customer_phrase: string | null;
+  customer_image_url: string | null;
   status: string;
   name: string | null;
   image_url: string | null;
@@ -993,9 +995,9 @@ export const api = {
   // ── Админ: заказы ──
   adminOrders: (userId?: number) =>
     client.get<AdminOrder[]>('/admin/orders', { params: userId !== undefined ? { user_id: userId } : {} }).then((r) => r.data),
-  adminGenerateOrder: (productId: number, qty?: number, customer?: string | null) =>
-    client.post<AdminOrder>('/admin/orders/generate', { product_id: productId, qty, customer }).then((r) => r.data),
-  adminUpdateOrder: (orderId: number, data: Partial<Pick<AdminOrder, 'product_id' | 'qty' | 'reward_coins' | 'customer' | 'status' | 'name'>>) =>
+  adminGenerateOrder: (productId: number, qty?: number, customer?: string | null, customerPhrase?: string | null) =>
+    client.post<AdminOrder>('/admin/orders/generate', { product_id: productId, qty, customer, customer_phrase: customerPhrase }).then((r) => r.data),
+  adminUpdateOrder: (orderId: number, data: Partial<Pick<AdminOrder, 'product_id' | 'qty' | 'reward_coins' | 'customer' | 'customer_phrase' | 'status' | 'name'>>) =>
     client.put<AdminOrder>(`/admin/orders/${orderId}`, data).then((r) => r.data),
   adminCancelOrder: (orderId: number) =>
     client.post<AdminOrder>(`/admin/orders/${orderId}/cancel`).then((r) => r.data),
