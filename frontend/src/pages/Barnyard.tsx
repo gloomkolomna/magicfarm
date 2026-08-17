@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
 import { api, type Animal, type BarnyardPen, type BarnyardProduceResult, type CrystalCard } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
+import StitchReportForm from '../components/StitchReportForm';
 
 const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
@@ -16,9 +17,6 @@ export default function BarnyardPage() {
 
   const [installPen, setInstallPen] = useState<BarnyardPen | null>(null);
   const [installAnimalId, setInstallAnimalId] = useState<number | null>(null);
-
-  const [investPen, setInvestPen] = useState<BarnyardPen | null>(null);
-  const [investAmount, setInvestAmount] = useState('');
 
   const [produceResult, setProduceResult] = useState<BarnyardProduceResult | null>(null);
   const [showDiceVideo, setShowDiceVideo] = useState(false);
@@ -43,14 +41,15 @@ export default function BarnyardPage() {
 
   useEffect(() => {
     Promise.all([
-      api.gameMediaByCode('dice_roll').then(gm => setDiceVideoUrl(gm.url ? mediaUrl(gm.url) : null)).catch(() => {}),
+      api.gameMediaByCode('dice_roll').then(gm => gm.url ? mediaUrl(gm.url) : null).catch(() => null),
       ...([1, 2, 3, 4, 5, 6].map(i =>
         api.gameMediaByCode(`dice_face_${i}`).then(gm => gm.url ? mediaUrl(gm.url) : null).catch(() => null)
       )),
       api.crystalCards().catch(() => [] as CrystalCard[]),
-    ]).then(([_video, ...results]) => {
+    ]).then(([video, ...results]) => {
       const faces = results.slice(0, 6) as (string | null)[];
       const cards = results[6] as CrystalCard[];
+      setDiceVideoUrl(video);
       setDiceFaces([null, ...faces]);
       if (cards) setCrystalCards(cards);
     });
@@ -69,24 +68,11 @@ export default function BarnyardPage() {
         try { cards = JSON.parse(res.drawn_cards_json); } catch {}
       }
       if (cards.length > 0) {
-        setCardResult({ cards, title: `🐾 ${animal?.name || 'Животное'} — карты` });
+        setCardResult({ cards, title: `🏗 ${animal?.name || 'Загон'} — карты` });
       } else {
-        setMsg('✓ Животное установлено!');
+        setMsg('✓ Загон строится!');
       }
       setInstallPen(null); setInstallAnimalId(null);
-      await load(); await refresh();
-    } catch (e: any) {
-      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-    } finally { setBusy(false); }
-  }
-
-  async function doInvest() {
-    if (!investPen || !investAmount) return;
-    setBusy(true); setMsg(null);
-    try {
-      await api.barnyardInvest(investPen.id, Number(investAmount));
-      setMsg('✓ Крестики вложены');
-      setInvestPen(null); setInvestAmount('');
       await load(); await refresh();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -113,7 +99,7 @@ export default function BarnyardPage() {
     );
   }
 
-  const sorted = [...pens].sort((a, b) => a.opening_order - b.opening_order);
+  const sorted = [...pens].sort((a, b) => (a.opening_order ?? 9999) - (b.opening_order ?? 9999));
 
   return (
     <>
@@ -128,14 +114,12 @@ export default function BarnyardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 10 }}>
             {sorted.map((pen) => (
               <div key={pen.id} className="fm-card fm-rise" style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  Загон #{pen.opening_order}
-                </div>
-
                 {pen.status === 'empty' && (
                   <>
-                    <div style={{ fontSize: 40, lineHeight: 1, marginBottom: 8 }}>🔒</div>
-                    <div style={{ color: 'var(--text-muted)', marginBottom: 10 }}>Пусто</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+                      Свободное место
+                    </div>
+                    <div style={{ fontSize: 40, lineHeight: 1, marginBottom: 8, opacity: 0.7 }}>🏚️</div>
                     <button
                       className="fm-btn fm-btn-outline"
                       style={{ width: '100%' }}
@@ -145,17 +129,28 @@ export default function BarnyardPage() {
                         setInstallAnimalId(animals[0]?.id ?? null);
                       }}
                     >
-                      🐾 Установить животное
+                      🏗 Построить загон
                     </button>
                   </>
                 )}
 
                 {pen.status === 'building' && (
                   <>
-                    <div style={{ fontSize: 40, lineHeight: 1, marginBottom: 4 }}>
-                      {pen.animal_emoji || '🐾'}
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+                      Загон #{pen.opening_order} · строится
                     </div>
-                    <div style={{ fontWeight: 600, marginBottom: 6 }}>{pen.animal_name}</div>
+                    {pen.image_empty_pen_url ? (
+                      <img
+                        src={mediaUrl(pen.image_empty_pen_url)}
+                        alt=""
+                        style={{ width: '100%', height: 110, objectFit: 'contain', marginBottom: 6 }}
+                      />
+                    ) : (
+                      <div style={{ fontSize: 40, lineHeight: 1, marginBottom: 6, opacity: 0.7 }}>🏚️</div>
+                    )}
+                    <div style={{ color: 'var(--text-muted)', marginBottom: 8, fontSize: 13 }}>
+                      Пустой загон — вышейте норму, чтобы заселить животное
+                    </div>
                     <div className="fm-progress" style={{ marginBottom: 6 }}>
                       <div
                         className="fm-progress-fill"
@@ -165,27 +160,35 @@ export default function BarnyardPage() {
                       />
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                      {pen.accumulated}/{pen.required}
+                      {pen.accumulated}/{pen.required} ❎
                     </div>
-                    <button
-                      className="fm-btn fm-btn-outline"
-                      style={{ width: '100%', marginBottom: 6 }}
-                      disabled={busy}
-                      onClick={() => {
-                        setInvestPen(pen);
-                        setInvestAmount(String(Math.max(0, pen.required - pen.accumulated)));
-                      }}
-                    >
-                      💧 Вложить крестики
-                    </button>
+                    <StitchReportForm
+                      contextType="animal_build"
+                      contextId={pen.id}
+                      required={Math.max(0, pen.required - pen.accumulated)}
+                      busy={busy}
+                      buttonText="Заселить животное"
+                      onDone={async () => { setMsg('✓ Животное в загоне!'); await load(); await refresh(); }}
+                    />
                   </>
                 )}
 
-                {pen.status === 'ready' && (
+                {pen.status === 'ready' && pen.last_die == null && (
                   <>
-                    <div style={{ fontSize: 40, lineHeight: 1, marginBottom: 4 }}>
-                      {pen.animal_emoji || '🐾'}
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+                      Загон #{pen.opening_order}
                     </div>
+                    {pen.image_pen_url ? (
+                      <img
+                        src={mediaUrl(pen.image_pen_url)}
+                        alt=""
+                        style={{ width: '100%', height: 110, objectFit: 'contain', marginBottom: 6 }}
+                      />
+                    ) : (
+                      <div style={{ fontSize: 40, lineHeight: 1, marginBottom: 4 }}>
+                        {pen.animal_emoji || '🐾'}
+                      </div>
+                    )}
                     <div style={{ fontWeight: 600, marginBottom: 10 }}>{pen.animal_name}</div>
                     <button
                       className="fm-btn"
@@ -197,17 +200,49 @@ export default function BarnyardPage() {
                     </button>
                   </>
                 )}
+
+                {pen.status === 'ready' && pen.last_die != null && (
+                  <>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+                      Загон #{pen.opening_order} · производство
+                    </div>
+                    {pen.image_harvested_url || pen.image_pen_url ? (
+                      <img
+                        src={mediaUrl((pen.image_harvested_url || pen.image_pen_url)!)}
+                        alt=""
+                        style={{ width: '100%', height: 110, objectFit: 'contain', marginBottom: 6 }}
+                      />
+                    ) : (
+                      <div style={{ fontSize: 40, lineHeight: 1, marginBottom: 4 }}>
+                        {pen.animal_emoji || '🐾'}
+                      </div>
+                    )}
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>{pen.animal_name}</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                      Норма продукции: {pen.required} ❎
+                    </div>
+                    <StitchReportForm
+                      contextType="animal_produce"
+                      contextId={pen.id}
+                      required={pen.required}
+                      busy={busy}
+                      buttonText="Получить продукцию на склад"
+                      onDone={async () => { setMsg('✓ Продукция на складе!'); await load(); await refresh(); }}
+                    />
+                  </>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Модалка установки животного */}
+      {/* Модалка постройки загона */}
       {installPen && (
-        <Modal title="🐾 Установить животное" onClose={() => setInstallPen(null)}>
+        <Modal title="🏗 Построить загон" onClose={() => setInstallPen(null)}>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
-            Загон #{installPen.opening_order}. Выберите животное из каталога:
+            Выберите животное — загон появится на поле пустым,
+            а животное заселится после зачёта вышивки.
           </p>
           {animals.length === 0 ? (
             <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Каталог животных пуст.</div>
@@ -224,38 +259,8 @@ export default function BarnyardPage() {
             disabled={busy || installAnimalId == null}
             onClick={doInstall}
           >
-            Установить
+            Построить
           </button>
-        </Modal>
-      )}
-
-      {/* Модалка вложения крестиков */}
-      {investPen && (
-        <Modal title={`💧 ${investPen.animal_name}`} onClose={() => setInvestPen(null)}>
-          <div className="fm-progress" style={{ marginBottom: 10 }}>
-            <div
-              className="fm-progress-fill"
-              style={{
-                width: `${investPen.required > 0 ? Math.min(100, Math.round((investPen.accumulated / investPen.required) * 100)) : 0}%`,
-              }}
-            />
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 10 }}>
-            {investPen.accumulated}/{investPen.required} крестиков
-          </div>
-          <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Вложить крестиков</label>
-          <input className="fm-input" type="number" min={1} value={investAmount} onChange={(e) => setInvestAmount(e.target.value)} />
-          <button
-            className="fm-btn"
-            style={{ width: '100%', marginTop: 12 }}
-            disabled={busy || !investAmount}
-            onClick={doInvest}
-          >
-            Вложить
-          </button>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-            Чтобы пополнить баланс крестиков — отчитайтесь о вышивке в модалке грядки.
-          </p>
         </Modal>
       )}
 
@@ -290,13 +295,13 @@ export default function BarnyardPage() {
                 {produceResult.animal_name}
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
-                Норма вышивки: {produceResult.required} крестиков
+                Норма вышивки: {produceResult.required} ❎
               </div>
               <div className="fm-chip" style={{ display: 'inline-block', fontSize: 16 }}>
                 +{produceResult.product_coins} 🪙
               </div>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>
-                Вышейте норму, отчитайтесь о вышивке — и продукция станет доступна.
+                Вышейте норму и отчитайтесь в карточке загона — продукция придёт на склад.
               </p>
             </div>
           )}
@@ -328,7 +333,7 @@ export default function BarnyardPage() {
             })}
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-            Вложите крестики по норме каждого кристалла — и загон будет готов.
+            Вышейте норму по картам — и в загоне появится животное.
           </p>
         </Modal>
       )}

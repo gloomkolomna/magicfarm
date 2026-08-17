@@ -86,7 +86,6 @@ export default function FieldPage() {
   const [barnyardCell, setBarnyardCell] = useState<FieldCellDetail | null>(null);
   const [barnyardAnimals, setBarnyardAnimals] = useState<Animal[]>([]);
   const [barnyardSel, setBarnyardSel] = useState<number | null>(null);
-  const [barnyardInvest, setBarnyardInvest] = useState('');
 
   // Модалка клетки питомца.
   const [petCell, setPetCell] = useState<FieldCellDetail | null>(null);
@@ -534,7 +533,6 @@ export default function FieldPage() {
   function openBarnyardCell(cell: FieldCellDetail) {
     setBarnyardCell(cell);
     setBarnyardSel(cell.barnyard?.animal_id ?? barnyardAnimals[0]?.id ?? null);
-    setBarnyardInvest(cell.barnyard ? String(Math.max(0, cell.barnyard.required - cell.barnyard.accumulated)) : '');
   }
 
   async function doBarnyardInstall() {
@@ -542,33 +540,7 @@ export default function FieldPage() {
     setBusy(true); setMsg(null);
     try {
       await api.barnyardInstallOnCell(barnyardCell.id, barnyardSel);
-      setMsg('✓ Животное установлено!');
-      setBarnyardCell(null);
-      await load(); await refresh();
-    } catch (e: any) {
-      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-    } finally { setBusy(false); }
-  }
-
-  async function doBarnyardInvest() {
-    if (!barnyardCell?.barnyard || !barnyardInvest) return;
-    setBusy(true); setMsg(null);
-    try {
-      await api.barnyardInvest(barnyardCell.barnyard.slot_id, Number(barnyardInvest));
-      setMsg('✓ Крестики вложены');
-      setBarnyardCell(null);
-      await load(); await refresh();
-    } catch (e: any) {
-      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-    } finally { setBusy(false); }
-  }
-
-  async function doBarnyardProduce() {
-    if (!barnyardCell?.barnyard) return;
-    setBusy(true); setMsg(null);
-    try {
-      await api.barnyardProduce(barnyardCell.barnyard.slot_id);
-      setMsg('✓ Продукция получена!');
+      setMsg('✓ Загон строится!');
       setBarnyardCell(null);
       await load(); await refresh();
     } catch (e: any) {
@@ -788,24 +760,35 @@ export default function FieldPage() {
                       )}
                       {cell.kind === 'barnyard' && (
                         <>
-                          {cell.barnyard?.status === 'ready' && (cell.barnyard.image_harvested_url || cell.barnyard.image_pen_url) ? (
+                          {cell.barnyard && cell.barnyard.animal_id != null && cell.barnyard.status === 'ready' ? (
+                            (cell.barnyard.image_harvested_url || cell.barnyard.image_pen_url) ? (
+                              <img
+                                src={mediaUrl((cell.barnyard.image_harvested_url || cell.barnyard.image_pen_url)!)}
+                                alt=""
+                                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
+                              />
+                            ) : (
+                              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.barnyard.animal_emoji || '🐾'}</div>
+                            )
+                          ) : cell.barnyard && cell.barnyard.animal_id != null && cell.barnyard.image_empty_pen_url ? (
                             <img
-                              src={mediaUrl((cell.barnyard.image_harvested_url || cell.barnyard.image_pen_url)!)}
+                              src={mediaUrl(cell.barnyard.image_empty_pen_url)}
                               alt=""
                               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
                             />
-                          ) : cell.barnyard?.animal_id != null && cell.barnyard.animal_emoji ? (
-                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.barnyard.animal_emoji}</div>
                           ) : (
-                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🐄</div>
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🏚️</div>
                           )}
                           {cell.barnyard?.animal_id != null && cell.barnyard.status === 'building' && (
                             <div style={{ position: 'absolute', left: 0, right: 0, bottom: 2, textAlign: 'center', fontSize: 9, color: '#fff', textShadow: '0 1px 2px #000', background: 'rgba(10,16,8,0.45)', pointerEvents: 'none' }}>
-                              {cell.barnyard.accumulated}/{cell.barnyard.required}
+                              {cell.barnyard.accumulated}/{cell.barnyard.required} ❎
                             </div>
                           )}
-                          {cell.barnyard?.status === 'ready' && (
+                          {cell.barnyard?.status === 'ready' && cell.barnyard.last_die == null && (
                             <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 14, color: '#7fff7f', pointerEvents: 'none' }}>✓</div>
+                          )}
+                          {cell.barnyard?.status === 'ready' && cell.barnyard.last_die != null && (
+                            <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 13, pointerEvents: 'none' }}>🧵</div>
                           )}
                         </>
                       )}
@@ -1489,7 +1472,7 @@ export default function FieldPage() {
                       </div>
                       {(cardResult.norm != null) && (
                         <p style={{ fontSize: 16, fontWeight: 700, textAlign: 'center', margin: '8px 0', color: 'var(--text-accent)' }}>
-                          Итоговая норма: {cardResult.norm} ✝️
+                          Итоговая норма: {cardResult.norm} ❎
                           {cardResult.qty && cardResult.qty > 1 ? <> (×{cardResult.qty} растений)</> : ''}
                         </p>
                       )}
@@ -1630,7 +1613,7 @@ export default function FieldPage() {
                         })}
                       </div>
                       <p style={{ fontSize: 16, fontWeight: 700, textAlign: 'center', margin: '8px 0', color: 'var(--text-accent)' }}>
-                        Итоговая норма: {tentCardResult.norm ?? tentModal.required} ✝️
+                        Итоговая норма: {tentCardResult.norm ?? tentModal.required} ❎
                       </p>
                       <div style={{ borderTop: '1px solid var(--border)', margin: '10px 0' }} />
                     </>
@@ -1663,7 +1646,7 @@ export default function FieldPage() {
                     <div key={cs.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8 }}>
                       <div style={{ flex: 1, fontSize: 13 }}>
                         <div>{cs.product_emoji} {cs.product_name} × {cs.qty}</div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>норма: {cs.required} ✝️</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>норма: {cs.required} ❎</div>
                       </div>
                       <button className="fm-btn" style={{ padding: '6px 10px', fontSize: 12 }} disabled={busy} onClick={() => setActiveCraft(cs)}>Продолжить</button>
                       <button className="fm-btn" style={{ padding: '6px 10px', fontSize: 12 }} disabled={busy} onClick={() => void doCancelCraft(cs.id)}>Отменить</button>
@@ -1688,9 +1671,9 @@ export default function FieldPage() {
                   </div>
                   {craftInfo.norm_per_unit > 0 ? (
                     <>
-                      <div style={{ marginBottom: 4 }}>Норма за 1 товар: {craftInfo.norm_per_unit} ✝️</div>
+                      <div style={{ marginBottom: 4 }}>Норма за 1 товар: {craftInfo.norm_per_unit} ❎</div>
                       <div style={{ color: 'var(--text-accent)', fontWeight: 700 }}>
-                        Итого за {Math.max(0, Number(craftQty) || 0)} шт: {craftInfo.norm_per_unit * Math.max(0, Number(craftQty) || 0)} ✝️
+                        Итого за {Math.max(0, Number(craftQty) || 0)} шт: {craftInfo.norm_per_unit * Math.max(0, Number(craftQty) || 0)} ❎
                       </div>
                     </>
                   ) : (
@@ -1823,7 +1806,7 @@ export default function FieldPage() {
                       <strong>
                         {HOUSE_MATERIALS.find((m) => m.code === houseState.current_material)?.name}
                       </strong>{' '}
-                      · норма {houseState.current_required} ✝️
+                      · норма {houseState.current_required} ❎
                     </p>
                     <StitchReportForm
                       contextType="house_material"
@@ -1911,7 +1894,7 @@ export default function FieldPage() {
                       );
                     })()}
                     <p style={{ fontSize: 16, fontWeight: 700, textAlign: 'center', margin: '8px 0', color: 'var(--text-accent)' }}>
-                      Норма на постройку дома: {houseState.required} ✝️
+                      Норма на постройку дома: {houseState.required} ❎
                     </p>
                     <StitchReportForm
                       contextType="house_build"
@@ -1943,7 +1926,7 @@ export default function FieldPage() {
               {activeCraft.product_emoji} {activeCraft.product_name} × {activeCraft.qty} · из {activeCraft.plant_name}
             </div>
             <div style={{ color: 'var(--text-accent)', fontWeight: 700 }}>
-              Выданная норма: {activeCraft.required} ✝️
+              Выданная норма: {activeCraft.required} ❎
             </div>
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
@@ -1971,7 +1954,8 @@ export default function FieldPage() {
           {!barnyardCell.barnyard || barnyardCell.barnyard.animal_id == null ? (
             <>
               <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
-                Выберите животное для заселения:
+                Постройте загон: выберите животное — загон появится пустым,
+                а животное заселится после зачёта вышивки.
               </p>
               {barnyardAnimals.length === 0 ? (
                 <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет доступных животных. Обратитесь к админу.</div>
@@ -1981,34 +1965,62 @@ export default function FieldPage() {
                 </select>
               )}
               <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || barnyardSel == null} onClick={doBarnyardInstall}>
-                Установить
+                🏗 Построить загон
               </button>
             </>
           ) : barnyardCell.barnyard.status === 'building' ? (
             <>
-              <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6 }}>{barnyardCell.barnyard.animal_emoji}</div>
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>{barnyardCell.barnyard.animal_name}</div>
+              {barnyardCell.barnyard.image_empty_pen_url ? (
+                <img src={mediaUrl(barnyardCell.barnyard.image_empty_pen_url)} alt="" style={{ width: '100%', maxHeight: 160, objectFit: 'contain', marginBottom: 6 }} />
+              ) : (
+                <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6, opacity: 0.7 }}>🏚️</div>
+              )}
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>Загон строится</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
+                Пустой загон — вышейте норму, чтобы заселить животное
+              </div>
               <div className="fm-progress" style={{ marginBottom: 6 }}>
                 <div className="fm-progress-fill" style={{ width: `${barnyardCell.barnyard.required > 0 ? Math.min(100, Math.round((barnyardCell.barnyard.accumulated / barnyardCell.barnyard.required) * 100)) : 0}%` }} />
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                {barnyardCell.barnyard.accumulated}/{barnyardCell.barnyard.required} крестиков
+                {barnyardCell.barnyard.accumulated}/{barnyardCell.barnyard.required} ❎
               </div>
               <StitchReportForm
                 contextType="animal_build"
                 contextId={barnyardCell.barnyard.slot_id}
+                cellId={barnyardCell.id}
                 required={Math.max(0, barnyardCell.barnyard.required - barnyardCell.barnyard.accumulated)}
                 busy={busy}
-                onDone={async () => { setMsg('✓ Зачтено!'); setBarnyardCell(null); await load(); await refresh(); }}
+                buttonText="Заселить животное"
+                onDone={async () => { setMsg('✓ Животное в загоне!'); setBarnyardCell(null); await load(); await refresh(); }}
               />
+            </>
+          ) : barnyardCell.barnyard.last_die != null ? (
+            <>
+              {barnyardCell.barnyard.image_harvested_url || barnyardCell.barnyard.image_pen_url ? (
+                <img src={mediaUrl((barnyardCell.barnyard.image_harvested_url || barnyardCell.barnyard.image_pen_url)!)} alt="" style={{ width: '100%', maxHeight: 160, objectFit: 'contain', marginBottom: 6 }} />
+              ) : (
+                <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6 }}>{barnyardCell.barnyard.animal_emoji || '🐾'}</div>
+              )}
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{barnyardCell.barnyard.animal_name}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                Идёт производство: норма {barnyardCell.barnyard.required} ❎
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                Отчитайтесь о вышивке во вкладке «🐄 Скотный двор» — продукция придёт на склад.
+              </p>
             </>
           ) : (
             <>
-              <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6 }}>{barnyardCell.barnyard.animal_emoji}</div>
+              {barnyardCell.barnyard.image_pen_url ? (
+                <img src={mediaUrl(barnyardCell.barnyard.image_pen_url)} alt="" style={{ width: '100%', maxHeight: 160, objectFit: 'contain', marginBottom: 6 }} />
+              ) : (
+                <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6 }}>{barnyardCell.barnyard.animal_emoji || '🐾'}</div>
+              )}
               <div style={{ fontWeight: 600, marginBottom: 10 }}>{barnyardCell.barnyard.animal_name}</div>
-              <button className="fm-btn" style={{ width: '100%' }} disabled={busy} onClick={doBarnyardProduce}>
-                🥚 Получить продукцию
-              </button>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                Получение продукции (бросок кубика) — во вкладке «🐄 Скотный двор».
+              </p>
             </>
           )}
         </Modal>

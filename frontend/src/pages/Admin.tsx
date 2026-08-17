@@ -1349,7 +1349,7 @@ export default function AdminPage() {
                                 {plot.status === 'grown' ? '✅ Выращена' : '🌱 В процессе'}
                               </div>
                               <div style={{ fontSize: 12, marginTop: 2 }}>
-                                {plot.accumulated}/{plot.required} ✝️
+                                {plot.accumulated}/{plot.required} ❎
                                 {plot.crystal_color && <> · {plot.crystal_color} ×{plot.crystal_count}</>}
                               </div>
                             </div>
@@ -1367,7 +1367,7 @@ export default function AdminPage() {
                               <strong>{pr.name}</strong>
                               <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{pr.kind}</div>
                               <div style={{ fontSize: 12, marginTop: 2 }}>
-                                {pr.accumulated}/{pr.required} ✝️
+                                {pr.accumulated}/{pr.required} ❎
                               </div>
                             </div>
                           ))}
@@ -1405,7 +1405,7 @@ export default function AdminPage() {
                                   <img src={mediaUrl(r.photo_after_url)} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 'var(--radius-sm)' }} />
                                 )}
                                 <div style={{ flex: 1 }}>
-                                  <strong>✝️ {r.amount}</strong>
+                                  <strong>❎ {r.amount}</strong>
                                   {r.note && <div style={{ fontSize: 13 }}>{r.note}</div>}
                                   <span className="fm-chip" style={{ marginTop: 4, fontSize: 11 }}>
                                     {r.status === 'accepted' ? '✓ зачтено' : r.status === 'pending' ? '⏳ ждёт' : '✖ отклонено'}
@@ -1446,7 +1446,7 @@ export default function AdminPage() {
                           <thead>
                             <tr style={{ borderBottom: '1px solid var(--border)' }}>
                               <th style={{ padding: '8px 12px', textAlign: 'left' }}>Игрок</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'right' }}>✝️</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'right' }}>❎</th>
                               <th style={{ padding: '8px 12px', textAlign: 'right' }}>🪙</th>
                               <th style={{ padding: '8px 12px', textAlign: 'right' }}>📷</th>
                             </tr>
@@ -2325,7 +2325,7 @@ function FieldGridView({ field, playerVkId, onResetNorm, onDeletePlot }: { field
                       setSelectedCell({ col: ci, row: ri, plotId: cell.plot.id });
                     }
                   }}
-                  title={cell?.plot ? `Норма: ${cell.plot.required}✝️ · ${cell.plot.accumulated}/${cell.plot.required} · norm_revealed: ${cell.plot.norm_revealed}` : undefined}
+                  title={cell?.plot ? `Норма: ${cell.plot.required}❎ · ${cell.plot.accumulated}/${cell.plot.required} · norm_revealed: ${cell.plot.norm_revealed}` : undefined}
                   style={{
                     border: `1px solid ${field.grid_color || 'rgba(255,255,255,0.08)'}`,
                     background: fill,

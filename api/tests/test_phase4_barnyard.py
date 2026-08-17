@@ -250,10 +250,11 @@ def test_produce_die_no_immediate_repeat(admin_client):
         r = c.post(f"/api/animals/pens/{sid}/install", json={"animal_id": 1})
         c.post(f"/api/animals/pens/{sid}/invest", json={"amount": r.json()["required"]})
         r1 = c.post(f"/api/animals/pens/{sid}/produce").json()
-        r2 = c.post(f"/api/animals/pens/{sid}/produce").json()
         assert 1 <= r1["die"] <= 6
-        assert 1 <= r2["die"] <= 6
-        assert r2["die"] != r1["die"]
+
+        r2 = c.post(f"/api/animals/pens/{sid}/produce")
+        assert r2.status_code == 409
+        assert "прошлой продукции" in r2.json()["detail"]
 
 
 def test_produce_uses_personal_dice_norm(admin_client):
@@ -269,3 +270,214 @@ def test_produce_uses_personal_dice_norm(admin_client):
         c.post(f"/api/animals/pens/{sid}/invest", json={"amount": r.json()["required"]})
         data = c.post(f"/api/animals/pens/{sid}/produce").json()
         assert data["required"] == 40 * data["die"]
+
+
+# ===== Привязка загонов вкладки к клеткам поля =====
+
+def _make_barnyard_cells(admin_client, coords):
+    fid = admin_client.post("/api/admin/fields", json={"name": "Скотный", "cols": 3, "rows": 3, "field_kind": "barnyard"}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}/cells/blocked", json={"cells": [{"col": c, "row": r} for c, r in coords], "kind": "barnyard"})
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    cells = {c["id"]: c for c in detail["cells"] if c["kind"] == "barnyard"}
+    return fid, cells
+
+
+def test_install_from_tab_binds_to_free_cell(admin_client):
+    coords = [(0, 0), (1, 0)]
+    fid, cells = _make_barnyard_cells(admin_client, coords)
+    first_id = min(cells.values(), key=lambda c: (c["row"], c["col"]))["id"]
+    second_id = max(cells.values(), key=lambda c: (c["row"], c["col"]))["id"]
+
+    sid1 = _seed_barnyard_slot(2100)
+    sid2 = _seed_barnyard_slot(2100)
+    with make_user_client(2100, "player") as c:
+        r = c.post(f"/api/animals/pens/{sid1}/install", json={"animal_id": 1})
+        assert r.status_code == 200
+        assert r.json()["cell_id"] == first_id
+
+        r = c.post(f"/api/animals/pens/{sid2}/install", json={"animal_id": 2})
+        assert r.json()["cell_id"] == second_id
+
+        detail = c.get(f"/api/fields/{fid}").json()
+        bound = {x["barnyard"]["animal_id"]: x["id"] for x in detail["cells"] if x.get("barnyard")}
+        assert bound == {1: first_id, 2: second_id}
+
+
+def test_install_from_tab_skips_occupied_cell(admin_client):
+    coords = [(0, 0), (1, 0)]
+    fid, cells = _make_barnyard_cells(admin_client, coords)
+    first_id = min(cells.values(), key=lambda c: (c["row"], c["col"]))["id"]
+    second_id = max(cells.values(), key=lambda c: (c["row"], c["col"]))["id"]
+
+    sid_other = _seed_barnyard_slot(2101)
+    with make_user_client(2101, "player") as c:
+        c.post(f"/api/animals/pens/{sid_other}/install", json={"animal_id": 1})
+        assert c.get("/api/animals/pens").json()[0]["cell_id"] == first_id
+
+    sid_mine = _seed_barnyard_slot(2102)
+    with make_user_client(2102, "player") as c:
+        r = c.post(f"/api/animals/pens/{sid_mine}/install", json={"animal_id": 2})
+        assert r.json()["cell_id"] == second_id
+
+
+def test_install_from_tab_without_cells_leaves_null(admin_client):
+    sid = _seed_barnyard_slot(2103)
+    with make_user_client(2103, "player") as c:
+        r = c.post(f"/api/animals/pens/{sid}/install", json={"animal_id": 1})
+        assert r.status_code == 200
+        assert r.json()["cell_id"] is None
+
+
+def test_install_from_tab_locked_without_unlocked_pens(admin_client):
+    from models import User
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        u = s.query(User).filter(User.vk_id == 2104).first()
+        if u is None:
+            u = User(vk_id=2104, role="player", unlocked_barnyard=0, unlocked_pets=0)
+            s.add(u)
+            s.commit()
+    finally:
+        s.close()
+
+    sid = _seed_barnyard_slot(2104)
+    with make_user_client(2104, "player") as c:
+        r = c.post(f"/api/animals/pens/{sid}/install", json={"animal_id": 1})
+        assert r.status_code == 403
+        assert "Животноводство" in r.json()["detail"]
+
+
+def _set_animal_images(animal_id):
+    from models import Animal
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        a = s.query(Animal).filter(Animal.id == animal_id).first()
+        a.image_empty_pen_url = "/uploads/empty.png"
+        a.image_pen_url = "/uploads/pen.png"
+        a.image_harvested_url = "/uploads/harvested.png"
+        s.commit()
+    finally:
+        s.close()
+
+
+def _make_animal_product(animal_id):
+    from models import Product
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        p = s.query(Product).filter(Product.animal_id == animal_id).first()
+        if p is None:
+            p = Product(code=f"animal_product_{animal_id}", name="Продукция", animal_id=animal_id, production_kind="barnyard")
+            s.add(p)
+            s.commit()
+            s.refresh(p)
+        return p.id
+    finally:
+        s.close()
+
+
+def test_pens_payload_has_pen_images(admin_client):
+    _set_animal_images(1)
+    sid = _seed_barnyard_slot(2105)
+    with make_user_client(2105, "player") as c:
+        _credit(c, 50000)
+        c.post(f"/api/animals/pens/{sid}/install", json={"animal_id": 1})
+        pens = c.get("/api/animals/pens").json()
+        filled = [p for p in pens if p["animal_id"] is not None][0]
+        assert filled["image_empty_pen_url"] == "/uploads/empty.png"
+        assert filled["image_pen_url"] == "/uploads/pen.png"
+        assert filled["image_harvested_url"] == "/uploads/harvested.png"
+
+
+def test_field_cell_detail_has_empty_pen_image(admin_client):
+    _set_animal_images(1)
+    fid, cell_id = _make_barnyard_cell(admin_client)
+    with make_user_client(2106, "player") as c:
+        c.post(f"/api/animals/cells/{cell_id}/install", json={"animal_id": 1})
+        detail = c.get(f"/api/fields/{fid}").json()
+        cell = [x for x in detail["cells"] if x["id"] == cell_id][0]
+        assert cell["barnyard"]["image_empty_pen_url"] == "/uploads/empty.png"
+
+
+# ===== Производство: отшив и зачисление продукции =====
+
+def _full_cycle_client(admin_client):
+    fid, cell_id = _make_barnyard_cell(admin_client)
+    _set_animal_images(1)
+    return fid, cell_id
+
+
+def test_animal_build_report_insufficient_amount(admin_client):
+    fid, cell_id = _full_cycle_client(admin_client)
+    with make_user_client(2107, "player") as c:
+        installed = c.post(f"/api/animals/cells/{cell_id}/install", json={"animal_id": 1}).json()
+        rep = c.post(
+            "/api/stitches/reports",
+            data={"amount": str(installed["required"] - 1), "context_type": "animal_build", "context_id": str(installed["id"])},
+            files=[("photo_after", ("a.png", _real_img(), "image/png"))],
+        )
+        assert rep.status_code == 400
+        assert "Норма постройки" in rep.json()["detail"]
+
+
+def test_animal_produce_credits_inventory(admin_client):
+    fid, cell_id = _full_cycle_client(admin_client)
+    pid = _make_animal_product(1)
+    with make_user_client(2108, "player") as c:
+        installed = c.post(f"/api/animals/cells/{cell_id}/install", json={"animal_id": 1}).json()
+        rep = c.post(
+            "/api/stitches/reports",
+            data={"amount": str(installed["required"]), "context_type": "animal_build", "context_id": str(installed["id"])},
+            files=[("photo_after", ("a.png", _real_img(), "image/png"))],
+        )
+        assert rep.status_code == 201, rep.text
+
+        produced = c.post(f"/api/animals/pens/{installed['id']}/produce").json()
+        die = produced["die"]
+        rep2 = c.post(
+            "/api/stitches/reports",
+            data={"amount": str(produced["required"] + 5000), "context_type": "animal_produce", "context_id": str(installed["id"])},
+            files=[("photo_after", ("b.png", _real_img(), "image/png"))],
+        )
+        assert rep2.status_code == 201, rep2.text
+
+        inv = c.get("/api/farm/inventory").json()
+        row = [i for i in inv if i["item_kind"] == "product" and i["item_id"] == pid]
+        assert row and row[0]["qty"] == die
+
+        again = c.post(f"/api/animals/pens/{installed['id']}/produce")
+        assert again.status_code == 200
+
+
+def test_animal_produce_insufficient_amount(admin_client):
+    fid, cell_id = _full_cycle_client(admin_client)
+    with make_user_client(2109, "player") as c:
+        installed = c.post(f"/api/animals/cells/{cell_id}/install", json={"animal_id": 1}).json()
+        c.post(
+            "/api/stitches/reports",
+            data={"amount": str(installed["required"]), "context_type": "animal_build", "context_id": str(installed["id"])},
+            files=[("photo_after", ("a.png", _real_img(), "image/png"))],
+        )
+        produced = c.post(f"/api/animals/pens/{installed['id']}/produce").json()
+        rep = c.post(
+            "/api/stitches/reports",
+            data={"amount": str(produced["required"] - 1), "context_type": "animal_produce", "context_id": str(installed["id"])},
+            files=[("photo_after", ("b.png", _real_img(), "image/png"))],
+        )
+        assert rep.status_code == 400
+        assert "Норма продукции" in rep.json()["detail"]
+
+
+def test_animal_produce_report_without_roll(admin_client):
+    fid, cell_id = _full_cycle_client(admin_client)
+    with make_user_client(2110, "player") as c:
+        installed = c.post(f"/api/animals/cells/{cell_id}/install", json={"animal_id": 1}).json()
+        rep = c.post(
+            "/api/stitches/reports",
+            data={"amount": "100", "context_type": "animal_produce", "context_id": str(installed["id"])},
+            files=[("photo_after", ("a.png", _real_img(), "image/png"))],
+        )
+        assert rep.status_code == 409
+

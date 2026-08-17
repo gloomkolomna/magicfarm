@@ -76,16 +76,25 @@ def _process_context(report: "StitchReport", db: Session) -> None:
                 consume_potion(cs.user_id, bonus_code, db)
             db.commit()
     elif report.context_type == "animal_produce" and report.context_id is not None:
-        from models import Animal, BarnyardSlot
-        slot = db.query(BarnyardSlot).filter(BarnyardSlot.id == report.context_id).first()
-        if slot is not None:
-            bonus = apply_pet_bonus_animal_product(report.user_id, db)
-            die = slot.last_die or 1
-            qty = die + bonus
-            animal = db.query(Animal).filter(Animal.id == slot.animal_id).first()
-            if animal:
-                pass
-            db.commit()
+        from models import BarnyardSlot, Inventory, Product
+        slot = db.query(BarnyardSlot).filter(
+            BarnyardSlot.id == report.context_id, BarnyardSlot.user_id == report.user_id
+        ).first()
+        if slot is not None and slot.animal_id is not None:
+            product = db.query(Product).filter(Product.animal_id == slot.animal_id).first()
+            if product is not None:
+                bonus = apply_pet_bonus_animal_product(report.user_id, db)
+                die = slot.last_die or 1
+                qty = die + bonus
+                inv = db.query(Inventory).filter(
+                    Inventory.user_id == report.user_id, Inventory.product_id == product.id
+                ).first()
+                if inv is None:
+                    inv = Inventory(user_id=report.user_id, product_id=product.id, qty=0)
+                    db.add(inv)
+                inv.qty = (inv.qty or 0) + qty
+                slot.last_die = None
+                db.commit()
     elif report.context_type == "tent_build" and report.context_id is not None:
         from models import PRODUCTION_NAMES, Production, Tent, TentBuild
         tb = db.query(TentBuild).filter(
@@ -261,6 +270,40 @@ def create_report(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Недостаточно крестиков. Норма на дом: {hb.required}, вы указали {amount}",
+            )
+
+    if context_type == "animal_build" and context_id is not None:
+        from models import BarnyardSlot
+        slot = db.query(BarnyardSlot).filter(
+            BarnyardSlot.id == context_id, BarnyardSlot.user_id == user.vk_id
+        ).first()
+        if slot is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Загон не найден")
+        if slot.status != "building":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Загон не строится")
+        remaining = (slot.required or 0) - (slot.accumulated or 0)
+        if amount < remaining:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Недостаточно крестиков. Норма постройки загона: {remaining}, вы указали {amount}",
+            )
+
+    if context_type == "animal_produce" and context_id is not None:
+        from models import BarnyardSlot
+        slot = db.query(BarnyardSlot).filter(
+            BarnyardSlot.id == context_id, BarnyardSlot.user_id == user.vk_id
+        ).first()
+        if slot is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Загон не найден")
+        if slot.last_die is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Сначала получите продукцию (бросок кубика)",
+            )
+        if amount < (slot.required or 0):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Недостаточно крестиков. Норма продукции: {slot.required}, вы указали {amount}",
             )
 
     if context_type is not None and context_type not in (

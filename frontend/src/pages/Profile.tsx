@@ -109,7 +109,7 @@ export default function ProfilePage() {
                   />
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <strong>✝️ {r.amount}</strong>
+                  <strong>❎ {r.amount}</strong>
                   {r.note && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{r.note}</div>}
                   <span className="fm-chip" style={{ ...STATUS_STYLE[r.status], marginTop: 4, fontSize: 11 }}>
                     {r.status === 'accepted' ? '✓ зачтено' : r.status === 'pending' ? '⏳ ждёт' : '✖ отклонено'}

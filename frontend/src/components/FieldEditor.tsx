@@ -897,7 +897,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 <label style={lbl}>Тип</label>
                 <select className="fm-input" value={tentKind} onChange={(e) => setTentKind(e.target.value)}>
                   {prodTemplates.map((pt) => (
-                    <option key={pt.code} value={pt.code}>{pt.emoji} {pt.name} ({pt.required} ✝️/цикл)</option>
+                    <option key={pt.code} value={pt.code}>{pt.emoji} {pt.name} ({pt.required} ❎/цикл)</option>
                   ))}
                   <option value="witch_house">🏠 Дом ведьмы (стройка по материалам)</option>
                 </select>

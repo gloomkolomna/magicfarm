@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user
-from models import Animal, BarnyardSlot, Field, FieldAnimal, Inventory, User
+from models import Animal, BarnyardSlot, Field, FieldAnimal, FieldCell, Inventory, User
 from routes.admin_catalog import AnimalOut, _animal_out
 from services.achievements import check_and_award
 from services.card_draw import calculate_norm, cards_to_json, draw_cards
@@ -49,6 +49,9 @@ class BarnyardOut(BaseModel):
     drawn_cards_json: str | None
     opening_order: int | None
     cell_id: int | None = None
+    image_empty_pen_url: str | None = None
+    image_pen_url: str | None = None
+    image_harvested_url: str | None = None
 
 
 def _slot_out(s: BarnyardSlot) -> BarnyardOut:
@@ -61,6 +64,9 @@ def _slot_out(s: BarnyardSlot) -> BarnyardOut:
         drawn_cards_json=s.drawn_cards_json,
         opening_order=s.opening_order,
         cell_id=s.cell_id,
+        image_empty_pen_url=s.animal.image_empty_pen_url if s.animal else None,
+        image_pen_url=s.animal.image_pen_url if s.animal else None,
+        image_harvested_url=s.animal.image_harvested_url if s.animal else None,
     )
 
 
@@ -83,6 +89,23 @@ def list_pens(
 
 class InstallRequest(BaseModel):
     animal_id: int
+
+
+def _bind_to_free_cell(db: Session, slot: BarnyardSlot) -> None:
+    if slot.cell_id is not None:
+        return
+    used = {
+        cell_id for (cell_id,) in db.query(BarnyardSlot.cell_id).filter(
+            BarnyardSlot.cell_id.isnot(None)
+        ).all()
+    }
+    free = db.query(FieldCell).filter(FieldCell.kind == "barnyard").order_by(
+        FieldCell.field_id.asc(), FieldCell.row.asc(), FieldCell.col.asc()
+    ).all()
+    for cell in free:
+        if cell.id not in used:
+            slot.cell_id = cell.id
+            return
 
 
 def _install_into_slot(db: Session, user: User, slot: BarnyardSlot, animal_id: int) -> BarnyardSlot:
@@ -108,6 +131,7 @@ def _install_into_slot(db: Session, user: User, slot: BarnyardSlot, animal_id: i
     slot.required = required
     slot.accumulated = 0
     slot.drawn_cards_json = cards_to_json(cards)
+    _bind_to_free_cell(db, slot)
     slot.opening_order = db.query(BarnyardSlot).filter(
         BarnyardSlot.user_id == user.vk_id,
         BarnyardSlot.animal_id.isnot(None),
@@ -139,6 +163,15 @@ def install_animal(
     if slot.status != "empty":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Загон уже занят или строится")
 
+    occupied = db.query(BarnyardSlot).filter(
+        BarnyardSlot.user_id == user.vk_id, BarnyardSlot.animal_id.isnot(None)
+    ).count()
+    if occupied >= (user.unlocked_barnyard or 0):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Нет открытых загонов. Повысьте уровень (прокачка «Животноводство»).",
+        )
+
     _install_into_slot(db, user, slot, req.animal_id)
     return _slot_out(slot)
 
@@ -150,7 +183,6 @@ def install_animal_on_cell(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    from models import FieldCell
     cell = db.query(FieldCell).filter(FieldCell.id == cell_id).first()
     if cell is None or cell.kind != "barnyard":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Загон не найден")
@@ -227,6 +259,11 @@ def produce(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Загон не найден")
     if slot.status != "ready":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Загон не готов к производству")
+    if slot.last_die is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Сначала вышейте норму и отчитайтесь о прошлой продукции",
+        )
 
     die = _roll_die(slot.last_die)
     slot.last_die = die

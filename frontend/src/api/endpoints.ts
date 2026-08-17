@@ -457,6 +457,7 @@ export interface BarnyardCell {
   accumulated: number;
   required: number;
   last_die: number | null;
+  image_empty_pen_url: string | null;
   image_pen_url: string | null;
   image_harvested_url: string | null;
 }
@@ -588,6 +589,10 @@ export interface BarnyardPen {
   last_die: number | null;
   drawn_cards_json: string | null;
   opening_order: number;
+  cell_id: number | null;
+  image_empty_pen_url: string | null;
+  image_pen_url: string | null;
+  image_harvested_url: string | null;
 }
 
 export interface BarnyardProduceResult {
