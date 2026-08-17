@@ -107,25 +107,23 @@ export default function PotionsPage() {
         <>
           {cauldron ? (
             <div className="fm-card fm-rise" style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                  <CauldronView material={cauldron.material} imageUrl={cauldronImages[cauldron.material] || null} height={56} />
-                  <div style={{ minWidth: 0 }}>
-                    <strong style={{ display: 'block' }}>{cauldron.recipe_name}</strong>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      {CAULDRON_MATERIAL_LABELS[cauldron.material] || cauldron.material} · {cauldron.capacity} ингр.
-                    </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <CauldronView material={cauldron.material} imageUrl={cauldron.image_url || cauldronImages[cauldron.material] || null} height={56} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <strong style={{ display: 'block' }}>{cauldron.recipe_name}</strong>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {CAULDRON_MATERIAL_LABELS[cauldron.material] || cauldron.material} · {cauldron.capacity} ингр.
                   </div>
+                  {cauldronStatus && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: cauldronStatus.color, marginTop: 4 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: cauldronStatus.color, flexShrink: 0 }} />
+                      {cauldronStatus.label}
+                    </div>
+                  )}
                 </div>
-                {cauldronStatus && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap', color: cauldronStatus.color }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: cauldronStatus.color, flexShrink: 0 }} />
-                    {cauldronStatus.label}
-                  </span>
-                )}
               </div>
 
-              <div className="fm-grid" style={{ gridTemplateColumns: `repeat(${cauldron.capacity}, 1fr)` }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(88px, 1fr))', gap: 8 }}>
                 {Array.from({ length: cauldron.capacity }).map((_, i) => {
                   const slot = cauldron.slots.find((s) => s.slot_index === i);
                   const filled = !!slot && slot.item_id != null;

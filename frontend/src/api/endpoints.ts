@@ -146,6 +146,7 @@ export interface Cauldron {
   capacity: number;
   status: string;
   slots: CauldronSlot[];
+  image_url: string | null;
 }
 
 export interface SlotWarehouseItem {

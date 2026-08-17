@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_role
-from models import Cauldron, CauldronSlot, Inventory, Plant, PotionRecipe, Product, User, UserPotion
+from models import BreweryZone, Cauldron, CauldronSlot, Inventory, Plant, PotionRecipe, Product, User, UserPotion
 from services.achievements import check_and_award
 from services.potion_bonuses import CONDITIONAL_BONUSES, INSTANT_BONUSES
 from services.uploads import remove_upload, save_upload
@@ -95,6 +95,7 @@ class CauldronOut(BaseModel):
     capacity: int
     status: str
     slots: list[dict]
+    image_url: str | None = None
 
 
 class UserPotionOut(BaseModel):
@@ -192,6 +193,11 @@ def get_cauldron(
     return _cauldron_detail(c, db)
 
 
+def _cauldron_zone_image(db: Session) -> str | None:
+    z = db.query(BreweryZone).filter(BreweryZone.zone_kind == "cauldron").order_by(BreweryZone.id.asc()).first()
+    return z.image_url if z else None
+
+
 def _cauldron_detail(c: Cauldron, db: Session) -> CauldronOut:
     recipe = db.query(PotionRecipe).filter(PotionRecipe.id == c.recipe_id).first() if c.recipe_id else None
     slots = db.query(CauldronSlot).filter(CauldronSlot.cauldron_id == c.id).order_by(CauldronSlot.slot_index).all()
@@ -216,6 +222,7 @@ def _cauldron_detail(c: Cauldron, db: Session) -> CauldronOut:
     return CauldronOut(
         id=c.id, recipe_id=c.recipe_id, recipe_name=recipe.name if recipe else None,
         material=c.material, capacity=c.capacity, status=c.status, slots=slot_data,
+        image_url=_cauldron_zone_image(db),
     )
 
 

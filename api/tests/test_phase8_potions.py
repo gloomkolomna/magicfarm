@@ -46,6 +46,27 @@ def test_create_cauldron(admin_client):
         assert len(data["slots"]) == 4
 
 
+def test_cauldron_returns_zone_image(admin_client):
+    from models import BreweryZone, Field
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        f = Field(code="brew_field_test", name="Зельеварня", cols=3, rows=2)
+        s.add(f)
+        s.flush()
+        s.add(BreweryZone(field_id=f.id, zone_kind="cauldron", col1=0, row1=0, col2=1, row2=1,
+                          image_url="/api/uploads/cauldron.png"))
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as c:
+        c.post("/api/potions/cauldrons", json={"recipe_id": 1})
+        r = c.get("/api/potions/cauldrons/active")
+        assert r.status_code == 200
+        assert r.json()["image_url"] == "/api/uploads/cauldron.png"
+
+
 def test_cauldron_conflict(admin_client):
     with make_user_client(123, "player") as c:
         c.post("/api/potions/cauldrons", json={"recipe_id": 1})
