@@ -108,7 +108,7 @@ export default function PotionsPage() {
           {cauldron ? (
             <div className="fm-card fm-rise" style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                <CauldronView material={cauldron.material} imageUrl={cauldron.image_url || cauldronImages[cauldron.material] || null} height={56} />
+                <CauldronView material={cauldron.material} imageUrl={mediaUrl(cauldron.image_url) || cauldronImages[cauldron.material] || null} height={56} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <strong style={{ display: 'block' }}>{cauldron.recipe_name}</strong>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
