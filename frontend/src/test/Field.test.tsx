@@ -36,6 +36,9 @@ vi.mock('../api/endpoints', () => {
       revealNorm: vi.fn().mockResolvedValue({ id: 10, norm_revealed: true }),
       gameMediaByCode: vi.fn().mockRejectedValue(new Error('not found')),
       crystalCards: vi.fn().mockResolvedValue([]),
+      plants: vi.fn().mockResolvedValue([]),
+      animalsAvailable: vi.fn().mockResolvedValue([]),
+      petsCatalog: vi.fn().mockResolvedValue([]),
     },
   };
 });

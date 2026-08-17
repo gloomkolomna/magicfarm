@@ -42,6 +42,9 @@ export default function PotionsPage() {
   const [levelPage, setLevelPage] = useState(0);
   const [zoomedImg, setZoomedImg] = useState<string | null>(null);
   const [cauldronImages, setCauldronImages] = useState<Record<string, string | null>>({});
+  const [brewVideoUrl, setBrewVideoUrl] = useState<string | null>(null);
+  const [brewVideoOpen, setBrewVideoOpen] = useState(false);
+  const [pendingBrewMsg, setPendingBrewMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const materials = ['tin', 'silver', 'gold'];
@@ -55,6 +58,12 @@ export default function PotionsPage() {
         }
       }),
     ).then((entries) => setCauldronImages(Object.fromEntries(entries)));
+  }, []);
+
+  useEffect(() => {
+    api.gameMediaByCode('potion_brew').then((gm) => {
+      if (gm?.url) setBrewVideoUrl(mediaUrl(gm.url));
+    }).catch(() => {});
   }, []);
 
   const load = useCallback(async () => {
@@ -147,17 +156,34 @@ export default function PotionsPage() {
     if (!cauldron) return;
     setBusy(true);
     setMsg(null);
+    let potion;
     try {
-      const potion = await api.brewCauldron(cauldron.id);
-      setCauldron(null);
-      const brewed = recipes.find((r) => r.id === potion.recipe_id);
-      setMsg(`✓ Зелье на складе! Бонус: ${potionBonusLabel(brewed?.bonus_code) || '—'} — активируйте его на вкладке «Бонусы»`);
-      await refresh();
+      potion = await api.brewCauldron(cauldron.id);
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-    } finally {
       setBusy(false);
+      return;
     }
+    setBusy(false);
+    setCauldron(null);
+    const brewed = recipes.find((r) => r.id === potion.recipe_id);
+    const okMsg = `✓ Зелье сварено! Бонус: ${potionBonusLabel(brewed?.bonus_code) || '—'} — активируйте на вкладке «Бонусы»`;
+    if (brewVideoUrl) {
+      setPendingBrewMsg(okMsg);
+      setBrewVideoOpen(true);
+    } else {
+      setMsg(okMsg);
+      await refresh();
+    }
+  }
+
+  function endBrewVideo() {
+    setBrewVideoOpen(false);
+    if (pendingBrewMsg) {
+      setMsg(pendingBrewMsg);
+      setPendingBrewMsg(null);
+    }
+    refresh();
   }
 
   const allSlotsFilled = cauldron && cauldron.slots.length === cauldron.capacity && cauldron.slots.every((s) => s.item_id);
@@ -286,26 +312,22 @@ export default function PotionsPage() {
                           }}
                         >
                           <CauldronView material={material} imageUrl={cauldronImages[material] || null} height={44} />
-                          <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.3 }}>
-                            {CAULDRON_MATERIAL_LABELS[material]}
-                            <span style={{ color: 'var(--text-muted)' }}> · {r.ingredient_slots.length} ингр.</span>
-                          </span>
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.3, flex: 1, minWidth: 0 }}>
+                        {CAULDRON_MATERIAL_LABELS[material]}
+                        <span style={{ color: 'var(--text-muted)' }}> · {r.ingredient_slots.length} ингр.</span>
+                      </span>
                         </div>
                       );
                     })()}
                     <div
                       style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 8,
                         fontSize: 13,
                         borderTop: '1px solid var(--border)',
                         paddingTop: 8,
                       }}
                     >
-                      <span style={{ color: 'var(--text-muted)' }}>{ingredientIcons(r.ingredient_slots)}</span>
-                      <span style={{ color: 'var(--accent-warm)', fontWeight: 600, whiteSpace: 'nowrap' }}>🪙 {r.reward_coins}</span>
+                      <div style={{ color: 'var(--accent-warm)', fontWeight: 600, whiteSpace: 'nowrap' }}>🪙 {r.reward_coins}</div>
+                      <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>{ingredientIcons(r.ingredient_slots)}</div>
                     </div>
                     {r.bonus_code && (
                       <div
@@ -313,8 +335,6 @@ export default function PotionsPage() {
                           marginTop: 8,
                           fontSize: 13,
                           textAlign: 'left',
-                          borderLeft: '3px solid #a078dc',
-                          paddingLeft: 8,
                           color: '#c9a6f2',
                         }}
                       >
@@ -349,6 +369,23 @@ export default function PotionsPage() {
         >
           <img src={zoomedImg} alt="" style={{ maxWidth: '90vw', maxHeight: '80vh', borderRadius: 10 }} />
         </div>
+      )}
+
+      {brewVideoOpen && brewVideoUrl && (
+        <Modal title="🧪 Варка зелья" onClose={endBrewVideo}>
+          <video
+            src={brewVideoUrl}
+            autoPlay
+            muted
+            playsInline
+            style={{ width: '100%', maxHeight: '55vh', borderRadius: 8 }}
+            onEnded={endBrewVideo}
+            onError={endBrewVideo}
+          />
+          <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ marginTop: 6 }} onClick={endBrewVideo}>
+            Пропустить видео
+          </button>
+        </Modal>
       )}
 
       {warehouseOpen && (

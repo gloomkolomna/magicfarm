@@ -135,6 +135,12 @@ button.fm-card {
   gap: 10px;
 }
 
+@media (min-width: 769px) {
+  .fm-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* ── Поля ввода ── */
 .fm-input {
   width: 100%;

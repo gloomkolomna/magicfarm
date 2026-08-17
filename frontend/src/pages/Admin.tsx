@@ -243,6 +243,7 @@ export default function AdminPage() {
     { code: 'cauldron_tin', kind: 'image', label: '🍲 Котёл: оловянный (4 ингредиента)' },
     { code: 'cauldron_silver', kind: 'image', label: '🍲 Котёл: серебряный (5 ингредиентов)' },
     { code: 'cauldron_gold', kind: 'image', label: '🍲 Котёл: золотой (6 ингредиентов)' },
+    { code: 'potion_brew', kind: 'video', label: '🧪 Видео варки зелья' },
   ];
 
   const [gameMedia, setGameMedia] = useState<GameMedia[]>([]);

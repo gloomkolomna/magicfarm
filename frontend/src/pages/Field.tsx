@@ -110,6 +110,9 @@ export default function FieldPage() {
   const [brewWarehouseLoading, setBrewWarehouseLoading] = useState(false);
   const [brewPlantItems, setBrewPlantItems] = useState<Record<number, { name: string | null; image: string | null }>>({});
   const [brewProductItems, setBrewProductItems] = useState<Record<number, { name: string | null; image: string | null }>>({});
+  const [brewVideoUrl, setBrewVideoUrl] = useState<string | null>(null);
+  const [brewVideoOpen, setBrewVideoOpen] = useState(false);
+  const [pendingBrewMsg, setPendingBrewMsg] = useState<string | null>(null);
 
   const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string; norm?: number; qty?: number } | null>(null);
   const [showVideo, setShowVideo] = useState(false);
@@ -153,7 +156,7 @@ export default function FieldPage() {
 
   const loadVideo = useCallback(async () => {
     try {
-      const [gm, cards, animals, pets, diceV, houseV, houseImg, faces, mats] = await Promise.all([
+      const [gm, cards, animals, pets, diceV, houseV, houseImg, brewV, faces, mats] = await Promise.all([
         api.gameMediaByCode('card_shuffle').catch(() => null),
         api.crystalCards().catch(() => [] as CrystalCard[]),
         api.animalsAvailable().catch(() => [] as Animal[]),
@@ -161,6 +164,7 @@ export default function FieldPage() {
         api.gameMediaByCode('dice_roll').catch(() => null),
         api.gameMediaByCode('house_build_video').catch(() => null),
         api.gameMediaByCode('house_built_image').catch(() => null),
+        api.gameMediaByCode('potion_brew').catch(() => null),
         Promise.all(Array.from({ length: 6 }, (_, i) =>
           api.gameMediaByCode(`dice_face_${i + 1}`).catch(() => null))),
         Promise.all(HOUSE_MATERIALS.map((m) =>
@@ -173,6 +177,7 @@ export default function FieldPage() {
       if (diceV?.url) setDiceVideoUrl(mediaUrl(diceV.url));
       if (houseV?.url) setHouseBuildVideoUrl(mediaUrl(houseV.url));
       if (houseImg?.url) setHouseBuiltImageUrl(mediaUrl(houseImg.url));
+      if (brewV?.url) setBrewVideoUrl(mediaUrl(brewV.url));
       setDiceFaceUrls([null, ...faces.map((f) => (f?.url ? mediaUrl(f.url) : null))]);
       setHouseMaterialUrls(Object.fromEntries(HOUSE_MATERIALS.map((m, i) => [m.code, mats[i]?.url ? mediaUrl(mats[i]!.url!) : null])));
     } catch {}
@@ -301,15 +306,33 @@ export default function FieldPage() {
 
   async function brewNow() {
     if (!activeCauldron) return;
+    const name = activeCauldron.recipe_name ?? '';
     setBusy(true); setMsg(null);
     try {
       await api.brewCauldron(activeCauldron.id);
-      setBrewCauldronModal(false);
-      setMsg(`✓ Зелье «${activeCauldron.recipe_name ?? ''}» сварено!`);
-      await load(); await refresh();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-    } finally { setBusy(false); }
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
+    setBrewCauldronModal(false);
+    const okMsg = `✓ Зелье «${name}» сварено!`;
+    if (brewVideoUrl) {
+      setPendingBrewMsg(okMsg);
+      setBrewVideoOpen(true);
+    } else {
+      setMsg(okMsg);
+    }
+    await load(); await refresh();
+  }
+
+  function endBrewVideo() {
+    setBrewVideoOpen(false);
+    if (pendingBrewMsg) {
+      setMsg(pendingBrewMsg);
+      setPendingBrewMsg(null);
+    }
   }
 
   async function doPlant() {
@@ -747,7 +770,7 @@ export default function FieldPage() {
                   else if (cell.kind === 'bed' && cell.occupant_user_id == null && field.plant_category !== 'orchard') bg = `center/contain no-repeat url(${plotUrl})`;
                   else if (cell.occupant_user_id != null) bg = cell.plot?.status === 'grown' ? 'rgba(111,174,74,0.30)' : 'rgba(90,143,62,0.20)';
                   const isBed = cell.kind === 'bed';
-                  const grownImg = (cell.plot?.status === 'grown' || cell.plot?.status === 'await_replant') ? (cell.plant_image_harvested || cell.plant_image_grown) : cell.plant_image_young;
+                  const grownImg = (cell.plot?.status === 'grown' || cell.plot?.status === 'await_replant') ? cell.plant_image_grown : cell.plant_image_young;
                   return (
                     <div
                       key={`cell-${c}-${r}`}
@@ -987,7 +1010,7 @@ export default function FieldPage() {
               const spanCols = pb.col2 - pb.col1 + 1;
               const spanRows = pb.row2 - pb.row1 + 1;
               const occupied = pb.occupant_user_id != null;
-              const grownImg = (pb.plot?.status === 'grown' || pb.plot?.status === 'await_replant') ? (pb.plant_image_harvested || pb.plant_image_grown) : pb.plant_image_young;
+              const grownImg = (pb.plot?.status === 'grown' || pb.plot?.status === 'await_replant') ? pb.plant_image_grown : pb.plant_image_young;
               return (
                 <div
                   key={`bed-${pb.id}`}
@@ -1398,6 +1421,24 @@ export default function FieldPage() {
           ) : (
             <div className="fm-card" style={{ fontSize: 13, color: 'var(--text-muted)' }}>Заполните все окошки ингредиентов на карте.</div>
           )}
+        </Modal>
+      )}
+
+      {/* Зельеварня: видео варки */}
+      {brewVideoOpen && brewVideoUrl && (
+        <Modal title="🧪 Варка зелья" onClose={endBrewVideo}>
+          <video
+            src={brewVideoUrl}
+            autoPlay
+            muted
+            playsInline
+            style={{ width: '100%', maxHeight: '55vh', borderRadius: 8 }}
+            onEnded={endBrewVideo}
+            onError={endBrewVideo}
+          />
+          <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ marginTop: 6 }} onClick={endBrewVideo}>
+            Пропустить видео
+          </button>
         </Modal>
       )}
 
