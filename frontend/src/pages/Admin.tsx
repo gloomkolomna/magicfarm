@@ -49,6 +49,22 @@ const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: 'customer_max_orders', label: 'Лимит активных заказов заказчика (0–50)', hint: 'Заказчики с этим числом открытых заказов скрываются при создании заказа' },
 ];
 
+function matchesAny(item: unknown, q: string): boolean {
+  const s = q.trim().toLowerCase();
+  if (!s) return true;
+  const stack: unknown[] = [item];
+  while (stack.length) {
+    const v = stack.pop();
+    if (v == null) continue;
+    if (typeof v === 'object') {
+      Object.values(v as Record<string, unknown>).forEach((x) => stack.push(x));
+      continue;
+    }
+    if (String(v).toLowerCase().includes(s)) return true;
+  }
+  return false;
+}
+
 export default function AdminPage() {
   const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs'>('players');
   const [players, setPlayers] = useState<Player[]>([]);
@@ -61,24 +77,7 @@ export default function AdminPage() {
   function doSearch(q: string) {
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => {
-      const s = q.trim().toLowerCase();
-      let filtered: Player[];
-      if (!s) {
-        filtered = allPlayers;
-      } else {
-        const num = Number(s);
-        if (Number.isFinite(num) && String(num) === s) {
-          filtered = allPlayers.filter((p) => p.vk_id === num);
-        } else {
-          filtered = allPlayers.filter((p) =>
-            String(p.vk_id).includes(s) ||
-            p.first_name.toLowerCase().includes(s) ||
-            p.last_name.toLowerCase().includes(s) ||
-            `${p.first_name} ${p.last_name}`.toLowerCase().includes(s)
-          );
-        }
-      }
-      setPlayers(filtered);
+      setPlayers(q.trim() ? allPlayers.filter((p) => matchesAny(p, q)) : allPlayers);
       setPlayerPage(0);
     }, 150);
   }
@@ -727,7 +726,7 @@ export default function AdminPage() {
         <table className="fm-table" style={{ width: '100%' }}>
           <thead><tr><th>ID</th><th>Имя</th><th>Открытых заказов</th><th>Фото</th><th></th></tr></thead>
           <tbody>
-            {customers.map((c) => (
+            {shownCustomers.map((c) => (
               <tr key={c.id} style={c.open_orders_count >= customerMaxOrders ? { opacity: 0.5 } : undefined}>
                 <td>{c.id}</td>
                 <td>{c.name}</td>
@@ -753,6 +752,7 @@ export default function AdminPage() {
             ))}
           </tbody>
         </table>
+        {qActive && shownCustomers.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', marginTop: 8 }}>{NO_MATCH}</div>}
       </div>
     );
   }
@@ -814,7 +814,7 @@ export default function AdminPage() {
         <table className="fm-table" style={{ width: '100%' }}>
           <thead><tr><th>Уровень</th><th>Картинка</th><th>Монет</th><th>Грядок</th><th>Разблокировка</th><th></th></tr></thead>
           <tbody>
-            {levels.map((l) => (
+            {shownLevels.map((l) => (
               <tr key={l.level}>
                 <td>{l.level}</td>
                 <td>{l.image_url ? <img src={mediaUrl(l.image_url)} alt="" style={{ maxWidth: 60, maxHeight: 40, borderRadius: 4 }} /> : '—'}</td>
@@ -829,6 +829,7 @@ export default function AdminPage() {
             ))}
           </tbody>
         </table>
+        {qActive && shownLevels.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', marginTop: 8 }}>{NO_MATCH}</div>}
       </div>
     );
   }
@@ -966,7 +967,7 @@ export default function AdminPage() {
         <table className="fm-table" style={{ width: '100%' }}>
           <thead><tr><th>ID</th><th>Название</th><th>Уровень</th><th>Слотов</th><th>Бонус</th><th>Описание</th><th></th></tr></thead>
           <tbody>
-            {potionRecipes.map((r) => (
+            {shownPotionRecipes.map((r) => (
               <tr key={r.id}>
                 <td>{r.id}</td>
                 <td>
@@ -986,6 +987,7 @@ export default function AdminPage() {
             ))}
           </tbody>
         </table>
+        {qActive && shownPotionRecipes.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', marginTop: 8 }}>{NO_MATCH}</div>}
       </div>
     );
   }
@@ -1082,7 +1084,7 @@ export default function AdminPage() {
         <table className="fm-table" style={{ width: '100%' }}>
           <thead><tr><th>ID</th><th>Источник</th><th>Товар</th><th>Уровень</th><th></th></tr></thead>
           <tbody>
-            {recipes.map((r) => (
+            {shownRecipes.map((r) => (
               <tr key={r.id}>
                 <td>{r.id}</td>
                 <td>{r.source_product_id != null
@@ -1104,6 +1106,7 @@ export default function AdminPage() {
             ))}
           </tbody>
         </table>
+        {qActive && shownRecipes.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', marginTop: 8 }}>{NO_MATCH}</div>}
       </div>
     );
   }
@@ -1270,6 +1273,48 @@ export default function AdminPage() {
     finally { setBusy(false); }
   }
 
+  const [tabQuery, setTabQuery] = useState<Record<string, string>>({});
+  const query = tabQuery[tab] || '';
+  const setQuery = (v: string) => setTabQuery((m) => ({ ...m, [tab]: v }));
+  const qActive = query.trim().length > 0;
+  const fl = <T,>(items: T[]): T[] => (qActive ? items.filter((it) => matchesAny(it, query)) : items);
+
+  const shownOrders = fl(adminOrders.map((o) => ({ ...o, status_label: ORDER_STATUS_LABEL[o.status]?.label || '' })));
+  const shownFields = fl(fields);
+  const shownPlants = fl(plants);
+  const shownAnimals = fl(animals);
+  const shownPets = fl(pets);
+  const shownProducts = fl(catalogProducts);
+  const shownProductions = fl(prodTemplates);
+  const shownRecipes = fl(recipes);
+  const shownCustomers = fl(customers);
+  const shownLevels = fl(levels);
+  const shownPotionRecipes = fl(potionRecipes);
+  const shownMedia = fl(gameMedia);
+  const shownCards = fl(crystalCards);
+  const shownAchievements = fl(achievements);
+  const shownSettings = fl(SETTING_FIELDS);
+
+  const totals: Record<string, { total: number; shown: number }> = {
+    orders: { total: adminOrders.length, shown: shownOrders.length },
+    fields: { total: fields.length, shown: shownFields.length },
+    plants: { total: plants.length, shown: shownPlants.length },
+    animals: { total: animals.length, shown: shownAnimals.length },
+    pets: { total: pets.length, shown: shownPets.length },
+    products: { total: catalogProducts.length, shown: shownProducts.length },
+    productions: { total: prodTemplates.length, shown: shownProductions.length },
+    recipes: { total: recipes.length, shown: shownRecipes.length },
+    customers: { total: customers.length, shown: shownCustomers.length },
+    levels: { total: levels.length, shown: shownLevels.length },
+    'potion-recipes': { total: potionRecipes.length, shown: shownPotionRecipes.length },
+    media: { total: gameMedia.length, shown: shownMedia.length },
+    'crystal-cards': { total: crystalCards.length, shown: shownCards.length },
+    achievements: { total: achievements.length, shown: shownAchievements.length },
+    settings: { total: SETTING_FIELDS.length, shown: shownSettings.length },
+  };
+
+  const NO_MATCH = 'Ничего не найдено.';
+
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -1291,6 +1336,25 @@ export default function AdminPage() {
         <TabBtn active={tab === 'achievements'} onClick={() => { setTab('achievements'); loadAchievements(); }}>🏆 Достижения</TabBtn>
         <TabBtn active={tab === 'logs'} onClick={() => setTab('logs')}>📜 Логи</TabBtn>
       </div>
+
+      {tab !== 'players' && tab !== 'logs' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <input
+            className="fm-input"
+            placeholder="🔍 Поиск по всем полям…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {qActive && (
+            <>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                {totals[tab]?.shown ?? 0} из {totals[tab]?.total ?? 0}
+              </span>
+              <button className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => setQuery('')}>✕</button>
+            </>
+          )}
+        </div>
+      )}
 
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
@@ -1432,7 +1496,7 @@ export default function AdminPage() {
                     <input
                       className="fm-input"
                       type="text"
-                      placeholder="Поиск по ID или имени…"
+                      placeholder="Поиск по всем полям (ID, имя, роль, монеты…)"
                       value={playerSearch}
                       onChange={(e) => { setPlayerSearch(e.target.value); doSearch(e.target.value); }}
                     />
@@ -1528,11 +1592,15 @@ export default function AdminPage() {
           {tab === 'settings' && (
             <>
               <CrystalStandardEditor disabled={busy} />
-              <div className="fm-grid">
-                {SETTING_FIELDS.map((f) => (
-                  <SettingRow key={f.key} field={f} value={settings[f.key] ?? ''} disabled={busy} onSave={(v) => saveSetting(f.key, v)} />
-                ))}
-              </div>
+              {shownSettings.length === 0 ? (
+                <div className="fm-card" style={{ color: 'var(--text-muted)' }}>{NO_MATCH}</div>
+              ) : (
+                <div className="fm-grid">
+                  {shownSettings.map((f) => (
+                    <SettingRow key={f.key} field={f} value={settings[f.key] ?? ''} disabled={busy} onSave={(v) => saveSetting(f.key, v)} />
+                  ))}
+                </div>
+              )}
               <div className="fm-card" style={{ marginTop: 10 }}>
                 <h3>🖼️ Нейтральный фон</h3>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1553,11 +1621,11 @@ export default function AdminPage() {
                   <button className="fm-btn" style={{ width: '100%', marginBottom: 14 }} disabled={busy} onClick={() => setShowCreate(true)}>
                     ➕ Создать локацию
                   </button>
-                  {fields.length === 0 ? (
-                    <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Локаций пока нет.</div>
+                  {shownFields.length === 0 ? (
+                    <div className="fm-card" style={{ color: 'var(--text-muted)' }}>{qActive ? NO_MATCH : 'Локаций пока нет.'}</div>
                   ) : (
                     <div className="fm-grid">
-                      {fields.map((f) => (
+                      {shownFields.map((f) => (
                         <div key={f.id} className="fm-card fm-rise">
                           <strong style={{ fontSize: 16 }}>🗺️ {f.name}</strong>
                           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{f.cols}×{f.rows} клеток</div>
@@ -1632,26 +1700,26 @@ export default function AdminPage() {
           )}
 
           {tab === 'plants' && (
-            <CatalogTab title="🌱 Растения" items={plants} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePlant} onDelete={deletePlant} onUploadImage={uploadPlantImage} onUploadImageYoung={uploadPlantImageYoung} onUploadImageGrown={uploadPlantImageGrown} onUploadImageHarvested={uploadPlantImageHarvested} hideMainImage
+            <CatalogTab title="🌱 Растения" items={shownPlants} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePlant} onDelete={deletePlant} onUploadImage={uploadPlantImage} onUploadImageYoung={uploadPlantImageYoung} onUploadImageGrown={uploadPlantImageGrown} onUploadImageHarvested={uploadPlantImageHarvested} hideMainImage emptyText={qActive ? NO_MATCH : undefined}
               fields={[{ key: 'name', label: 'Название', ph: 'Джекобоб' }, { key: 'level', label: 'Уровень', ph: '1', type: 'number' }, { key: 'category', label: 'Категория', options: [{ value: 'garden', label: '🌱 Грядка' }, { value: 'orchard', label: '🍎 Сад' }] }, { key: 'description', label: 'Описание', ph: 'Грибы' }, { key: 'stitch_condition', label: 'Условие отшива', ph: 'Вышить на белой канве' }]}
             />
           )}
 
           {tab === 'animals' && (
-            <CatalogTab title="🐄 Животные" items={animals} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveAnimal} onDelete={deleteAnimal} onUploadImage={uploadAnimalImage} onUploadImageEmptyPen={uploadAnimalEmptyPenImage} onUploadImagePen={uploadAnimalPenImage} onUploadImageHarvested={uploadAnimalImageHarvested} hideMainImage
+            <CatalogTab title="🐄 Животные" items={shownAnimals} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveAnimal} onDelete={deleteAnimal} onUploadImage={uploadAnimalImage} onUploadImageEmptyPen={uploadAnimalEmptyPenImage} onUploadImagePen={uploadAnimalPenImage} onUploadImageHarvested={uploadAnimalImageHarvested} hideMainImage emptyText={qActive ? NO_MATCH : undefined}
               fields={[{ key: 'name', label: 'Название', ph: 'Единорог' }, { key: 'product_name', label: 'Продукция', ph: 'Рог единорога' }]}
             />
           )}
 
           {tab === 'pets' && (
-            <CatalogTab title="🐾 Питомцы" items={pets} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePet} onDelete={deletePet} onUploadImage={uploadPetImage}
+            <CatalogTab title="🐾 Питомцы" items={shownPets} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePet} onDelete={deletePet} onUploadImage={uploadPetImage} emptyText={qActive ? NO_MATCH : undefined}
               fields={[{ key: 'name', label: 'Название', ph: 'Лис Сильварис' }, { key: 'bonus_kind', label: 'Бонус', options: BONUS_KIND_OPTIONS }]}
               imageLabel="питомца"
             />
           )}
 
           {tab === 'products' && (
-            <CatalogTab title="📦 Товары" items={catalogProducts} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveProduct} onDelete={deleteProduct} onUploadImage={uploadProductImage}
+            <CatalogTab title="📦 Товары" items={shownProducts} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveProduct} onDelete={deleteProduct} onUploadImage={uploadProductImage} emptyText={qActive ? NO_MATCH : undefined}
               fields={[
                 { key: 'name', label: 'Название', ph: 'Яд' },
                 { key: 'stars', label: 'Звёзды', ph: '1', type: 'number' },
@@ -1664,7 +1732,7 @@ export default function AdminPage() {
           )}
 
           {tab === 'productions' && (
-            <CatalogTab title="🏭 Производства" items={prodTemplates} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveProduction} onDelete={deleteProduction} onUploadImage={uploadProductionImage}
+            <CatalogTab title="🏭 Производства" items={shownProductions} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveProduction} onDelete={deleteProduction} onUploadImage={uploadProductionImage} emptyText={qActive ? NO_MATCH : undefined}
               fields={[
                 { key: 'name', label: 'Название', ph: 'Стол зельеварения' },
                 { key: 'cards_to_draw', label: 'Карт для нормы', options: CARDS_DRAW_OPTIONS },
@@ -1760,11 +1828,11 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {adminOrders.length === 0 ? (
-                <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Заказов нет.</div>
+              {shownOrders.length === 0 ? (
+                <div className="fm-card" style={{ color: 'var(--text-muted)' }}>{qActive ? NO_MATCH : 'Заказов нет.'}</div>
               ) : (
                 <div className="fm-grid">
-                  {adminOrders.map((o) => {
+                  {shownOrders.map((o) => {
                     const st = ORDER_STATUS_LABEL[o.status] || ORDER_STATUS_LABEL.open;
                     return (
                       <div key={o.id} className="fm-card fm-rise" style={{ textAlign: 'center' }}>
@@ -1850,7 +1918,7 @@ export default function AdminPage() {
                 <button className="fm-btn fm-btn-sm" disabled={busy || !mediaTypeSel} onClick={saveGameMedia}>➕ Создать</button>
               </div>
               <div className="fm-grid">
-                {gameMedia.map((gm) => {
+                {shownMedia.map((gm) => {
                   const label = MEDIA_TYPES.find(m => m.code === gm.code)?.label || gm.code;
                   return (
                     <div key={gm.id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
@@ -1874,6 +1942,7 @@ export default function AdminPage() {
                 })}
               </div>
               {gameMedia.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Медиа пока нет. Выберите тип из списка и создайте запись для загрузки файла.</div>}
+              {qActive && shownMedia.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{NO_MATCH}</div>}
             </div>
           )}
 
@@ -1907,7 +1976,7 @@ export default function AdminPage() {
                 {achEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setAchEditingId(null); setAchForm({ name: '', condition_kind: '', condition_value: '1', production_code: '' }); setAchImage(null); }}>Отмена</button>}
               </div>
               <div className="fm-grid">
-                {achievements.map((a) => (
+                {shownAchievements.map((a) => (
                   <div key={a.id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
                     {a.image_url && <img src={mediaUrl(a.image_url)} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: 6 }} />}
                     <strong>{a.name}</strong>
@@ -1924,14 +1993,15 @@ export default function AdminPage() {
                 ))}
               </div>
               {achievements.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Достижений пока нет.</div>}
+              {qActive && shownAchievements.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{NO_MATCH}</div>}
             </div>
           )}
 
           {tab === 'crystal-cards' && (
             <div>
-              <h2 style={{ marginTop: 0 }}>🃏 Карты кристаллов ({crystalCards.length})</h2>
+              <h2 style={{ marginTop: 0 }}>🃏 Карты кристаллов ({shownCards.length}{qActive ? ` из ${crystalCards.length}` : ''})</h2>
               <div className="fm-grid">
-                {crystalCards.map((card) => (
+                {shownCards.map((card) => (
                   <div key={card.id} className="fm-card fm-rise" style={{ fontSize: 13, textAlign: 'center' }}>
                     {card.image_url ? (
                       <img src={mediaUrl(card.image_url)} alt="" style={{ width: 80, height: 80, objectFit: 'contain', marginBottom: 4 }} />
@@ -2052,7 +2122,7 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 interface CatField { key: string; label: string; ph?: string; type?: string; options?: { value: string; label: string }[] }
 
 function CatalogTab({
-  title, items, busy, form, formOpen, editingId, onFormChange, onCreate, onEdit, onCancel, onSave, onDelete, onUploadImage, onUploadImageYoung, onUploadImageGrown, onUploadImageEmptyPen, onUploadImagePen, onUploadImageHarvested, fields, imageLabel = 'Изображение', hideMainImage = false,
+  title, items, busy, form, formOpen, editingId, onFormChange, onCreate, onEdit, onCancel, onSave, onDelete, onUploadImage, onUploadImageYoung, onUploadImageGrown, onUploadImageEmptyPen, onUploadImagePen, onUploadImageHarvested, fields, imageLabel = 'Изображение', hideMainImage = false, emptyText,
 }: {
   title: string;
   items: any[];
@@ -2075,6 +2145,7 @@ function CatalogTab({
   fields: CatField[];
   imageLabel?: string;
   hideMainImage?: boolean;
+  emptyText?: string;
 }) {
   const [pendingUpload, setPendingUpload] = useState<{ file: File; cb: (id: number, f: File) => Promise<void> } | null>(null);
 
@@ -2176,7 +2247,7 @@ function CatalogTab({
       )}
 
       {items.length === 0 ? (
-        <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Пусто. Нажмите «Добавить».</div>
+        <div className="fm-card" style={{ color: 'var(--text-muted)' }}>{emptyText ?? 'Пусто. Нажмите «Добавить».'}</div>
       ) : (
         <div className="fm-grid">
           {items.map((item) => {

@@ -616,3 +616,20 @@ def test_double_garden_harvest(admin_client, uploads_tmp):
         plant_inv = [i for i in inv if i["item_kind"] == "plant"][0]
         assert plant_inv["qty"] == 2
         assert c.get("/api/potions").json()[0]["used"] is True
+
+
+def test_potions_when_fires_hint(admin_client):
+    _seed_potion(123, "double_order_reward", activated=False, used=False)
+    with make_user_client(123, "player") as c:
+        pots = c.get("/api/potions").json()
+        assert len(pots) == 1
+        assert pots[0]["when_fires"] is not None
+        assert "заказ" in pots[0]["when_fires"]
+
+        bns = {b["code"]: b for b in c.get("/api/potions/bonuses").json()}
+        assert bns["double_order_reward"]["when_fires"] == pots[0]["when_fires"]
+        assert bns["free_pet"]["when_fires"] == "Применяется сразу при активации"
+
+        r = c.post(f"/api/potions/{pots[0]['id']}/activate")
+        assert r.status_code == 200
+        assert r.json()["when_fires"] == pots[0]["when_fires"]

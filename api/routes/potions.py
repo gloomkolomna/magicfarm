@@ -33,10 +33,35 @@ POTION_BONUS_LABELS = {
 }
 
 
+POTION_BONUS_HINTS = {
+    "double_garden_harvest": "Сработает автоматически при следующем сборе урожая с грядки",
+    "double_orchard_harvest": "Сработает автоматически при следующем сборе урожая в саду",
+    "double_animal_product": "Сработает автоматически при следующем получении продукции животного",
+    "skip_plant_stitch": "Сработает автоматически при следующей посадке — растение вырастет сразу, без отшива нормы",
+    "skip_animal_stitch": "Сработает автоматически при установке следующего животного — без отшива нормы",
+    "double_order_reward": "Сработает автоматически при выполнении следующего заказа — награда ×2",
+    "partial_order": "Сработает автоматически при выполнении следующего заказа — хватит и части товара",
+    "bonus_sewing_product": "Сработает автоматически при следующем отчёте по крафту товара портнихи — +1 товар",
+    "bonus_workshop_product": "Сработает автоматически при следующем отчёте по крафту товара мастерской — +1 товар",
+    "bonus_alchemy_product": "Сработает автоматически при следующем отчёте по крафту товара зельеварения — +1 товар",
+    "free_pet": "Применяется сразу при активации",
+    "early_level_up": "Применяется сразу при активации",
+    "extra_barnyard_slot": "Применяется сразу при активации",
+    "unlock_garden_l3": "Применяется сразу при активации",
+    "unlock_orchard_l3": "Применяется сразу при активации",
+}
+
+
 def _bonus_label(code: str | None) -> str | None:
     if not code:
         return None
     return POTION_BONUS_LABELS.get(code, code)
+
+
+def _bonus_hint(code: str | None) -> str | None:
+    if not code:
+        return None
+    return POTION_BONUS_HINTS.get(code)
 
 
 class PotionRecipeOut(BaseModel):
@@ -78,6 +103,7 @@ class UserPotionOut(BaseModel):
     potion_name: str
     bonus_code: str | None
     bonus_description: str | None
+    when_fires: str | None = None
     description: str | None
     image_url: str | None
     activated: bool
@@ -408,6 +434,7 @@ def list_user_potions(
             id=up.id, potion_recipe_id=up.potion_recipe_id,
             potion_name=recipe.name if recipe else "?",
             bonus_code=up.bonus_code, bonus_description=_bonus_label(up.bonus_code),
+            when_fires=_bonus_hint(up.bonus_code),
             description=recipe.description if recipe else None,
             image_url=recipe.image_url if recipe else None,
             activated=up.activated,
@@ -425,6 +452,7 @@ class BonusCatalogItem(BaseModel):
     activated: bool
     used: bool
     potion_id: int | None = None
+    when_fires: str | None = None
 
 
 @router.get("/bonuses", response_model=list[BonusCatalogItem])
@@ -445,6 +473,7 @@ def list_bonuses(
             activated=p.activated if p else False,
             used=p.used if p else False,
             potion_id=p.id if p else None,
+            when_fires=_bonus_hint(code),
         ))
     return result
 
@@ -503,6 +532,7 @@ def activate_potion(
         id=up.id, potion_recipe_id=up.potion_recipe_id,
         potion_name=recipe.name if recipe else "?",
         bonus_code=up.bonus_code, bonus_description=_bonus_label(up.bonus_code),
+        when_fires=_bonus_hint(up.bonus_code),
         description=recipe.description if recipe else None,
         image_url=recipe.image_url if recipe else None,
         activated=up.activated,

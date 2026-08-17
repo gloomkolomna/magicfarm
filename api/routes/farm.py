@@ -500,7 +500,7 @@ def list_inventory(
 ):
     result: list[InventoryOut] = []
     if item_kind in (None, "plant", "product"):
-        q = db.query(Inventory).filter(Inventory.user_id == user.vk_id)
+        q = db.query(Inventory).filter(Inventory.user_id == user.vk_id, Inventory.qty > 0)
         if item_kind == "plant":
             q = q.filter(Inventory.plant_id.isnot(None))
         elif item_kind == "product":

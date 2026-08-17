@@ -19,6 +19,7 @@ const BASE_TABS: Tab[] = [
   { path: '/barnyard', label: '🐄 Скотный двор' },
   { path: '/pets', label: '🐾 Питомцы' },
   { path: '/potions', label: '🧪 Зелья' },
+  { path: '/bonuses', label: '⚡ Бонусы' },
   { path: '/inventory', label: '📦 Склад' },
   { path: '/orders', label: '🧺 Заказы' },
   { path: '/achievements', label: '🏆 Достижения' },

@@ -112,3 +112,30 @@ def test_invest_invalid_amount(player_client, monkeypatch):
     plot_id = _make_plot(required=300)
     res = player_client.post(f"/api/farm/plots/{plot_id}/invest", json={"amount": 0})
     assert res.status_code == 400
+
+
+def test_inventory_hides_zero_qty(player_client):
+    from models import Inventory
+    from tests.conftest import TestingSessionLocal
+    jack = _plant_id(player_client, "jackobob")
+    khleb = _plant_id(player_client, "khlebozlak")
+    poison = next(p for p in player_client.get("/api/farm/products").json() if p["code"] == "poison")
+    s = TestingSessionLocal()
+    try:
+        s.add(Inventory(user_id=PLAYER_VK, plant_id=jack, qty=0))
+        s.add(Inventory(user_id=PLAYER_VK, plant_id=khleb, qty=4))
+        s.add(Inventory(user_id=PLAYER_VK, product_id=poison["id"], qty=0))
+        s.commit()
+    finally:
+        s.close()
+
+    items = player_client.get("/api/farm/inventory").json()
+    assert all(i["qty"] > 0 for i in items)
+    plant_ids = {i["item_id"] for i in items if i["item_kind"] == "plant"}
+    assert jack not in plant_ids
+    assert khleb in plant_ids
+    assert not any(i["item_kind"] == "product" and i["item_id"] == poison["id"] for i in items)
+
+    plants_only = player_client.get("/api/farm/inventory", params={"item_kind": "plant"}).json()
+    assert all(i["qty"] > 0 for i in plants_only)
+    assert {i["item_id"] for i in plants_only} == {khleb}

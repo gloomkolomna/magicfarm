@@ -721,3 +721,136 @@ def test_upload_order_image_other_user(player_client, monkeypatch):
         files={"image": ("test.png", io.BytesIO(_img_bytes()), "image/png")},
     )
     assert res.status_code == 403
+
+
+# ── Доступность заказов по уровню ──
+
+def _make_plant(code: str, category: str = "garden", level: int = 1) -> int:
+    from models import Plant
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        p = Plant(code=code, name=code, emoji="🌿", category=category, level=level, norm_per_crystal=100)
+        s.add(p)
+        s.commit()
+        s.refresh(p)
+        return p.id
+    finally:
+        s.close()
+
+
+def _make_plant_product(plant_id: int, code: str) -> int:
+    from models import Product
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        p = Product(code=code, name=code, emoji="🎁", plant_id=plant_id, stars=1, production_kind="alchemy")
+        s.add(p)
+        s.commit()
+        s.refresh(p)
+        return p.id
+    finally:
+        s.close()
+
+
+def _make_animal_product(code: str) -> int:
+    from models import Animal, Product
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        animal = s.query(Animal).filter(Animal.code == "wool_sheep").first()
+        p = Product(code=code, name=code, emoji="🧶", animal_id=animal.id, stars=1, production_kind="sewing")
+        s.add(p)
+        s.commit()
+        s.refresh(p)
+        return p.id
+    finally:
+        s.close()
+
+
+def _make_field_with_plant(field_code: str, plant_id: int, min_level: int, plant_category: str | None = None) -> None:
+    from models import Field, FieldPlant
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        f = Field(code=field_code, name=field_code, min_level=min_level, plant_category=plant_category)
+        s.add(f)
+        s.flush()
+        s.add(FieldPlant(field_id=f.id, plant_id=plant_id))
+        s.commit()
+    finally:
+        s.close()
+
+
+def _set_user(vk_id: int, **kwargs) -> None:
+    from models import User
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        u = s.query(User).filter(User.vk_id == vk_id).first()
+        for k, v in kwargs.items():
+            setattr(u, k, v)
+        s.commit()
+    finally:
+        s.close()
+
+
+def _available_order(player_client, product_id: int) -> dict:
+    data = player_client.get("/api/orders/available").json()
+    return next(o for o in data if o["product_id"] == product_id)
+
+
+def _admin_generate(product_id: int, qty: int) -> None:
+    from tests.conftest import make_user_client
+    with make_user_client(400977, "admin") as admin:
+        assert admin.post("/api/admin/orders/generate", json={"product_id": product_id, "qty": qty}).status_code == 201
+
+
+def test_available_order_locked_by_plant_level(player_client):
+    plant = _make_plant("shtuchnyy_cvetok", category="orchard", level=2)
+    prod = _make_plant_product(plant, "cvetok_tovar")
+    _admin_generate(prod, 3)
+
+    o = _available_order(player_client, prod)
+    assert o["available"] is False
+    assert "сады" in o["lock_reason"]
+    assert player_client.post(f"/api/orders/{o['id']}/take").status_code == 403
+
+    _set_user(123, unlocked_garden_level=2)
+    o = _available_order(player_client, prod)
+    assert o["available"] is True
+    assert o["lock_reason"] is None
+    assert player_client.post(f"/api/orders/{o['id']}/take").status_code == 200
+
+
+def test_available_order_locked_by_field_min_level(player_client):
+    plant = _make_plant("gornyy_travnik", category="garden", level=1)
+    prod = _make_plant_product(plant, "travnik_tovar")
+    _make_field_with_plant("gornaya_dolina", plant, min_level=3, plant_category="garden")
+    _admin_generate(prod, 2)
+
+    o = _available_order(player_client, prod)
+    assert o["available"] is False
+    assert o["lock_reason"] == "Локация откроется на 3 уровне"
+    assert player_client.post(f"/api/orders/{o['id']}/take").status_code == 403
+
+    _make_field_with_plant("ravnina", plant, min_level=0, plant_category="garden")
+    o = _available_order(player_client, prod)
+    assert o["available"] is True
+    assert player_client.post(f"/api/orders/{o['id']}/take").status_code == 200
+
+
+def test_available_order_without_fields_is_available(player_client):
+    pid = _poison_id(player_client)
+    _admin_generate(pid, 2)
+    o = _available_order(player_client, pid)
+    assert o["available"] is True
+    assert o["lock_reason"] is None
+
+
+def test_available_order_animal_product_is_available(player_client):
+    prod = _make_animal_product("sherstyanye_noski")
+    _admin_generate(prod, 1)
+    o = _available_order(player_client, prod)
+    assert o["available"] is True
+    assert o["lock_reason"] is None

@@ -139,8 +139,10 @@ export default function OrderCatalogPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((o) => (
-                <tr key={o.id}>
+              {rows.map((o) => {
+                const locked = o.available === false;
+                return (
+                <tr key={o.id} style={locked ? { opacity: 0.55 } : undefined}>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       {o.image_url && (
@@ -160,16 +162,23 @@ export default function OrderCatalogPage() {
                   <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.name || '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(o.created_at)}</td>
                   <td>
-                    <button
-                      className="fm-btn fm-btn-sm"
-                      disabled={busyId !== null}
-                      onClick={() => take(o.id)}
-                    >
-                      {busyId === o.id ? '…' : 'Взять'}
-                    </button>
+                    {locked ? (
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={o.lock_reason || ''}>
+                        🔒 {o.lock_reason || 'Недоступно'}
+                      </span>
+                    ) : (
+                      <button
+                        className="fm-btn fm-btn-sm"
+                        disabled={busyId !== null}
+                        onClick={() => take(o.id)}
+                      >
+                        {busyId === o.id ? '…' : 'Взять'}
+                      </button>
+                    )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

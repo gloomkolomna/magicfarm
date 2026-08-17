@@ -48,6 +48,30 @@ def _calc_order_reward(db: Session, product: Product, qty: int) -> int:
     return calculate_product_price(plant_level, prod_kind, qty, db)
 
 
+def _order_lock_reason(o: OrderReq, user: User, db: Session) -> str | None:
+    from models import Field, FieldPlant, Plant
+
+    if o.product.plant_id is None:
+        return None
+    plant = db.query(Plant).filter(Plant.id == o.product.plant_id).first()
+    if plant is None:
+        return None
+    if plant.category == "garden_beds" and plant.level > (user.unlocked_plot_level or 1):
+        return f"Нужны грядки {plant.level} уровня"
+    if plant.category == "orchard" and plant.level > (user.unlocked_garden_level or 0):
+        return f"Нужны сады {plant.level} уровня"
+    fields = (
+        db.query(Field)
+        .join(FieldPlant, FieldPlant.field_id == Field.id)
+        .filter(FieldPlant.plant_id == plant.id)
+        .all()
+    )
+    suitable = [f for f in fields if f.plant_category is None or f.plant_category == plant.category]
+    if suitable and all((f.min_level or 0) > (user.level or 0) for f in suitable):
+        return f"Локация откроется на {min(f.min_level for f in suitable)} уровне"
+    return None
+
+
 class OrderOut(BaseModel):
     id: int
     product_id: int
@@ -65,6 +89,8 @@ class OrderOut(BaseModel):
     image_url: str | None = None
     created_at: datetime.datetime | None
     fulfilled_at: datetime.datetime | None
+    available: bool = True
+    lock_reason: str | None = None
 
 
 def _customer_images(db: Session) -> dict[str, str]:
@@ -72,7 +98,7 @@ def _customer_images(db: Session) -> dict[str, str]:
     return {c.name: c.image_url for c in rows}
 
 
-def _to_out(o: OrderReq, customer_images: dict[str, str] | None = None) -> OrderOut:
+def _to_out(o: OrderReq, customer_images: dict[str, str] | None = None, lock_reason: str | None = None) -> OrderOut:
     return OrderOut(
         id=o.id, product_id=o.product_id, product_code=o.product.code,
         product_name=o.product.name, product_emoji=o.product.emoji,
@@ -83,6 +109,7 @@ def _to_out(o: OrderReq, customer_images: dict[str, str] | None = None) -> Order
         customer_image_url=(customer_images or {}).get(o.customer) if o.customer else None,
         status=o.status, name=o.name, image_url=o.image_url,
         created_at=o.created_at, fulfilled_at=o.fulfilled_at,
+        available=lock_reason is None, lock_reason=lock_reason,
     )
 
 
@@ -118,7 +145,7 @@ def list_available_orders(
         (OrderReq.fulfilled_by == None) | (OrderReq.fulfilled_by != user.vk_id),
     ).order_by(OrderReq.created_at.desc()).limit(200).all()
     imgs = _customer_images(db)
-    return [_to_out(o, imgs) for o in rows]
+    return [_to_out(o, imgs, _order_lock_reason(o, user, db)) for o in rows]
 
 
 @router.post("/{order_id}/take", response_model=OrderOut)
@@ -134,6 +161,9 @@ def take_order(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже взят")
     if o.status != "open":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен или отменён")
+    lock_reason = _order_lock_reason(o, user, db)
+    if lock_reason is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lock_reason)
     o.user_id = user.vk_id
     db.commit()
     db.refresh(o)

@@ -35,6 +35,7 @@ const LibraryPage = lazyPage(() => import('./pages/Library'));
 const BarnyardPage = lazyPage(() => import('./pages/Barnyard'));
 const PetsPage = lazyPage(() => import('./pages/PetsPage'));
 const PotionsPage = lazyPage(() => import('./pages/PotionsPage'));
+const BonusesPage = lazyPage(() => import('./pages/Bonuses'));
 const AchievementsPage = lazyPage(() => import('./pages/Achievements'));
 const Onboarding = lazyPage(() => import('./pages/Onboarding'));
 
@@ -108,6 +109,7 @@ function App() {
           <Route path="/barnyard" element={<MiniAppShell><BarnyardPage /></MiniAppShell>} />
           <Route path="/pets" element={<MiniAppShell><PetsPage /></MiniAppShell>} />
           <Route path="/potions" element={<MiniAppShell><PotionsPage /></MiniAppShell>} />
+          <Route path="/bonuses" element={<MiniAppShell><BonusesPage /></MiniAppShell>} />
           <Route path="/achievements" element={<MiniAppShell><AchievementsPage /></MiniAppShell>} />
           <Route path="/orders" element={<MiniAppShell><OrdersPage /></MiniAppShell>} />
           <Route path="/orders/catalog" element={<MiniAppShell><OrderCatalogPage /></MiniAppShell>} />

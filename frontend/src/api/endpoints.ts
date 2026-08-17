@@ -160,6 +160,7 @@ export interface UserPotion {
   potion_name: string;
   bonus_code: string | null;
   bonus_description: string | null;
+  when_fires: string | null;
   description: string | null;
   image_url: string | null;
   activated: boolean;
@@ -174,6 +175,7 @@ export interface BonusCatalogItem {
   activated: boolean;
   used: boolean;
   potion_id: number | null;
+  when_fires: string | null;
 }
 
 export type CrystalColor = 'green' | 'blue' | 'violet';
@@ -412,6 +414,8 @@ export interface Order {
   image_url: string | null;
   created_at: string | null;
   fulfilled_at: string | null;
+  available?: boolean;
+  lock_reason?: string | null;
 }
 
 export interface AdminOrder extends Order {
