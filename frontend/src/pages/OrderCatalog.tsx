@@ -5,29 +5,18 @@ import { api, type Order } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
 
-type SortKey = 'product_name' | 'qty' | 'reward_coins' | 'customer' | 'name' | 'created_at';
+type SortKey = 'product_name' | 'qty' | 'reward_coins' | 'customer';
 
 const COLUMNS: { key: SortKey; label: string; align?: 'right' }[] = [
   { key: 'product_name', label: 'Товар' },
   { key: 'qty', label: 'Кол-во', align: 'right' },
   { key: 'reward_coins', label: '🪙 Награда', align: 'right' },
   { key: 'customer', label: 'Заказчик' },
-  { key: 'name', label: 'Название' },
-  { key: 'created_at', label: 'Дата' },
 ];
-
-function fmtDate(s: string | null): string {
-  if (!s) return '—';
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' });
-}
 
 function cellValue(o: Order, key: SortKey): string | number {
   if (key === 'product_name') return o.product_name.toLowerCase();
   if (key === 'customer') return (o.customer || '').toLowerCase();
-  if (key === 'name') return (o.name || '').toLowerCase();
-  if (key === 'created_at') return o.created_at || '';
   return o[key];
 }
 
@@ -39,7 +28,7 @@ export default function OrderCatalogPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('created_at');
+  const [sortKey, setSortKey] = useState<SortKey>('product_name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [zoomImg, setZoomImg] = useState<string | null>(null);
 
@@ -159,8 +148,6 @@ export default function OrderCatalogPage() {
                   <td style={{ textAlign: 'right' }}>×{o.qty}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>🪙 {o.reward_coins}</td>
                   <td>{o.customer || '—'}</td>
-                  <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.name || '—'}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(o.created_at)}</td>
                   <td>
                     {locked ? (
                       <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={o.lock_reason || ''}>

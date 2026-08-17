@@ -44,6 +44,7 @@ class PetCellOut(BaseModel):
     pet_id: int
     pet_name: str
     pet_emoji: str | None
+    pet_image_url: str | None = None
     bonus_description: str | None
 
 
@@ -165,7 +166,8 @@ def _cell_detail(c: FieldCell, db: Session, user: User, plot: Plot | None = None
         if up is not None and up.pet is not None:
             pet = PetCellOut(
                 pet_id=up.pet_id, pet_name=up.pet.name,
-                pet_emoji=up.pet.emoji, bonus_description=up.pet.bonus_description,
+                pet_emoji=up.pet.emoji, pet_image_url=up.pet.image_url,
+                bonus_description=up.pet.bonus_description,
             )
     occupant_name = None
     return CellDetailOut(

@@ -817,12 +817,20 @@ export default function FieldPage() {
                       {cell.kind === 'pet' && (
                         <>
                           {cell.pet?.pet_id ? (
-                            <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.pet.pet_emoji || '🐾'}</div>
+                            cell.pet.pet_image_url ? (
+                              <img
+                                src={mediaUrl(cell.pet.pet_image_url)}
+                                alt=""
+                                style={{ maxWidth: '88%', maxHeight: '82%', objectFit: 'contain', pointerEvents: 'none' }}
+                              />
+                            ) : (
+                              <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.pet.pet_emoji || '🐾'}</div>
+                            )
                           ) : (
                             <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🐾</div>
                           )}
                           {cell.pet?.pet_id && (
-                            <div style={{ fontSize: 9, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                            <div style={{ fontSize: 9, color: '#fff', pointerEvents: 'none', background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '94%' }}>
                               {cell.pet.pet_name}
                             </div>
                           )}
@@ -2264,7 +2272,11 @@ export default function FieldPage() {
             )
           ) : (
             <>
-              <div style={{ fontSize: 40, lineHeight: 1, marginBottom: 6 }}>{petCell.pet.pet_emoji || '🐾'}</div>
+              {petCell.pet.pet_image_url ? (
+                <img src={mediaUrl(petCell.pet.pet_image_url)} alt="" style={{ width: '100%', maxHeight: 160, objectFit: 'contain', marginBottom: 6 }} />
+              ) : (
+                <div style={{ fontSize: 40, lineHeight: 1, marginBottom: 6 }}>{petCell.pet.pet_emoji || '🐾'}</div>
+              )}
               <div style={{ fontWeight: 600, marginBottom: 6 }}>{petCell.pet.pet_name}</div>
               {petCell.pet.bonus_description && (
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{petCell.pet.bonus_description}</div>

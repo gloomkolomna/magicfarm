@@ -472,6 +472,7 @@ export interface PetCell {
   pet_id: number;
   pet_name: string;
   pet_emoji: string | null;
+  pet_image_url: string | null;
   bonus_description: string | null;
 }
 
@@ -811,7 +812,6 @@ export const api = {
 
   // ── Питомцы ──
   userPets: () => client.get<any[]>('/pets').then(r => r.data),
-  settlePet: (petId: number) => client.post('/pets/settle', {pet_id: petId}).then(r => r.data),
   settlePetOnCell: (cellId: number, petId: number) =>
     client.post(`/pets/cells/${cellId}/settle`, { pet_id: petId }).then(r => r.data),
   petsCatalog: () => client.get<Pet[]>('/pets/catalog').then((r) => r.data),

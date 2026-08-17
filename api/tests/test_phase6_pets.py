@@ -100,6 +100,15 @@ def _report_settle(c, pet_id, cell_id=None, amount=1):
 
 def test_settle_pet_on_cell(admin_client):
     fid, cell_id = _make_pet_cell(admin_client)
+    from models import Pet
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        pet = s.query(Pet).filter(Pet.id == 1).first()
+        pet.image_url = "/uploads/pet_dragon.png"
+        s.commit()
+    finally:
+        s.close()
     with make_user_client(3001, "player") as c:
         r = c.post(f"/api/pets/cells/{cell_id}/settle", json={"pet_id": 1})
         assert r.status_code == 201, r.text
@@ -112,6 +121,7 @@ def test_settle_pet_on_cell(admin_client):
         cell = [x for x in detail["cells"] if x["id"] == cell_id][0]
         assert cell["pet"]["pet_id"] == 1
         assert cell["pet"]["pet_name"] == "Дракон Эфир"
+        assert cell["pet"]["pet_image_url"] == "/uploads/pet_dragon.png"
 
 
 def test_settle_pet_on_cell_occupied(admin_client):
