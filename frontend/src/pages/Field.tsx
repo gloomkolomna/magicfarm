@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { api, POTION_INGREDIENT_ICONS as ING_ICON, POTION_INGREDIENT_LABELS as ING_LABEL, potionBonusLabel, type Animal, type BreweryZoneView, type CraftInfo, type CraftSessionInfo, type CrystalCard, type FieldCellDetail, type FieldDetail, type HouseState, type Pet, type Plant, type PlantBed, type Product, type SlotWarehouseItem, type Tent } from '../api/endpoints';
+import { api, POTION_INGREDIENT_ICONS as ING_ICON, POTION_INGREDIENT_LABELS as ING_LABEL, potionBonusLabel, type Animal, type BarnyardCollectResult, type BarnyardTentStorage, type BarnyardWithdrawal, type BreweryZoneView, type CraftInfo, type CraftSessionInfo, type CrystalCard, type FieldCellDetail, type FieldDetail, type HouseState, type Pet, type Plant, type PlantBed, type Product, type SlotWarehouseItem, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import StitchReportForm from '../components/StitchReportForm';
 import Toast from '../components/Toast';
@@ -86,6 +86,14 @@ export default function FieldPage() {
   const [barnyardCell, setBarnyardCell] = useState<FieldCellDetail | null>(null);
   const [barnyardAnimals, setBarnyardAnimals] = useState<Animal[]>([]);
   const [barnyardSel, setBarnyardSel] = useState<number | null>(null);
+  const [barnyardPrepareCards, setBarnyardPrepareCards] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; norm: number } | null>(null);
+  const [barnyardCollect, setBarnyardCollect] = useState<BarnyardCollectResult | null>(null);
+
+  // Склад продукции шатра скотного двора.
+  const [barnyardStorage, setBarnyardStorage] = useState<BarnyardTentStorage | null>(null);
+  const [barnyardWithdrawSel, setBarnyardWithdrawSel] = useState<number | null>(null);
+  const [barnyardWithdrawQty, setBarnyardWithdrawQty] = useState('1');
+  const [activeWithdrawal, setActiveWithdrawal] = useState<BarnyardWithdrawal | null>(null);
 
   // Модалка клетки питомца.
   const [petCell, setPetCell] = useState<FieldCellDetail | null>(null);
@@ -533,6 +541,15 @@ export default function FieldPage() {
   function openBarnyardCell(cell: FieldCellDetail) {
     setBarnyardCell(cell);
     setBarnyardSel(cell.barnyard?.animal_id ?? barnyardAnimals[0]?.id ?? null);
+    setBarnyardPrepareCards(null);
+    setBarnyardCollect(null);
+  }
+
+  async function refreshBarnyardCell(cellId: number) {
+    const fd = await api.fieldDetail(fieldId);
+    setField(fd);
+    const fresh = fd.cells.find((x: FieldCellDetail) => x.id === cellId);
+    if (fresh) setBarnyardCell(fresh);
   }
 
   async function doBarnyardInstall() {
@@ -540,9 +557,56 @@ export default function FieldPage() {
     setBusy(true); setMsg(null);
     try {
       await api.barnyardInstallOnCell(barnyardCell.id, barnyardSel);
-      setMsg('✓ Загон строится!');
-      setBarnyardCell(null);
-      await load(); await refresh();
+      await refreshBarnyardCell(barnyardCell.id);
+      setMsg('✓ Животное помещено! Подготовьте загон.');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  async function doBarnyardPrepare() {
+    if (!barnyardCell || !barnyardCell.barnyard) return;
+    setBusy(true); setMsg(null);
+    try {
+      const res = await api.barnyardPreparePen(barnyardCell.barnyard.slot_id);
+      let cards: { color: string; value: number; is_treasure: boolean }[] = [];
+      if (res.drawn_cards_json) {
+        try { cards = JSON.parse(res.drawn_cards_json); } catch {}
+      }
+      setBarnyardPrepareCards({ cards, norm: res.required });
+      await refreshBarnyardCell(barnyardCell.id);
+      await refresh();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  async function doBarnyardCollect() {
+    if (!barnyardCell?.barnyard) return;
+    setBusy(true); setMsg(null);
+    try {
+      const res = await api.barnyardCollectProduct(barnyardCell.barnyard.slot_id);
+      setBarnyardCollect(res);
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
+  async function reloadBarnyardStorage() {
+    try {
+      setBarnyardStorage(await api.barnyardTentStorage());
+    } catch {
+      setBarnyardStorage(null);
+    }
+  }
+
+  async function doBarnyardWithdraw() {
+    if (barnyardWithdrawSel == null || !barnyardWithdrawQty) return;
+    setBusy(true); setMsg(null);
+    try {
+      const w = await api.barnyardWithdraw(barnyardWithdrawSel, Number(barnyardWithdrawQty));
+      setActiveWithdrawal(w);
+      await reloadBarnyardStorage();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally { setBusy(false); }
@@ -623,6 +687,12 @@ export default function FieldPage() {
       const first = products.find((x) => x.production_kind === t.kind);
       void selectCraftProduct(first ? first.id : null);
       void reloadCraftSessions();
+      if (t.kind === 'barnyard') {
+        setBarnyardWithdrawSel(null);
+        setBarnyardWithdrawQty('1');
+        setActiveWithdrawal(null);
+        void reloadBarnyardStorage();
+      }
     } else {
       setCraftProduct(null);
       setCraftInfo(null);
@@ -760,10 +830,10 @@ export default function FieldPage() {
                       )}
                       {cell.kind === 'barnyard' && (
                         <>
-                          {cell.barnyard && cell.barnyard.animal_id != null && cell.barnyard.status === 'ready' ? (
-                            (cell.barnyard.image_harvested_url || cell.barnyard.image_pen_url) ? (
+                          {cell.barnyard && cell.barnyard.status === 'ready' ? (
+                            cell.barnyard.image_pen_url ? (
                               <img
-                                src={mediaUrl((cell.barnyard.image_harvested_url || cell.barnyard.image_pen_url)!)}
+                                src={mediaUrl(cell.barnyard.image_pen_url)}
                                 alt=""
                                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
                               />
@@ -784,11 +854,8 @@ export default function FieldPage() {
                               {cell.barnyard.accumulated}/{cell.barnyard.required} ❎
                             </div>
                           )}
-                          {cell.barnyard?.status === 'ready' && cell.barnyard.last_die == null && (
+                          {cell.barnyard?.status === 'ready' && (
                             <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 14, color: '#7fff7f', pointerEvents: 'none' }}>✓</div>
-                          )}
-                          {cell.barnyard?.status === 'ready' && cell.barnyard.last_die != null && (
-                            <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 13, pointerEvents: 'none' }}>🧵</div>
                           )}
                         </>
                       )}
@@ -1638,7 +1705,103 @@ export default function FieldPage() {
 
           {tentModal.build_status === 'built' && (
             <>
-              <p style={{ fontSize: 14, color: 'var(--success)', marginBottom: 10 }}>✓ Шатёр построен! Можно крафтить товары.</p>
+              <p style={{ fontSize: 14, color: 'var(--success)', marginBottom: 10 }}>✓ Шатёр построен!</p>
+              {tentModal.kind === 'barnyard' && (
+                <div className="fm-card" style={{ marginBottom: 12 }}>
+                  <strong style={{ display: 'block', marginBottom: 6 }}>📦 Склад продукции скотного двора</strong>
+                  {!barnyardStorage ? (
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Загрузка склада…</div>
+                  ) : barnyardStorage.items.length === 0 && barnyardStorage.pending.length === 0 ? (
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                      Склад пуст. Соберите продукцию с загонов на локации.
+                    </div>
+                  ) : (
+                    <>
+                      {barnyardStorage.items.map((it) => (
+                        <div key={it.product_id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                          <span>{it.product_emoji || '📦'} {it.product_name}</span>
+                          <span className="fm-chip">×{it.qty}</span>
+                        </div>
+                      ))}
+                      {barnyardStorage.pending.length > 0 && (
+                        <>
+                          <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
+                          <label style={{ display: 'block', fontSize: 13, marginBottom: 6 }}>Заборы в работе</label>
+                          {barnyardStorage.pending.map((w) => (
+                            <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 6 }}>
+                              <div style={{ flex: 1, fontSize: 13 }}>
+                                <div>{w.product_emoji || '📦'} {w.product_name} × {w.qty}</div>
+                                <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>норма: {w.required} ❎</div>
+                              </div>
+                              <button className="fm-btn" style={{ padding: '6px 10px', fontSize: 12 }} disabled={busy} onClick={() => setActiveWithdrawal(w)}>
+                                Отчитаться
+                              </button>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      {activeWithdrawal ? (
+                        <div style={{ borderTop: '1px solid var(--border)', margin: '10px 0' }} />
+                      ) : barnyardStorage.items.length > 0 ? (
+                        <>
+                          <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
+                          <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>Что забрать</label>
+                          <select
+                            className="fm-input"
+                            value={barnyardWithdrawSel ?? ''}
+                            onChange={(e) => setBarnyardWithdrawSel(e.target.value ? Number(e.target.value) : null)}
+                          >
+                            <option value="">— выберите —</option>
+                            {barnyardStorage.items.map((it) => (
+                              <option key={it.product_id} value={it.product_id}>{it.product_emoji || '📦'} {it.product_name} (×{it.qty})</option>
+                            ))}
+                          </select>
+                          <label style={{ display: 'block', fontSize: 13, margin: '8px 0 4px' }}>Количество</label>
+                          <input
+                            className="fm-input"
+                            type="number"
+                            min={1}
+                            value={barnyardWithdrawQty}
+                            onChange={(e) => setBarnyardWithdrawQty(e.target.value)}
+                          />
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0' }}>
+                            Норма отшива: {barnyardStorage.norm_per_unit} ❎ × количество
+                          </div>
+                          <button
+                            className="fm-btn"
+                            style={{ width: '100%' }}
+                            disabled={busy || barnyardWithdrawSel == null || Number(barnyardWithdrawQty) < 1}
+                            onClick={doBarnyardWithdraw}
+                          >
+                            🧺 Забрать со склада
+                          </button>
+                        </>
+                      ) : null}
+                      {activeWithdrawal && (
+                        <>
+                          <div className="fm-card" style={{ background: 'var(--bg-secondary)', fontSize: 13, marginBottom: 8 }}>
+                            Забор: {activeWithdrawal.product_emoji || '📦'} {activeWithdrawal.product_name} ×{activeWithdrawal.qty} — норма {activeWithdrawal.required} ❎
+                          </div>
+                          <StitchReportForm
+                            contextType="barnyard_withdraw"
+                            contextId={activeWithdrawal.id}
+                            required={activeWithdrawal.required}
+                            busy={busy}
+                            buttonText="Забрать продукцию"
+                            onDone={async () => {
+                              setMsg('✓ Продукция на общем складе!');
+                              setActiveWithdrawal(null);
+                              await reloadBarnyardStorage();
+                              await load();
+                              await refresh();
+                            }}
+                          />
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
               {craftSessions.filter((cs) => cs.production_kind === tentModal.kind).length > 0 && (
                 <>
                   <label style={{ display: 'block', margin: '0 0 6px', fontSize: 14 }}>Текущие крафты</label>
@@ -1950,12 +2113,12 @@ export default function FieldPage() {
 
       {/* Модалка загона скотного двора */}
       {barnyardCell && (
-        <Modal title="🐄 Скотный двор" onClose={() => setBarnyardCell(null)}>
+        <Modal title="🐄 Загон скотного двора" onClose={() => setBarnyardCell(null)}>
           {!barnyardCell.barnyard || barnyardCell.barnyard.animal_id == null ? (
             <>
               <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
-                Постройте загон: выберите животное — загон появится пустым,
-                а животное заселится после зачёта вышивки.
+                Выберите животное — появится пустой загон. После подготовки и зачёта вышивки
+                животное заселится и начнёт давать продукцию.
               </p>
               {barnyardAnimals.length === 0 ? (
                 <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет доступных животных. Обратитесь к админу.</div>
@@ -1965,19 +2128,60 @@ export default function FieldPage() {
                 </select>
               )}
               <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || barnyardSel == null} onClick={doBarnyardInstall}>
-                🏗 Построить загон
+                🐄 Поместить животное
               </button>
             </>
-          ) : barnyardCell.barnyard.status === 'building' ? (
+          ) : barnyardCell.barnyard.status === 'placed' ? (
             <>
               {barnyardCell.barnyard.image_empty_pen_url ? (
                 <img src={mediaUrl(barnyardCell.barnyard.image_empty_pen_url)} alt="" style={{ width: '100%', maxHeight: 160, objectFit: 'contain', marginBottom: 6 }} />
               ) : (
                 <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6, opacity: 0.7 }}>🏚️</div>
               )}
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>Загон строится</div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{barnyardCell.barnyard.animal_name} · загон не подготовлен</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
+                Нажмите «Подготовить загон» — вытянутся 5 карт кристаллов и появится норма вышивки.
+              </div>
+              <button className="fm-btn" style={{ width: '100%' }} disabled={busy} onClick={doBarnyardPrepare}>
+                🧵 Подготовить загон
+              </button>
+            </>
+          ) : barnyardCell.barnyard.status === 'building' ? (
+            <>
+              {barnyardPrepareCards && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                    {barnyardPrepareCards.cards.map((c, i) => {
+                      const cardImg = crystalCards.find(
+                        (cc) => cc.color === c.color && cc.value === c.value && cc.is_treasure === c.is_treasure
+                      )?.image_url;
+                      return (
+                        <div key={i} style={{ textAlign: 'center', padding: 4, borderRadius: 8, background: 'var(--bg-secondary)', border: '1px solid var(--border)', minWidth: 64 }}>
+                          {cardImg ? (
+                            <img src={mediaUrl(cardImg)} alt="" style={{ width: '22vw', maxWidth: 110, height: 'auto', objectFit: 'contain' }} />
+                          ) : (
+                            <div style={{ fontSize: 30, lineHeight: 1 }}>
+                              {c.is_treasure ? '💎' : c.color === 'green' ? '🟢' : c.color === 'blue' ? '🔵' : '🟣'}
+                            </div>
+                          )}
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{c.is_treasure ? 'Сокровище' : c.value}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p style={{ fontSize: 15, fontWeight: 700, textAlign: 'center', margin: '0 0 10px', color: 'var(--text-accent)' }}>
+                    Норма: {barnyardPrepareCards.norm} ❎
+                  </p>
+                </>
+              )}
+              {barnyardCell.barnyard.image_empty_pen_url ? (
+                <img src={mediaUrl(barnyardCell.barnyard.image_empty_pen_url)} alt="" style={{ width: '100%', maxHeight: 160, objectFit: 'contain', marginBottom: 6 }} />
+              ) : (
+                <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6, opacity: 0.7 }}>🏚️</div>
+              )}
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>Загон готовится</div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
-                Пустой загон — вышейте норму, чтобы заселить животное
+                Вышейте норму и отчитайтесь — животное заселится в загон.
               </div>
               <div className="fm-progress" style={{ marginBottom: 6 }}>
                 <div className="fm-progress-fill" style={{ width: `${barnyardCell.barnyard.required > 0 ? Math.min(100, Math.round((barnyardCell.barnyard.accumulated / barnyardCell.barnyard.required) * 100)) : 0}%` }} />
@@ -1992,23 +2196,8 @@ export default function FieldPage() {
                 required={Math.max(0, barnyardCell.barnyard.required - barnyardCell.barnyard.accumulated)}
                 busy={busy}
                 buttonText="Заселить животное"
-                onDone={async () => { setMsg('✓ Животное в загоне!'); setBarnyardCell(null); await load(); await refresh(); }}
+                onDone={async () => { setMsg('✓ Животное в загоне!'); setBarnyardCell(null); setBarnyardPrepareCards(null); await load(); await refresh(); }}
               />
-            </>
-          ) : barnyardCell.barnyard.last_die != null ? (
-            <>
-              {barnyardCell.barnyard.image_harvested_url || barnyardCell.barnyard.image_pen_url ? (
-                <img src={mediaUrl((barnyardCell.barnyard.image_harvested_url || barnyardCell.barnyard.image_pen_url)!)} alt="" style={{ width: '100%', maxHeight: 160, objectFit: 'contain', marginBottom: 6 }} />
-              ) : (
-                <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6 }}>{barnyardCell.barnyard.animal_emoji || '🐾'}</div>
-              )}
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>{barnyardCell.barnyard.animal_name}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                Идёт производство: норма {barnyardCell.barnyard.required} ❎
-              </div>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Отчитайтесь о вышивке во вкладке «🐄 Скотный двор» — продукция придёт на склад.
-              </p>
             </>
           ) : (
             <>
@@ -2018,8 +2207,20 @@ export default function FieldPage() {
                 <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6 }}>{barnyardCell.barnyard.animal_emoji || '🐾'}</div>
               )}
               <div style={{ fontWeight: 600, marginBottom: 10 }}>{barnyardCell.barnyard.animal_name}</div>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Получение продукции (бросок кубика) — во вкладке «🐄 Скотный двор».
+              <button className="fm-btn" style={{ width: '100%', marginBottom: 10 }} disabled={busy} onClick={doBarnyardCollect}>
+                🧺 Собрать продукцию
+              </button>
+              {barnyardCollect && (
+                <div className="fm-card" style={{ background: 'rgba(127,255,127,0.10)', fontSize: 13, marginBottom: 10 }}>
+                  🎲 Кубик: <strong>{barnyardCollect.die}</strong> — «{barnyardCollect.product_name}» ×{barnyardCollect.qty_added} ушло на склад шатра.
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                    Всего на складе шатра: {barnyardCollect.storage_qty} шт.
+                  </div>
+                </div>
+              )}
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+                Продукция хранится на складе шатра скотного двора. Забрать её на общий склад
+                (и продать через заказы) можно в шатре скотного двора.
               </p>
             </>
           )}

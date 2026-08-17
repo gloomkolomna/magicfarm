@@ -36,10 +36,8 @@ class BarnyardCellOut(BaseModel):
     status: str
     accumulated: int
     required: int
-    last_die: int | None
     image_empty_pen_url: str | None = None
     image_pen_url: str | None = None
-    image_harvested_url: str | None = None
 
 
 class PetCellOut(BaseModel):
@@ -155,10 +153,9 @@ def _cell_detail(c: FieldCell, db: Session, user: User, plot: Plot | None = None
                 animal_name=slot.animal.name if slot.animal else None,
                 animal_emoji=slot.animal.emoji if slot.animal else None,
                 status=slot.status, accumulated=slot.accumulated,
-                required=slot.required, last_die=slot.last_die,
+                required=slot.required,
                 image_empty_pen_url=slot.animal.image_empty_pen_url if slot.animal else None,
                 image_pen_url=slot.animal.image_pen_url if slot.animal else None,
-                image_harvested_url=slot.animal.image_harvested_url if slot.animal else None,
             )
     pet = None
     if c.kind == "pet":

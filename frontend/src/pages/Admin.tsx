@@ -1161,13 +1161,7 @@ export default function AdminPage() {
   }
   async function uploadAnimalPenImage(id: number, file: File) {
     setBusy(true); setMsg(null);
-    try { await api.adminUploadAnimalPenImage(id, file); await load(); setMsg('✓ Загон с животным загружен'); }
-    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
-    finally { setBusy(false); }
-  }
-  async function uploadAnimalImageHarvested(id: number, file: File) {
-    setBusy(true); setMsg(null);
-    try { await api.adminUploadAnimalImageHarvested(id, file); await load(); setMsg('✓ Выращенное животное загружено'); }
+    try { await api.adminUploadAnimalPenImage(id, file); await load(); setMsg('✓ Выращенное (загон с животным) загружено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
@@ -1706,7 +1700,7 @@ export default function AdminPage() {
           )}
 
           {tab === 'animals' && (
-            <CatalogTab title="🐄 Животные" items={shownAnimals} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveAnimal} onDelete={deleteAnimal} onUploadImage={uploadAnimalImage} onUploadImageEmptyPen={uploadAnimalEmptyPenImage} onUploadImagePen={uploadAnimalPenImage} onUploadImageHarvested={uploadAnimalImageHarvested} hideMainImage emptyText={qActive ? NO_MATCH : undefined}
+            <CatalogTab title="🐄 Животные" items={shownAnimals} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={saveAnimal} onDelete={deleteAnimal} onUploadImage={uploadAnimalImage} onUploadImageEmptyPen={uploadAnimalEmptyPenImage} onUploadImagePen={uploadAnimalPenImage} hideMainImage emptyText={qActive ? NO_MATCH : undefined}
               fields={[{ key: 'name', label: 'Название', ph: 'Единорог' }, { key: 'product_name', label: 'Продукция', ph: 'Рог единорога' }]}
             />
           )}
@@ -2232,13 +2226,13 @@ function CatalogTab({
             )}
             {onUploadImageEmptyPen && (
               <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
-                🏚️ Пустой загон
+                🏚️ Загон
                 <input type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0], onUploadImageEmptyPen!)} />
               </label>
             )}
             {onUploadImagePen && (
               <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
-                🐄 Загон с животным
+                🐄 Выращенное
                 <input type="file" accept="image/*" hidden onChange={(e) => handleFile(e.target.files?.[0], onUploadImagePen!)} />
               </label>
             )}

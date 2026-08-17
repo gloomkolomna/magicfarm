@@ -110,6 +110,7 @@ class StandardRequest(BaseModel):
 class MineRequest(BaseModel):
     norms: NormsBlock
     dice_norm: int
+    animal_product_norm: int | None = None
     study_norms: LevelNorms | None = None
     production_norms: LevelNorms | None = None
 
@@ -118,6 +119,7 @@ class MineOut(BaseModel):
     onboarding_done: bool
     norms: dict
     dice_norm: int
+    animal_product_norm: int
     study_norms: dict
     production_norms: dict
 
@@ -212,11 +214,17 @@ def get_my_norms(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    from routes.settings import _PRODUCTION_NORM_ATTRS, _STUDY_NORM_ATTRS
+    from routes.settings import (
+        _PRODUCTION_NORM_ATTRS, _STUDY_NORM_ATTRS,
+        DEFAULT_ANIMAL_PRODUCT_NORM,
+    )
     return {
         "onboarding_done": bool(user.onboarding_done),
         "norms": _user_norms(db, user),
         "dice_norm": user.dice_norm if user.dice_norm else DEFAULT_DICE_NORM,
+        "animal_product_norm": (
+            user.animal_product_norm if user.animal_product_norm else DEFAULT_ANIMAL_PRODUCT_NORM
+        ),
         "study_norms": _user_level_norms(user, _STUDY_NORM_ATTRS),
         "production_norms": _user_level_norms(user, _PRODUCTION_NORM_ATTRS),
     }
@@ -228,14 +236,22 @@ def set_my_norms(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    from routes.settings import _PRODUCTION_NORM_ATTRS, _STUDY_NORM_ATTRS
+    from routes.settings import (
+        _PRODUCTION_NORM_ATTRS, _STUDY_NORM_ATTRS,
+        DEFAULT_ANIMAL_PRODUCT_NORM,
+    )
     norms = _validate_norms(req.norms.model_dump())
     dice = _validate_dice_norm(req.dice_norm)
+    animal_product = (
+        _validate_dice_norm(req.animal_product_norm) if req.animal_product_norm is not None else None
+    )
     study = _validate_level_norms(req.study_norms.model_dump() if req.study_norms else None)
     production = _validate_level_norms(req.production_norms.model_dump() if req.production_norms else None)
     _replace_user_norms(db, user.vk_id, norms)
     u = db.query(User).filter(User.vk_id == user.vk_id).first()
     u.dice_norm = dice
+    if animal_product is not None:
+        u.animal_product_norm = animal_product
     _apply_level_norms(u, _STUDY_NORM_ATTRS, study)
     _apply_level_norms(u, _PRODUCTION_NORM_ATTRS, production)
     u.onboarding_done = True
@@ -244,6 +260,9 @@ def set_my_norms(
         "onboarding_done": True,
         "norms": norms,
         "dice_norm": dice,
+        "animal_product_norm": (
+            u.animal_product_norm if u.animal_product_norm else DEFAULT_ANIMAL_PRODUCT_NORM
+        ),
         "study_norms": study,
         "production_norms": production,
     }

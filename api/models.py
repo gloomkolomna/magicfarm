@@ -71,6 +71,7 @@ class User(Base):
     unlocked_plot_level = Column(Integer, nullable=False, default=1, server_default="1")
     unlocked_garden_level = Column(Integer, nullable=False, default=0, server_default="0")
     dice_norm = Column(Integer, nullable=True)
+    animal_product_norm = Column(Integer, nullable=True)
     study_norm_l1 = Column(Integer, nullable=True)
     study_norm_l2 = Column(Integer, nullable=True)
     study_norm_l3 = Column(Integer, nullable=True)
@@ -622,6 +623,35 @@ class BarnyardSlot(Base):
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     animal = relationship("Animal")
+
+
+class BarnyardStorage(Base):
+    __tablename__ = "barnyard_storage"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    qty = Column(Integer, nullable=False, default=0, server_default="0")
+
+    product = relationship("Product")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "product_id", name="uq_barnyard_storage_user_product"),
+    )
+
+
+class BarnyardWithdrawal(Base):
+    __tablename__ = "barnyard_withdrawals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    qty = Column(Integer, nullable=False)
+    required = Column(Integer, nullable=False, default=0, server_default="0")
+    status = Column(String, nullable=False, default="pending", server_default="pending")
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    product = relationship("Product")
 
 
 class GameMedia(Base):

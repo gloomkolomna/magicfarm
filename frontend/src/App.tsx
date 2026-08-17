@@ -32,7 +32,6 @@ const FieldsPage = lazyPage(() => import('./pages/Fields'));
 const FieldPage = lazyPage(() => import('./pages/Field'));
 const InventoryPage = lazyPage(() => import('./pages/Inventory'));
 const LibraryPage = lazyPage(() => import('./pages/Library'));
-const BarnyardPage = lazyPage(() => import('./pages/Barnyard'));
 const PetsPage = lazyPage(() => import('./pages/PetsPage'));
 const PotionsPage = lazyPage(() => import('./pages/PotionsPage'));
 const BonusesPage = lazyPage(() => import('./pages/Bonuses'));
@@ -106,7 +105,6 @@ function App() {
           <Route path="/field/:id" element={<FieldPage />} />
           <Route path="/inventory" element={<MiniAppShell><InventoryPage /></MiniAppShell>} />
           <Route path="/library" element={<MiniAppShell><LibraryPage /></MiniAppShell>} />
-          <Route path="/barnyard" element={<MiniAppShell><BarnyardPage /></MiniAppShell>} />
           <Route path="/pets" element={<MiniAppShell><PetsPage /></MiniAppShell>} />
           <Route path="/potions" element={<MiniAppShell><PotionsPage /></MiniAppShell>} />
           <Route path="/bonuses" element={<MiniAppShell><BonusesPage /></MiniAppShell>} />

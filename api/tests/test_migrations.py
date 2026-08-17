@@ -151,7 +151,7 @@ def test_migration_new_columns_exist(migrated_db):
     assert "last_die" in house_cols
 
     user_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(users)")]
-    for col in ("dice_norm", "study_norm_l1", "study_norm_l2", "study_norm_l3",
+    for col in ("dice_norm", "animal_product_norm", "study_norm_l1", "study_norm_l2", "study_norm_l3",
                 "production_norm_l1", "production_norm_l2", "production_norm_l3"):
         assert col in user_cols
 
@@ -166,6 +166,12 @@ def test_migration_new_columns_exist(migrated_db):
 
     potion_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(user_potions)")]
     assert "used" in potion_cols
+
+    storage_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(barnyard_storage)")]
+    assert {"user_id", "product_id", "qty"} <= set(storage_cols)
+
+    withdrawal_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(barnyard_withdrawals)")]
+    assert {"user_id", "product_id", "qty", "required", "status"} <= set(withdrawal_cols)
 
 
 def test_migration_seeds_customers(migrated_db):

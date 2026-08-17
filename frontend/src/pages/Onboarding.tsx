@@ -29,6 +29,7 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
   const { refresh } = useSession();
   const [norms, setNorms] = useState<CrystalNorms>(emptyNorms());
   const [diceNorm, setDiceNorm] = useState<number | ''>('');
+  const [animalProductNorm, setAnimalProductNorm] = useState<number | ''>('');
   const [studyNorms, setStudyNorms] = useState<{ level1: number | ''; level2: number | ''; level3: number | '' }>({ level1: '', level2: '', level3: '' });
   const [productionNorms, setProductionNorms] = useState<{ level1: number | ''; level2: number | ''; level3: number | '' }>({ level1: '', level2: '', level3: '' });
   const [busy, setBusy] = useState(false);
@@ -40,6 +41,7 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
       .then(([std, mine]) => {
         setNorms(mine.onboarding_done ? cloneNorms(mine.norms) : cloneNorms(std));
         setDiceNorm(mine.dice_norm ?? 200);
+        setAnimalProductNorm(mine.animal_product_norm ?? 100);
         const toField = (v: number | null) => (v == null ? '' : v);
         setStudyNorms({
           level1: toField(mine.study_norms?.level1),
@@ -81,6 +83,7 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
       .setMyCrystalNorms(
         norms,
         Number(diceNorm) || 200,
+        Number(animalProductNorm) || undefined,
         {
           level1: toNum(studyNorms.level1),
           level2: toNum(studyNorms.level2),
@@ -191,8 +194,19 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
                 style={{ width: 100, textAlign: 'center' }}
               />
             </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>🐄 Норма продукции скотного двора</label>
+              <input
+                className="fm-input"
+                type="number"
+                min={1}
+                value={animalProductNorm}
+                onChange={(e) => setAnimalProductNorm(e.target.value === '' ? '' : Number(e.target.value))}
+                style={{ width: 100, textAlign: 'center' }}
+              />
+            </div>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, flex: 1, minWidth: 180 }}>
-              Норма для кубиков = это значение × выпавшая грань (дом ведьмы, зверо-двор).
+              Норма для кубиков = это значение × выпавшая грань (дом ведьмы). Норма продукции скотного двора — крестиков за 1 единицу при заборе продукции со склада шатра.
             </p>
           </div>
 

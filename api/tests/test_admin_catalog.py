@@ -353,7 +353,7 @@ def test_product_catalog_requires_admin(player_client):
     assert res.status_code == 403
 
 
-def test_upload_animal_image_harvested(admin_client, uploads_tmp):
+def test_upload_animal_image_harvested_removed(admin_client, uploads_tmp):
     from PIL import Image
     buf = io.BytesIO()
     Image.new("RGB", (200, 200), (120, 80, 40)).save(buf, format="PNG")
@@ -361,10 +361,7 @@ def test_upload_animal_image_harvested(admin_client, uploads_tmp):
         "/api/admin/catalog/animals/1/image-harvested",
         files={"image": ("h.png", io.BytesIO(buf.getvalue()), "image/png")},
     )
-    assert res.status_code == 200
-    data = res.json()
-    assert data["image_harvested_url"] is not None
-    assert data["image_harvested_url"].startswith("/api/uploads/animal_")
+    assert res.status_code == 404
 
 
 # ═══════════════════════════════════════════════════════════════

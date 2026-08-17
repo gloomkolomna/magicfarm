@@ -10,7 +10,7 @@ from deps import get_current_user, require_role
 from models import StitchReport, User
 from routes.settings import get_auto_credit
 from services.achievements import check_and_award
-from services.pet_bonuses import apply_pet_bonus_animal_product, apply_pet_bonus_craft
+from services.pet_bonuses import apply_pet_bonus_craft
 from services.potion_bonuses import consume_potion, is_potion_active, product_bonus_code
 from services.uploads import remove_upload, save_upload
 
@@ -75,26 +75,9 @@ def _process_context(report: "StitchReport", db: Session) -> None:
                 prod_inv.qty = (prod_inv.qty or 0) + 1
                 consume_potion(cs.user_id, bonus_code, db)
             db.commit()
-    elif report.context_type == "animal_produce" and report.context_id is not None:
-        from models import BarnyardSlot, Inventory, Product
-        slot = db.query(BarnyardSlot).filter(
-            BarnyardSlot.id == report.context_id, BarnyardSlot.user_id == report.user_id
-        ).first()
-        if slot is not None and slot.animal_id is not None:
-            product = db.query(Product).filter(Product.animal_id == slot.animal_id).first()
-            if product is not None:
-                bonus = apply_pet_bonus_animal_product(report.user_id, db)
-                die = slot.last_die or 1
-                qty = die + bonus
-                inv = db.query(Inventory).filter(
-                    Inventory.user_id == report.user_id, Inventory.product_id == product.id
-                ).first()
-                if inv is None:
-                    inv = Inventory(user_id=report.user_id, product_id=product.id, qty=0)
-                    db.add(inv)
-                inv.qty = (inv.qty or 0) + qty
-                slot.last_die = None
-                db.commit()
+    elif report.context_type == "barnyard_withdraw" and report.context_id is not None:
+        from routes.barnyard import complete_withdrawal
+        complete_withdrawal(report.user_id, report.context_id, db)
     elif report.context_type == "tent_build" and report.context_id is not None:
         from models import PRODUCTION_NAMES, Production, Tent, TentBuild
         tb = db.query(TentBuild).filter(
@@ -288,27 +271,24 @@ def create_report(
                 detail=f"Недостаточно крестиков. Норма постройки загона: {remaining}, вы указали {amount}",
             )
 
-    if context_type == "animal_produce" and context_id is not None:
-        from models import BarnyardSlot
-        slot = db.query(BarnyardSlot).filter(
-            BarnyardSlot.id == context_id, BarnyardSlot.user_id == user.vk_id
+    if context_type == "barnyard_withdraw" and context_id is not None:
+        from models import BarnyardWithdrawal
+        w = db.query(BarnyardWithdrawal).filter(
+            BarnyardWithdrawal.id == context_id, BarnyardWithdrawal.user_id == user.vk_id
         ).first()
-        if slot is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Загон не найден")
-        if slot.last_die is None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Сначала получите продукцию (бросок кубика)",
-            )
-        if amount < (slot.required or 0):
+        if w is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка на забор не найдена")
+        if w.status != "pending":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заявка уже выполнена")
+        if amount < (w.required or 0):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Недостаточно крестиков. Норма продукции: {slot.required}, вы указали {amount}",
+                detail=f"Недостаточно крестиков. Норма забора: {w.required}, вы указали {amount}",
             )
 
     if context_type is not None and context_type not in (
         "plant_grow", "recipe_study", "production",
-        "animal_build", "animal_produce", "tent_build", "pet_settle",
+        "animal_build", "barnyard_withdraw", "tent_build", "pet_settle",
         "house_material", "house_build",
     ):
         raise HTTPException(

@@ -102,7 +102,6 @@ class AnimalOut(BaseModel):
     image_url: str | None
     image_empty_pen_url: str | None
     image_pen_url: str | None
-    image_harvested_url: str | None
 
 
 BONUS_KINDS: dict[str, str] = {
@@ -185,7 +184,6 @@ def _animal_out(a: Animal) -> AnimalOut:
         image_url=a.image_url,
         image_empty_pen_url=a.image_empty_pen_url,
         image_pen_url=a.image_pen_url,
-        image_harvested_url=a.image_harvested_url,
     )
 
 
@@ -954,23 +952,6 @@ def upload_animal_pen_image(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Животное не найдено")
     remove_upload(a.image_pen_url)
     a.image_pen_url = save_upload(image, f"animal_pen_{animal_id}", max_size=400)
-    db.commit()
-    db.refresh(a)
-    return _animal_out(a)
-
-
-@router.put("/animals/{animal_id}/image-harvested", response_model=AnimalOut)
-def upload_animal_image_harvested(
-    animal_id: int,
-    image: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin")),
-):
-    a = db.query(Animal).filter(Animal.id == animal_id).first()
-    if a is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Животное не найдено")
-    remove_upload(a.image_harvested_url)
-    a.image_harvested_url = save_upload(image, f"animal_harvested_{animal_id}", max_size=400)
     db.commit()
     db.refresh(a)
     return _animal_out(a)

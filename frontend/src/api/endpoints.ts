@@ -197,6 +197,7 @@ export interface CrystalNormsMine {
   onboarding_done: boolean;
   norms: CrystalNorms;
   dice_norm: number;
+  animal_product_norm: number;
   study_norms: LevelNorms;
   production_norms: LevelNorms;
 }
@@ -211,7 +212,6 @@ export interface Animal {
   image_url: string | null;
   image_empty_pen_url: string | null;
   image_pen_url: string | null;
-  image_harvested_url: string | null;
 }
 
 export interface Pet {
@@ -460,10 +460,8 @@ export interface BarnyardCell {
   status: string;
   accumulated: number;
   required: number;
-  last_die: number | null;
   image_empty_pen_url: string | null;
   image_pen_url: string | null;
-  image_harvested_url: string | null;
 }
 
 export interface PetCell {
@@ -587,24 +585,48 @@ export interface BarnyardPen {
   animal_id: number | null;
   animal_name: string | null;
   animal_emoji: string | null;
-  status: 'empty' | 'building' | 'ready';
+  status: 'empty' | 'placed' | 'building' | 'ready';
   accumulated: number;
   required: number;
-  last_die: number | null;
   drawn_cards_json: string | null;
   opening_order: number;
   cell_id: number | null;
   image_empty_pen_url: string | null;
   image_pen_url: string | null;
-  image_harvested_url: string | null;
 }
 
-export interface BarnyardProduceResult {
+export interface BarnyardCollectResult {
   slot_id: number;
   die: number;
+  qty_added: number;
+  product_id: number;
+  product_name: string;
+  storage_qty: number;
+}
+
+export interface BarnyardStorageItem {
+  product_id: number;
+  product_name: string;
+  product_emoji: string | null;
+  product_image_url: string | null;
+  qty: number;
+}
+
+export interface BarnyardWithdrawal {
+  id: number;
+  product_id: number;
+  product_name: string;
+  product_emoji: string | null;
+  qty: number;
   required: number;
-  animal_name: string;
-  product_coins: number;
+  status: string;
+  created_at: string | null;
+}
+
+export interface BarnyardTentStorage {
+  items: BarnyardStorageItem[];
+  pending: BarnyardWithdrawal[];
+  norm_per_unit: number;
 }
 
 export interface GameMedia {
@@ -771,12 +793,14 @@ export const api = {
   setMyCrystalNorms: (
     norms: CrystalNorms,
     diceNorm: number,
+    animalProductNorm?: number,
     studyNorms?: { level1: number | null; level2: number | null; level3: number | null },
     productionNorms?: { level1: number | null; level2: number | null; level3: number | null },
   ) =>
     client.put<CrystalNormsMine>('/crystal-norms/mine', {
       norms,
       dice_norm: diceNorm,
+      animal_product_norm: animalProductNorm,
       study_norms: studyNorms,
       production_norms: productionNorms,
     }).then((r) => r.data),
@@ -976,11 +1000,6 @@ export const api = {
     form.append('image', file);
     return client.put<Animal>(`/admin/catalog/animals/${id}/image-pen`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
-  adminUploadAnimalImageHarvested: (id: number, file: File) => {
-    const form = new FormData();
-    form.append('image', file);
-    return client.put<Animal>(`/admin/catalog/animals/${id}/image-harvested`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
-  },
   adminUploadPetImage: (id: number, file: File) => {
     const form = new FormData();
     form.append('image', file);
@@ -1114,15 +1133,16 @@ export const api = {
 
   // ── Скотный двор ──
   animalsAvailable: () => client.get<Animal[]>('/animals').then((r) => r.data),
-  barnyardPens: () => client.get<BarnyardPen[]>('/animals/pens').then((r) => r.data),
-  barnyardInstall: (slotId: number, animalId: number) =>
-    client.post<BarnyardPen>(`/animals/pens/${slotId}/install`, { animal_id: animalId }).then((r) => r.data),
   barnyardInstallOnCell: (cellId: number, animalId: number) =>
     client.post<BarnyardPen>(`/animals/cells/${cellId}/install`, { animal_id: animalId }).then((r) => r.data),
-  barnyardInvest: (slotId: number, amount: number) =>
-    client.post(`/animals/pens/${slotId}/invest`, { amount }).then((r) => r.data),
-  barnyardProduce: (slotId: number) =>
-    client.post<BarnyardProduceResult>(`/animals/pens/${slotId}/produce`).then((r) => r.data),
+  barnyardPreparePen: (slotId: number) =>
+    client.post<BarnyardPen>(`/animals/pens/${slotId}/prepare`).then((r) => r.data),
+  barnyardCollectProduct: (slotId: number) =>
+    client.post<BarnyardCollectResult>(`/animals/pens/${slotId}/produce`).then((r) => r.data),
+  barnyardTentStorage: () =>
+    client.get<BarnyardTentStorage>('/animals/tents/storage').then((r) => r.data),
+  barnyardWithdraw: (productId: number, qty: number) =>
+    client.post<BarnyardWithdrawal>('/animals/tents/withdraw', { product_id: productId, qty }).then((r) => r.data),
 
   // ── Карты-локации: игрок ──
   fields: () => client.get<FieldInfo[]>('/fields').then((r) => r.data),

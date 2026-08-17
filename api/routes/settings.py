@@ -53,6 +53,9 @@ DEFAULT_CARD_NORMS: dict[str, int] = {"green": 10, "blue": 20, "violet": 30}
 # Личная норма кубика игрока (за 1 точку); фолбэк, если не задана.
 DEFAULT_DICE_NORM = 200
 
+# Личная норма продукции скотного двора (крестиков за 1 единицу при заборе со склада шатра); фолбэк, если не задана.
+DEFAULT_ANIMAL_PRODUCT_NORM = 100
+
 
 # Стандарт норм кристаллов, задаваемый админом (JSON в настройке crystal_standard).
 # Структура: {color -> {"norm": база за 1 кристалл, "treasure": норма сокровища}}.
@@ -190,6 +193,13 @@ def get_dice_norm(user: User) -> int:
     if user.dice_norm is None:
         return DEFAULT_DICE_NORM
     return max(1, min(100000, int(user.dice_norm)))
+
+
+def get_animal_product_norm(user: User) -> int:
+    """Личная норма продукции скотного двора (крестиков за 1 единицу при заборе со склада шатра)."""
+    if user.animal_product_norm is None:
+        return DEFAULT_ANIMAL_PRODUCT_NORM
+    return max(1, min(100000, int(user.animal_product_norm)))
 
 
 _STUDY_NORM_ATTRS = {1: "study_norm_l1", 2: "study_norm_l2", 3: "study_norm_l3"}

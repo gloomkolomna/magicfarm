@@ -433,6 +433,7 @@ def restart_player(
     target.unlocked_garden_level = 0
     target.onboarding_done = False
     target.dice_norm = None
+    target.animal_product_norm = None
     target.study_norm_l1 = None
     target.study_norm_l2 = None
     target.study_norm_l3 = None
