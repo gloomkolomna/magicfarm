@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, potionBonusLabel, cauldronMaterialFor, CAULDRON_MATERIAL_LABELS, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type SlotWarehouseItem, type PotionRecipe } from '../api/endpoints';
+import { api, potionBonusLabel, cauldronMaterialFor, CAULDRON_MATERIAL_LABELS, POTION_INGREDIENT_ICONS as INGREDIENT_ICON, POTION_INGREDIENT_LABELS as INGREDIENT_LABEL, type Cauldron, type PotionRecipe } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
 import SpritePedestal from '../components/SpritePedestal';
@@ -26,25 +26,16 @@ const CAULDRON_STATUS: Record<string, { label: string; color: string }> = {
 };
 
 export default function PotionsPage() {
-  const { refresh, loading: sessionLoading } = useSession();
+  const { loading: sessionLoading } = useSession();
   const [recipes, setRecipes] = useState<PotionRecipe[]>([]);
   const [cauldron, setCauldron] = useState<Cauldron | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const [warehouseOpen, setWarehouseOpen] = useState(false);
-  const [warehouseSlot, setWarehouseSlot] = useState<number | null>(null);
-  const [warehouseKind, setWarehouseKind] = useState<string | null>(null);
-  const [warehouseItems, setWarehouseItems] = useState<SlotWarehouseItem[]>([]);
-  const [warehouseLoading, setWarehouseLoading] = useState(false);
-
   const [levelPage, setLevelPage] = useState(0);
   const [zoomedImg, setZoomedImg] = useState<string | null>(null);
   const [cauldronImages, setCauldronImages] = useState<Record<string, string | null>>({});
-  const [brewVideoUrl, setBrewVideoUrl] = useState<string | null>(null);
-  const [brewVideoOpen, setBrewVideoOpen] = useState(false);
-  const [pendingBrewMsg, setPendingBrewMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const materials = ['tin', 'silver', 'gold'];
@@ -58,12 +49,6 @@ export default function PotionsPage() {
         }
       }),
     ).then((entries) => setCauldronImages(Object.fromEntries(entries)));
-  }, []);
-
-  useEffect(() => {
-    api.gameMediaByCode('potion_brew').then((gm) => {
-      if (gm?.url) setBrewVideoUrl(mediaUrl(gm.url));
-    }).catch(() => {});
   }, []);
 
   const load = useCallback(async () => {
@@ -105,89 +90,6 @@ export default function PotionsPage() {
     }
   }
 
-  async function openWarehouse(slotIndex: number, itemKind: string) {
-    if (!cauldron) return;
-    setWarehouseSlot(slotIndex);
-    setWarehouseKind(itemKind);
-    setWarehouseOpen(true);
-    setWarehouseLoading(true);
-    try {
-      const items = await api.cauldronSlotWarehouse(cauldron.id, slotIndex);
-      setWarehouseItems(items);
-    } catch {
-      setWarehouseItems([]);
-    } finally {
-      setWarehouseLoading(false);
-    }
-  }
-
-  async function selectWarehouseItem(itemKind: string, itemId: number) {
-    if (warehouseSlot == null || !cauldron) return;
-    setBusy(true);
-    setMsg(null);
-    try {
-      const c = await api.fillCauldronSlot(cauldron.id, warehouseSlot, itemKind, itemId);
-      setCauldron(c);
-      setWarehouseOpen(false);
-      setWarehouseSlot(null);
-      setWarehouseKind(null);
-    } catch (e: any) {
-      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function clearSlot(slotIndex: number) {
-    if (!cauldron) return;
-    setBusy(true);
-    setMsg(null);
-    try {
-      const c = await api.clearCauldronSlot(cauldron.id, slotIndex);
-      setCauldron(c);
-    } catch (e: any) {
-      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function brew() {
-    if (!cauldron) return;
-    setBusy(true);
-    setMsg(null);
-    let potion;
-    try {
-      potion = await api.brewCauldron(cauldron.id);
-    } catch (e: any) {
-      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-      setBusy(false);
-      return;
-    }
-    setBusy(false);
-    setCauldron(null);
-    const brewed = recipes.find((r) => r.id === potion.recipe_id);
-    const okMsg = `✓ Зелье сварено! Бонус: ${potionBonusLabel(brewed?.bonus_code) || '—'} — активируйте на вкладке «Бонусы»`;
-    if (brewVideoUrl) {
-      setPendingBrewMsg(okMsg);
-      setBrewVideoOpen(true);
-    } else {
-      setMsg(okMsg);
-      await refresh();
-    }
-  }
-
-  function endBrewVideo() {
-    setBrewVideoOpen(false);
-    if (pendingBrewMsg) {
-      setMsg(pendingBrewMsg);
-      setPendingBrewMsg(null);
-    }
-    refresh();
-  }
-
-  const allSlotsFilled = cauldron && cauldron.slots.length === cauldron.capacity && cauldron.slots.every((s) => s.item_id);
-
   const sortedLevels = Object.keys(groupedByLevel).sort((a, b) => Number(a) - Number(b));
   const totalLevelPages = sortedLevels.length;
   const safeLevelPage = Math.max(0, Math.min(levelPage, Math.max(0, totalLevelPages - 1)));
@@ -226,7 +128,7 @@ export default function PotionsPage() {
               <div className="fm-grid" style={{ gridTemplateColumns: `repeat(${cauldron.capacity}, 1fr)` }}>
                 {Array.from({ length: cauldron.capacity }).map((_, i) => {
                   const slot = cauldron.slots.find((s) => s.slot_index === i);
-                  const filled = slot && slot.item_id;
+                  const filled = !!slot && slot.item_id != null;
                   const recipe = recipes.find((r) => r.id === cauldron.recipe_id);
                   const slotKind = recipe?.ingredient_slots?.[i] || 'plant';
 
@@ -236,39 +138,36 @@ export default function PotionsPage() {
                       className="fm-card"
                       style={{
                         textAlign: 'center',
-                        cursor: filled ? 'pointer' : 'pointer',
                         background: filled ? 'rgba(111,174,74,0.18)' : 'rgba(255,255,255,0.04)',
-                        position: 'relative',
-                      }}
-                      onClick={() => {
-                        if (filled) {
-                          clearSlot(i);
-                        } else {
-                          openWarehouse(i, slotKind);
-                        }
                       }}
                     >
-                      <div style={{ fontSize: 24, marginBottom: 2 }}>
-                        {filled ? '✅' : INGREDIENT_ICON[slotKind] || '❓'}
-                      </div>
+                      {filled && slot.item_image ? (
+                        <img src={mediaUrl(slot.item_image)} alt="" style={{ height: 40, maxWidth: '100%', objectFit: 'contain', marginBottom: 2 }} />
+                      ) : (
+                        <div style={{ fontSize: 24, marginBottom: 2 }}>
+                          {filled ? (slot.item_emoji || '✅') : INGREDIENT_ICON[slotKind] || '❓'}
+                        </div>
+                      )}
                       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        {filled ? 'Нажатие очистит' : INGREDIENT_LABEL[slotKind] || slotKind}
+                        {filled ? (slot.item_name || 'Загружено') : (INGREDIENT_LABEL[slotKind] || slotKind)}
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              {allSlotsFilled && (
-                <button
-                  className="fm-btn"
-                  style={{ width: '100%', marginTop: 12 }}
-                  disabled={busy}
-                  onClick={brew}
-                >
-                  🧪 Сварить зелье
-                </button>
-              )}
+              {(() => {
+                const recipe = recipes.find((r) => r.id === cauldron.recipe_id);
+                if (!recipe) return null;
+                return (
+                  <div style={{ marginTop: 10, fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                    <div style={{ color: 'var(--accent-warm)', fontWeight: 600 }}>🪙 Награда: {recipe.reward_coins}</div>
+                    {recipe.bonus_code && (
+                      <div style={{ color: '#c9a6f2', marginTop: 4 }}>⚡ Бонус: {potionBonusLabel(recipe.bonus_code)}</div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ) : null}
 
@@ -370,59 +269,6 @@ export default function PotionsPage() {
           <img src={zoomedImg} alt="" style={{ maxWidth: '90vw', maxHeight: '80vh', borderRadius: 10 }} />
         </div>
       )}
-
-      {brewVideoOpen && brewVideoUrl && (
-        <Modal title="🧪 Варка зелья" onClose={endBrewVideo}>
-          <video
-            src={brewVideoUrl}
-            autoPlay
-            muted
-            playsInline
-            style={{ width: '100%', maxHeight: '55vh', borderRadius: 8 }}
-            onEnded={endBrewVideo}
-            onError={endBrewVideo}
-          />
-          <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ marginTop: 6 }} onClick={endBrewVideo}>
-            Пропустить видео
-          </button>
-        </Modal>
-      )}
-
-      {warehouseOpen && (
-        <Modal title={warehouseKind ? `Выбрать: ${INGREDIENT_LABEL[warehouseKind] || warehouseKind}` : 'Склад'} onClose={() => { setWarehouseOpen(false); setWarehouseSlot(null); setWarehouseKind(null); }}>
-          {warehouseLoading ? (
-            <div style={{ color: 'var(--text-muted)' }}>Загрузка склада…</div>
-          ) : warehouseItems.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)' }}>Нет подходящих предметов на складе.</div>
-          ) : (
-            <div className="fm-grid">
-              {warehouseItems.map((item) => (
-                <div
-                  key={item.item_id}
-                  className="fm-card fm-rise"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => selectWarehouseItem(item.item_kind, item.item_id)}
-                >
-                  {item.item_image ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <img src={mediaUrl(item.item_image)} alt="" style={{ height: 44, maxWidth: 60, objectFit: 'contain', flexShrink: 0 }} />
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.item_name}</div>
-                        <span className="fm-chip">×{item.qty}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>{item.item_emoji} {item.item_name}</span>
-                      <span className="fm-chip">×{item.qty}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </Modal>
-      )}
     </div>
   );
 }
@@ -460,26 +306,3 @@ function CauldronView({ material, imageUrl, height }: { material: string; imageU
   );
 }
 
-function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 60,
-        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-      }}
-    >
-      <div
-        className="fm-card fm-rise"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 'calc(var(--shell-max-width) * 0.767)', maxHeight: '85vh', overflowY: 'auto' }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <h2 style={{ margin: 0 }}>{title}</h2>
-          <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={onClose}>✕</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}

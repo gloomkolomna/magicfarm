@@ -66,6 +66,21 @@ def test_fill_slot(admin_client):
         assert r.json()["status"] == "filling"
 
 
+def test_fill_slot_returns_item_details(admin_client):
+    _seed_plant_inventory(123, 1, 5)
+    with make_user_client(123, "player") as c:
+        r = c.post("/api/potions/cauldrons", json={"recipe_id": 1})
+        cid = r.json()["id"]
+        assert r.json()["slots"][1]["item_name"] is None
+        r = c.post(f"/api/potions/cauldrons/{cid}/slot/0", json={"item_kind": "plant", "item_id": 1})
+        assert r.status_code == 200
+        slot = r.json()["slots"][0]
+        assert slot["item_id"] == 1
+        assert slot["item_name"]
+        assert slot["item_emoji"]
+        assert "item_image" in slot
+
+
 def test_clear_slot(admin_client):
     _seed_plant_inventory(123, 1, 5)
     with make_user_client(123, "player") as c:

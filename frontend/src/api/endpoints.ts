@@ -132,7 +132,10 @@ export interface PotionRecipeCreate {
 export interface CauldronSlot {
   slot_index: number;
   item_type: string;
-  item_id: number;
+  item_id: number | null;
+  item_name: string | null;
+  item_emoji: string | null;
+  item_image: string | null;
 }
 
 export interface Cauldron {

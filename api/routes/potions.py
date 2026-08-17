@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_role
-from models import Cauldron, CauldronSlot, Inventory, PotionRecipe, User, UserPotion
+from models import Cauldron, CauldronSlot, Inventory, Plant, PotionRecipe, Product, User, UserPotion
 from services.achievements import check_and_award
 from services.potion_bonuses import CONDITIONAL_BONUSES, INSTANT_BONUSES
 from services.uploads import remove_upload, save_upload
@@ -195,7 +195,24 @@ def get_cauldron(
 def _cauldron_detail(c: Cauldron, db: Session) -> CauldronOut:
     recipe = db.query(PotionRecipe).filter(PotionRecipe.id == c.recipe_id).first() if c.recipe_id else None
     slots = db.query(CauldronSlot).filter(CauldronSlot.cauldron_id == c.id).order_by(CauldronSlot.slot_index).all()
-    slot_data = [{"slot_index": s.slot_index, "item_type": s.item_type, "item_id": s.item_id} for s in slots]
+    slot_data = []
+    for s in slots:
+        d = {"slot_index": s.slot_index, "item_type": s.item_type, "item_id": s.item_id,
+             "item_name": None, "item_emoji": None, "item_image": None}
+        if s.item_id is not None:
+            if s.item_type in PLANT_SLOT_TYPES:
+                plant = db.query(Plant).filter(Plant.id == s.item_id).first()
+                if plant is not None:
+                    d["item_name"] = plant.name
+                    d["item_emoji"] = plant.emoji
+                    d["item_image"] = plant.image_harvested_url or plant.image_grown_url or plant.image_url
+            else:
+                prod = db.query(Product).filter(Product.id == s.item_id).first()
+                if prod is not None:
+                    d["item_name"] = prod.name
+                    d["item_emoji"] = prod.emoji
+                    d["item_image"] = prod.image_url
+        slot_data.append(d)
     return CauldronOut(
         id=c.id, recipe_id=c.recipe_id, recipe_name=recipe.name if recipe else None,
         material=c.material, capacity=c.capacity, status=c.status, slots=slot_data,
