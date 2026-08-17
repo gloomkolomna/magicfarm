@@ -684,7 +684,7 @@ export default function FieldPage() {
     setTentCardResult(null);
     setTentShowVideo(false);
     if (t.build_status === 'built') {
-      const first = products.find((x) => x.production_kind === t.kind);
+      const first = products.find((x) => x.production_kind === t.kind && x.available !== false);
       void selectCraftProduct(first ? first.id : null);
       void reloadCraftSessions();
       if (t.kind === 'barnyard') {
@@ -792,23 +792,23 @@ export default function FieldPage() {
                             <img
                               src={mediaUrl(grownImg)}
                               alt=""
-                              style={{ maxWidth: '90%', maxHeight: '85%', objectFit: 'contain', pointerEvents: 'none' }}
+                              style={{ maxWidth: '90%', maxHeight: '80%', objectFit: 'contain', pointerEvents: 'none' }}
                             />
                           ) : (
                             <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.plant_emoji}</div>
                           )}
                           {cell.plot && cell.plot.status === 'planted' && (
-                            <div style={{ fontSize: 9, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>
+                            <div style={{ fontSize: 9, color: '#fff', pointerEvents: 'none', background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '1px 5px', whiteSpace: 'nowrap', maxWidth: '94%', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 1 }}>
                               {cell.plot.accumulated}/{cell.plot.required}
                             </div>
                           )}
                           {cell.plot && (
-                            <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 14, color: '#7fff7f', pointerEvents: 'none' }}>
+                            <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 13, color: '#7fff7f', pointerEvents: 'none', background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', lineHeight: 1.2 }}>
                               {cell.plot.status === 'grown' ? '✓' : cell.plot.status === 'await_replant' ? '🔁' : ''}
                             </div>
                           )}
                           {cell.plot && (
-                            <div style={{ position: 'absolute', bottom: 10, left: 3, fontSize: 12, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none', fontWeight: 700 }}>
+                            <div style={{ position: 'absolute', top: 2, left: 3, fontSize: 11, color: '#fff', pointerEvents: 'none', fontWeight: 700, background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', lineHeight: 1.4 }}>
                               ×{cell.plot.qty}
                             </div>
                           )}
@@ -982,25 +982,25 @@ export default function FieldPage() {
                       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9vw', lineHeight: 1, pointerEvents: 'none' }}>{pb.plant_emoji}</div>
                     )}
                     {occupied && pb.plot && pb.plot.status === 'planted' && (
-                      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 2, textAlign: 'center', fontSize: 11, color: '#fff', textShadow: '0 1px 2px #000', background: 'rgba(10,16,8,0.45)', pointerEvents: 'none' }}>
+                      <div style={{ position: 'absolute', left: 2, right: 2, bottom: 2, textAlign: 'center', fontSize: 10, color: '#fff', background: 'rgba(10,16,8,0.55)', borderRadius: 4, padding: '1px 4px', pointerEvents: 'none', whiteSpace: 'nowrap', overflow: 'hidden' }}>
                         {pb.plot.accumulated}/{pb.plot.required}
                       </div>
                     )}
                     {occupied && pb.plot && pb.plot.status === 'grown' && (
-                      <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 20, color: '#7fff7f', pointerEvents: 'none' }}>✓</div>
+                      <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 13, color: '#7fff7f', pointerEvents: 'none', background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', lineHeight: 1.3 }}>✓</div>
                     )}
                     {occupied && pb.plot && pb.plot.status === 'await_replant' && (
-                      <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 18, pointerEvents: 'none' }}>🔁</div>
+                      <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 12, pointerEvents: 'none', background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', lineHeight: 1.3 }}>🔁</div>
                     )}
                     {occupied && pb.plot && (
-                      <div style={{ position: 'absolute', top: 2, left: 3, fontSize: 13, color: '#fff', textShadow: '0 1px 2px #000', fontWeight: 700, pointerEvents: 'none' }}>
+                      <div style={{ position: 'absolute', top: 2, left: 3, fontSize: 11, color: '#fff', fontWeight: 700, pointerEvents: 'none', background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', lineHeight: 1.5 }}>
                         ×{pb.plot.qty}
                       </div>
                     )}
                     {!occupied && (
-                      <div style={{ fontSize: 'clamp(11px,3vw,16px)', color: '#d7f5c0', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600, pointerEvents: 'none' }}>
-                        🌳 Слот дерева
-                        <div style={{ fontSize: 10, opacity: 0.85 }}>свободно</div>
+                      <div style={{ fontSize: 'clamp(10px,2.4vw,13px)', color: '#d7f5c0', textAlign: 'center', fontWeight: 600, pointerEvents: 'none', background: 'rgba(10,16,8,0.45)', borderRadius: 6, padding: '3px 6px', maxWidth: '100%' }}>
+                        <div style={{ fontSize: 'clamp(16px,4vw,22px)', lineHeight: 1.1 }}>🌳</div>
+                        <div>Слот дерева · свободно</div>
                       </div>
                     )}
                   </div>
@@ -1821,7 +1821,7 @@ export default function FieldPage() {
               <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Новый крафт</label>
               <select className="fm-input" value={craftProduct ?? ''} onChange={(e) => void selectCraftProduct(Number(e.target.value))}>
                 <option value="">— выберите —</option>
-                {products.filter((p) => p.production_kind === tentModal.kind).map((p) => (
+                {products.filter((p) => p.production_kind === tentModal.kind && p.available !== false).map((p) => (
                   <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>
                 ))}
               </select>

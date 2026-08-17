@@ -267,7 +267,8 @@ class OrderReq(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=True)
     fulfilled_by = Column(Integer, ForeignKey("users.vk_id", ondelete="SET NULL"), nullable=True)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=True)
+    potion_recipe_id = Column(Integer, ForeignKey("potion_recipes.id", ondelete="CASCADE"), nullable=True)
     qty = Column(Integer, nullable=False)
     reward_coins = Column(Integer, nullable=False, default=0, server_default="0")
     customer = Column(String, nullable=True)
@@ -280,6 +281,7 @@ class OrderReq(Base):
 
     user = relationship("User", back_populates="orders", foreign_keys=[user_id])
     product = relationship("Product")
+    potion_recipe = relationship("PotionRecipe")
 
 
 class RequestLog(Base):

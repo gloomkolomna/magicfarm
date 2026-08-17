@@ -49,36 +49,21 @@ def _calc_order_reward(db: Session, product: Product, qty: int) -> int:
 
 
 def _order_lock_reason(o: OrderReq, user: User, db: Session) -> str | None:
-    from models import Field, FieldPlant, Plant
+    from services.availability import product_lock_reason
 
-    if o.product.plant_id is None:
-        return None
-    plant = db.query(Plant).filter(Plant.id == o.product.plant_id).first()
-    if plant is None:
-        return None
-    if plant.category == "garden_beds" and plant.level > (user.unlocked_plot_level or 1):
-        return f"Нужны грядки {plant.level} уровня"
-    if plant.category == "orchard" and plant.level > (user.unlocked_garden_level or 0):
-        return f"Нужны сады {plant.level} уровня"
-    fields = (
-        db.query(Field)
-        .join(FieldPlant, FieldPlant.field_id == Field.id)
-        .filter(FieldPlant.plant_id == plant.id)
-        .all()
-    )
-    suitable = [f for f in fields if f.plant_category is None or f.plant_category == plant.category]
-    if suitable and all((f.min_level or 0) > (user.level or 0) for f in suitable):
-        return f"Локация откроется на {min(f.min_level for f in suitable)} уровне"
-    return None
+    return product_lock_reason(o.product, user, db)
 
 
 class OrderOut(BaseModel):
     id: int
-    product_id: int
+    product_id: int | None
     product_code: str
     product_name: str
     product_emoji: str | None
     product_image_url: str | None = None
+    potion_recipe_id: int | None = None
+    potion_name: str | None = None
+    potion_image_url: str | None = None
     qty: int
     reward_coins: int
     customer: str | None
@@ -99,10 +84,23 @@ def _customer_images(db: Session) -> dict[str, str]:
 
 
 def _to_out(o: OrderReq, customer_images: dict[str, str] | None = None, lock_reason: str | None = None) -> OrderOut:
+    if o.product is not None:
+        product_code = o.product.code
+        product_name = o.product.name
+        product_emoji = o.product.emoji
+        product_image_url = o.product.image_url
+    else:
+        product_code = ""
+        product_name = o.potion_recipe.name if o.potion_recipe else "Зелье"
+        product_emoji = "🧪"
+        product_image_url = None
     return OrderOut(
-        id=o.id, product_id=o.product_id, product_code=o.product.code,
-        product_name=o.product.name, product_emoji=o.product.emoji,
-        product_image_url=o.product.image_url,
+        id=o.id, product_id=o.product_id, product_code=product_code,
+        product_name=product_name, product_emoji=product_emoji,
+        product_image_url=product_image_url,
+        potion_recipe_id=o.potion_recipe_id,
+        potion_name=o.potion_recipe.name if o.potion_recipe else None,
+        potion_image_url=(o.potion_recipe.image_url if o.potion_recipe else None),
         qty=o.qty, reward_coins=o.reward_coins,
         customer=o.customer,
         customer_phrase=o.customer_phrase,
@@ -145,7 +143,8 @@ def list_available_orders(
         (OrderReq.fulfilled_by == None) | (OrderReq.fulfilled_by != user.vk_id),
     ).order_by(OrderReq.created_at.desc()).limit(200).all()
     imgs = _customer_images(db)
-    return [_to_out(o, imgs, _order_lock_reason(o, user, db)) for o in rows]
+    visible = [o for o in rows if _order_lock_reason(o, user, db) is None]
+    return [_to_out(o, imgs) for o in visible]
 
 
 @router.post("/{order_id}/take", response_model=OrderOut)
@@ -237,12 +236,53 @@ def fulfill_order(
     if o.status != "open":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен или отменён")
 
+    double_reward = is_potion_active(user.vk_id, "double_order_reward", db)
+
+    if o.potion_recipe_id is not None:
+        from models import UserPotion
+        up = db.query(UserPotion).filter(
+            UserPotion.user_id == user.vk_id,
+            UserPotion.potion_recipe_id == o.potion_recipe_id,
+            UserPotion.used.is_(False),
+        ).first()
+        if up is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Нет такого зелья — сварите его в котле",
+            )
+        up.used = True
+
+        u = db.query(User).filter(User.vk_id == user.vk_id).first()
+        reward = o.reward_coins * 2 if double_reward else o.reward_coins
+        u.coins = (u.coins or 0) + reward
+
+        bonus = apply_pet_bonus_fulfill(user.vk_id, db)
+        if bonus > 0:
+            u.coins = (u.coins or 0) + bonus
+
+        if double_reward:
+            consume_potion(user.vk_id, "double_order_reward", db)
+
+        o.status = "fulfilled"
+        o.fulfilled_by = user.vk_id
+        o.fulfilled_at = datetime.datetime.utcnow()
+
+        db.commit()
+        db.refresh(o)
+
+        check_and_award(user.vk_id, "first_order", db)
+        check_and_award(user.vk_id, "coins_reached", db)
+
+        from services.leveling import check_level_up
+        check_level_up(db, u)
+
+        return _to_out(o, _customer_images(db))
+
     inv = db.query(Inventory).filter(
         Inventory.user_id == user.vk_id, Inventory.product_id == o.product_id
     ).first()
 
     partial = is_potion_active(user.vk_id, "partial_order", db)
-    double_reward = is_potion_active(user.vk_id, "double_order_reward", db)
 
     if partial:
         if inv is None or (inv.qty or 0) < 1:
@@ -298,7 +338,7 @@ def cancel_order(
     o = _get_user_order(order_id, user, db)
     if o.status != "open":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен или отменён")
-    o.status = "cancelled"
+    o.user_id = None
     db.commit()
     db.refresh(o)
     return _to_out(o, _customer_images(db))
@@ -329,7 +369,8 @@ def admin_list_orders(
     return [_admin_to_out(o, imgs) for o in q.limit(200).all()]
 
 class AdminGenerateRequest(BaseModel):
-    product_id: int
+    product_id: int | None = None
+    potion_recipe_id: int | None = None
     qty: int | None = None
     customer: str | None = None
     customer_phrase: str | None = None
@@ -341,6 +382,27 @@ def admin_generate_order(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
+    if (req.product_id is None) == (req.potion_recipe_id is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Укажите либо product_id, либо potion_recipe_id (ровно одно)",
+        )
+    if req.potion_recipe_id is not None:
+        from models import PotionRecipe
+        recipe = db.query(PotionRecipe).filter(PotionRecipe.id == req.potion_recipe_id).first()
+        if recipe is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт зелья не найден")
+        o = OrderReq(
+            user_id=None, product_id=None, potion_recipe_id=recipe.id, qty=1,
+            reward_coins=recipe.reward_coins, customer=req.customer,
+            customer_phrase=req.customer_phrase,
+            status="open",
+        )
+        db.add(o)
+        db.commit()
+        db.refresh(o)
+        return _admin_to_out(o, _customer_images(db))
+
     product = db.query(Product).filter(Product.id == req.product_id).first()
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
@@ -383,6 +445,11 @@ def admin_update_order(
 ):
     o = _get_order_or_404(order_id, db)
     if data.product_id is not None:
+        if o.potion_recipe_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Это заказ на зелье — сменить на товар нельзя",
+            )
         o.product_id = data.product_id
     if data.qty is not None:
         if data.qty < MIN_QTY or data.qty > MAX_QTY:

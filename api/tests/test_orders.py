@@ -153,12 +153,20 @@ def test_fulfill_already_fulfilled(player_client, monkeypatch):
     assert res.status_code == 409
 
 
-def test_cancel_order(player_client):
+def test_cancel_order_returns_to_catalog(player_client):
     pid = _poison_id(player_client)
     oid = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
     res = player_client.post(f"/api/orders/{oid}/cancel")
     assert res.status_code == 200
-    assert res.json()["status"] == "cancelled"
+    assert res.json()["status"] == "open"
+
+    assert player_client.get("/api/orders").json() == []
+
+    avail = player_client.get("/api/orders/available").json()
+    assert any(o["id"] == oid for o in avail)
+
+    res2 = player_client.post(f"/api/orders/{oid}/take")
+    assert res2.status_code == 200
 
 
 def test_cancel_already_fulfilled(player_client, monkeypatch):
@@ -811,16 +819,23 @@ def test_available_order_locked_by_plant_level(player_client):
     prod = _make_plant_product(plant, "cvetok_tovar")
     _admin_generate(prod, 3)
 
-    o = _available_order(player_client, prod)
-    assert o["available"] is False
-    assert "сады" in o["lock_reason"]
-    assert player_client.post(f"/api/orders/{o['id']}/take").status_code == 403
+    data = player_client.get("/api/orders/available").json()
+    assert all(o["product_id"] != prod for o in data)
+
+    from models import OrderReq
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        row = s.query(OrderReq).filter(OrderReq.product_id == prod).first()
+        oid = row.id
+    finally:
+        s.close()
+    assert player_client.post(f"/api/orders/{oid}/take").status_code == 403
 
     _set_user(123, unlocked_garden_level=2)
-    o = _available_order(player_client, prod)
-    assert o["available"] is True
-    assert o["lock_reason"] is None
-    assert player_client.post(f"/api/orders/{o['id']}/take").status_code == 200
+    data2 = player_client.get("/api/orders/available").json()
+    assert any(o["product_id"] == prod for o in data2)
+    assert player_client.post(f"/api/orders/{oid}/take").status_code == 200
 
 
 def test_available_order_locked_by_field_min_level(player_client):
@@ -829,14 +844,13 @@ def test_available_order_locked_by_field_min_level(player_client):
     _make_field_with_plant("gornaya_dolina", plant, min_level=3, plant_category="garden")
     _admin_generate(prod, 2)
 
-    o = _available_order(player_client, prod)
-    assert o["available"] is False
-    assert o["lock_reason"] == "Локация откроется на 3 уровне"
-    assert player_client.post(f"/api/orders/{o['id']}/take").status_code == 403
+    data = player_client.get("/api/orders/available").json()
+    assert all(o["product_id"] != prod for o in data)
 
     _make_field_with_plant("ravnina", plant, min_level=0, plant_category="garden")
-    o = _available_order(player_client, prod)
-    assert o["available"] is True
+    data2 = player_client.get("/api/orders/available").json()
+    assert any(o["product_id"] == prod for o in data2)
+    o = next(o for o in data2 if o["product_id"] == prod)
     assert player_client.post(f"/api/orders/{o['id']}/take").status_code == 200
 
 
@@ -854,3 +868,110 @@ def test_available_order_animal_product_is_available(player_client):
     o = _available_order(player_client, prod)
     assert o["available"] is True
     assert o["lock_reason"] is None
+
+
+# ── Заказы на зелья ──
+
+def _seed_user_potion(vk_id: int, recipe_id: int = 1, activated: bool = False, used: bool = False) -> int:
+    from models import UserPotion
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        up = UserPotion(user_id=vk_id, potion_recipe_id=recipe_id,
+                        bonus_code="skip_plant_stitch", activated=activated, used=used)
+        s.add(up)
+        s.commit()
+        s.refresh(up)
+        return up.id
+    finally:
+        s.close()
+
+
+def _generate_potion_order(admin_json: dict) -> dict:
+    from tests.conftest import make_user_client
+    with make_user_client(400977, "admin") as admin:
+        r = admin.post("/api/admin/orders/generate", json=admin_json)
+        assert r.status_code == 201, r.text
+        return r.json()
+
+
+def test_admin_generate_potion_order(player_client):
+    o = _generate_potion_order({"potion_recipe_id": 1, "customer": "Маг Годвин"})
+    assert o["potion_recipe_id"] == 1
+    assert o["qty"] == 1
+    assert o["reward_coins"] == 100
+    assert o["product_id"] is None
+    assert o["potion_name"] == "Сонное пророчество"
+
+    avail = player_client.get("/api/orders/available").json()
+    row = next(x for x in avail if x["id"] == o["id"])
+    assert row["potion_name"] == "Сонное пророчество"
+    assert player_client.post(f"/api/orders/{o['id']}/take").status_code == 200
+
+
+def test_admin_generate_requires_exactly_one_target():
+    from tests.conftest import make_user_client
+    with make_user_client(400977, "admin") as admin:
+        r1 = admin.post("/api/admin/orders/generate", json={"customer": "Маг Годвин"})
+        assert r1.status_code == 400
+        r2 = admin.post("/api/admin/orders/generate", json={"product_id": 1, "potion_recipe_id": 1})
+        assert r2.status_code == 400
+        r3 = admin.post("/api/admin/orders/generate", json={"potion_recipe_id": 999})
+        assert r3.status_code == 404
+
+
+def test_fulfill_potion_order(player_client):
+    o = _generate_potion_order({"potion_recipe_id": 1})
+    oid = player_client.post(f"/api/orders/{o['id']}/take").json()["id"]
+
+    res = player_client.post(f"/api/orders/{oid}/fulfill")
+    assert res.status_code == 400
+    assert "зель" in res.json()["detail"].lower()
+
+    _seed_user_potion(123, recipe_id=1)
+    coins_before = player_client.get("/api/me").json()["coins"]
+    res2 = player_client.post(f"/api/orders/{oid}/fulfill")
+    assert res2.status_code == 200, res2.text
+    assert res2.json()["status"] == "fulfilled"
+    assert player_client.get("/api/me").json()["coins"] == coins_before + 100
+
+    from models import UserPotion
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        assert s.query(UserPotion).filter(UserPotion.user_id == 123, UserPotion.used.is_(True)).count() == 1
+    finally:
+        s.close()
+
+
+def test_fulfill_potion_order_accepts_activated(player_client):
+    o = _generate_potion_order({"potion_recipe_id": 1})
+    oid = player_client.post(f"/api/orders/{o['id']}/take").json()["id"]
+    _seed_user_potion(123, recipe_id=1, activated=True)
+    res = player_client.post(f"/api/orders/{oid}/fulfill")
+    assert res.status_code == 200
+
+
+def test_fulfill_potion_order_rejects_used(player_client):
+    o = _generate_potion_order({"potion_recipe_id": 1})
+    oid = player_client.post(f"/api/orders/{o['id']}/take").json()["id"]
+    _seed_user_potion(123, recipe_id=1, used=True)
+    res = player_client.post(f"/api/orders/{oid}/fulfill")
+    assert res.status_code == 400
+
+
+def test_products_endpoint_marks_unavailable(player_client):
+    plant = _make_plant("shtuchnyy_cvetok2", category="orchard", level=2)
+    prod = _make_plant_product(plant, "cvetok_tovar2")
+
+    data = player_client.get("/api/farm/products").json()
+    row = next(p for p in data if p["id"] == prod)
+    assert row["available"] is False
+
+    poison = next(p for p in data if p["code"] == "poison")
+    assert poison["available"] is True
+
+    _set_user(123, unlocked_garden_level=2)
+    data2 = player_client.get("/api/farm/products").json()
+    row2 = next(p for p in data2 if p["id"] == prod)
+    assert row2["available"] is True

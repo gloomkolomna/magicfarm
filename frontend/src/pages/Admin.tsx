@@ -554,16 +554,19 @@ export default function AdminPage() {
 
   // ── Заказы: создание и редактирование ──
   function startCreateOrder() {
-    setOrderForm({ product_id: '', qty: '', customer: '' });
+    setOrderForm({ kind: 'product', product_id: '', potion_recipe_id: '', qty: '', customer: '' });
     setOrderImage(null);
     setOrderEditingId(null);
     setOrderFormOpen(true);
     api.adminCustomers().then(setCustomers).catch(() => {});
+    if (potionRecipes.length === 0) loadPotionRecipes();
   }
 
   function startEditOrder(o: AdminOrder) {
     setOrderForm({
-      product_id: String(o.product_id),
+      kind: o.potion_recipe_id != null ? 'potion' : 'product',
+      product_id: o.product_id != null ? String(o.product_id) : '',
+      potion_recipe_id: o.potion_recipe_id != null ? String(o.potion_recipe_id) : '',
       qty: String(o.qty),
       reward_coins: String(o.reward_coins),
       customer: o.customer || '',
@@ -574,20 +577,23 @@ export default function AdminPage() {
     setOrderEditingId(o.id);
     setOrderFormOpen(true);
     api.adminCustomers().then(setCustomers).catch(() => {});
+    if (potionRecipes.length === 0) loadPotionRecipes();
   }
 
   async function saveOrder() {
+    const isPotion = orderForm.kind === 'potion';
     const pid = Number(orderForm.product_id);
+    const prid = Number(orderForm.potion_recipe_id);
     const q = orderForm.qty ? Number(orderForm.qty) : undefined;
     const customer = orderForm.customer || undefined;
-    if (!pid) return;
+    if (isPotion ? !prid : !pid) return;
     setBusy(true); setMsg(null);
     try {
       let targetId = orderEditingId;
       if (orderEditingId !== null) {
         await api.adminUpdateOrder(orderEditingId, {
-          product_id: pid || undefined,
-          qty: q,
+          product_id: isPotion ? undefined : (pid || undefined),
+          qty: isPotion ? undefined : q,
           reward_coins: orderForm.reward_coins ? Number(orderForm.reward_coins) : undefined,
           customer: customer,
           customer_phrase: orderForm.customer_phrase ?? undefined,
@@ -595,6 +601,10 @@ export default function AdminPage() {
           name: orderForm.name || undefined,
         });
         setMsg('✓ Заказ обновлён');
+      } else if (isPotion) {
+        const created = await api.adminGenerateOrder(null, undefined, customer ?? null, orderForm.customer_phrase?.trim() || undefined, prid);
+        targetId = created.id;
+        setMsg('✓ Заказ на зелье создан');
       } else {
         const created = await api.adminGenerateOrder(pid, q, customer ?? null, orderForm.customer_phrase?.trim() || undefined);
         targetId = created.id;
@@ -1753,19 +1763,45 @@ export default function AdminPage() {
               {orderFormOpen && (
                 <div className="fm-card" style={{ marginBottom: 10 }}>
                   <h3 style={{ marginTop: 0 }}>{orderEditingId ? '✎ Редактировать заказ' : '➕ Создать заказ'}</h3>
-                  <div style={{ marginBottom: 8 }}>
-                    <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Товар</label>
-                    <select className="fm-input" value={orderForm.product_id || ''} onChange={(e) => setOrderForm({ ...orderForm, product_id: e.target.value })}>
-                      <option value="">— выберите —</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={String(p.id)}>{p.emoji} {p.name} ({p.code})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div style={{ marginBottom: 8 }}>
-                    <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Количество (1–20)</label>
-                    <input className="fm-input" type="number" min={1} max={20} value={orderForm.qty || ''} onChange={(e) => setOrderForm({ ...orderForm, qty: e.target.value })} placeholder="оставьте пустым для дефолта" />
-                  </div>
+                  {orderEditingId === null && (
+                    <div style={{ marginBottom: 8 }}>
+                      <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Тип заказа</label>
+                      <select className="fm-input" value={orderForm.kind || 'product'} onChange={(e) => setOrderForm({ ...orderForm, kind: e.target.value })}>
+                        <option value="product">📦 Товар</option>
+                        <option value="potion">🧪 Зелье</option>
+                      </select>
+                    </div>
+                  )}
+                  {orderForm.kind === 'potion' ? (
+                    <div style={{ marginBottom: 8 }}>
+                      <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Зелье</label>
+                      <select className="fm-input" value={orderForm.potion_recipe_id || ''} onChange={(e) => setOrderForm({ ...orderForm, potion_recipe_id: e.target.value })}>
+                        <option value="">— выберите —</option>
+                        {potionRecipes.map((r) => (
+                          <option key={r.id} value={String(r.id)}>{r.name} ({r.level})</option>
+                        ))}
+                      </select>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                        Заказ всегда на 1 зелье. Награда берётся из рецепта.
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ marginBottom: 8 }}>
+                        <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Товар</label>
+                        <select className="fm-input" value={orderForm.product_id || ''} onChange={(e) => setOrderForm({ ...orderForm, product_id: e.target.value })}>
+                          <option value="">— выберите —</option>
+                          {products.map((p) => (
+                            <option key={p.id} value={String(p.id)}>{p.emoji} {p.name} ({p.code})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ marginBottom: 8 }}>
+                        <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Количество (1–20)</label>
+                        <input className="fm-input" type="number" min={1} max={20} value={orderForm.qty || ''} onChange={(e) => setOrderForm({ ...orderForm, qty: e.target.value })} placeholder="оставьте пустым для дефолта" />
+                      </div>
+                    </>
+                  )}
                   <div style={{ marginBottom: 8 }}>
                     <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Заказчик</label>
                     <select className="fm-input" value={orderForm.customer || ''} onChange={(e) => setOrderForm({ ...orderForm, customer: e.target.value })}>
@@ -1830,7 +1866,7 @@ export default function AdminPage() {
                     const st = ORDER_STATUS_LABEL[o.status] || ORDER_STATUS_LABEL.open;
                     return (
                       <div key={o.id} className="fm-card fm-rise" style={{ textAlign: 'center' }}>
-                        <SpritePedestal url={o.image_url ? mediaUrl(o.image_url) : null} emoji={o.product_emoji} height={100} />
+                        <SpritePedestal url={o.image_url || o.product_image_url || o.potion_image_url ? mediaUrl(o.image_url || o.product_image_url || o.potion_image_url) : null} emoji={o.product_emoji} height={100} />
                         <strong style={{ display: 'block', marginBottom: 6 }}>{o.product_name} ×{o.qty}</strong>
                         {o.name && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>{o.name}</div>}
                         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>

@@ -534,6 +534,7 @@ class ProductOut(BaseModel):
     stars: int
     production_kind: str | None
     image_url: str | None
+    available: bool = True
 
 
 @router.get("/products", response_model=list[ProductOut])
@@ -541,12 +542,15 @@ def list_products(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from services.availability import product_lock_reason
+
     rows = db.query(Product).order_by(Product.id.asc()).all()
     return [
         ProductOut(
             id=p.id, code=p.code, name=p.name, emoji=p.emoji,
             stars=p.stars, production_kind=p.production_kind,
             image_url=p.image_url,
+            available=product_lock_reason(p, user, db) is None,
         )
         for p in rows
     ]

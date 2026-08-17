@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type StitchReport } from '../api/endpoints';
+import { api, type LevelGate, type StitchReport } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Onboarding from './Onboarding';
 
@@ -13,6 +13,7 @@ const STATUS_STYLE: Record<string, React.CSSProperties> = {
 export default function ProfilePage() {
   const { user, loading: sessionLoading } = useSession();
   const [reports, setReports] = useState<StitchReport[]>([]);
+  const [levels, setLevels] = useState<LevelGate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNorms, setShowNorms] = useState(false);
   const [filter, setFilter] = useState('');
@@ -20,7 +21,12 @@ export default function ProfilePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setReports(await api.stitchReports());
+      const [reps, lvls] = await Promise.all([
+        api.stitchReports(),
+        api.levels().catch(() => [] as LevelGate[]),
+      ]);
+      setReports(reps);
+      setLevels(lvls);
     } catch {
       /* ignore */
     } finally {
@@ -56,6 +62,66 @@ export default function ProfilePage() {
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>цикл игры</div>
         </div>
       </div>
+
+      {levels.length > 0 && (
+        <>
+          <h2>🗺️ Маршрут ({(user.level ?? 0)} из {levels[levels.length - 1].level})</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+            {levels.map((g) => {
+              const cur = user.level ?? 0;
+              const passed = g.level < cur;
+              const current = g.level === cur;
+              const next = g.level === cur + 1;
+              const coinsProgress = g.coins_required > 0 && (passed || current || next)
+                ? Math.min(100, Math.round(((user.coins ?? 0) / g.coins_required) * 100))
+                : null;
+              return (
+                <div
+                  key={g.level}
+                  className="fm-card"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    opacity: passed ? 0.6 : 1,
+                    border: current ? '2px solid var(--accent-warm)' : undefined,
+                    background: next ? 'rgba(224,168,62,0.08)' : undefined,
+                  }}
+                >
+                  {g.image_url ? (
+                    <img src={mediaUrl(g.image_url)} alt="" style={{ width: 44, height: 44, objectFit: 'contain', borderRadius: 6, flexShrink: 0 }} />
+                  ) : (
+                    <div style={{ width: 44, height: 44, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 700, background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                      {g.level}
+                    </div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <strong style={{ fontSize: 14 }}>Этап {g.level}</strong>
+                      {passed && <span style={{ fontSize: 11, color: 'var(--success)' }}>✓ пройден</span>}
+                      {current && <span className="fm-chip" style={{ fontSize: 11, background: 'rgba(224,168,62,0.25)' }}>📍 вы здесь</span>}
+                      {next && <span style={{ fontSize: 11, color: 'var(--accent-warm)' }}>⏳ следующий</span>}
+                    </div>
+                    {g.unlock_type && (
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        🔓 {g.unlock_type}
+                      </div>
+                    )}
+                    {!passed && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                        🪙 {g.coins_required} монет{g.plots_required > 0 ? <> · 🌱 {g.plots_required} грядок</> : null}
+                      </div>
+                    )}
+                    {coinsProgress !== null && !passed && (
+                      <div className="fm-progress" style={{ marginTop: 4, height: 6 }}>
+                        <div className="fm-progress-fill" style={{ width: `${coinsProgress}%` }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <button
         className="fm-btn fm-btn-outline"

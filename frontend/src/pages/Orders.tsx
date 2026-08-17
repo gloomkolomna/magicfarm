@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { api, type Order } from '../api/endpoints';
+import { api, type Order, type UserPotion } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
 import SpritePedestal from '../components/SpritePedestal';
@@ -23,6 +23,7 @@ export default function OrdersPage() {
   const nav = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [inventory, setInventory] = useState<Record<number, number>>({});
+  const [potions, setPotions] = useState<UserPotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -32,8 +33,8 @@ export default function OrdersPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [ord, inv] = await Promise.all([
-        api.orders(), api.inventory().catch(() => []),
+      const [ord, inv, pots] = await Promise.all([
+        api.orders(), api.inventory().catch(() => []), api.userPotions().catch(() => [] as UserPotion[]),
       ]);
       setOrders(ord);
       const invMap: Record<number, number> = {};
@@ -41,6 +42,7 @@ export default function OrdersPage() {
         if (i.item_kind === 'product') invMap[i.item_id] = (invMap[i.item_id] || 0) + i.qty;
       }
       setInventory(invMap);
+      setPotions(pots);
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка загрузки'));
     } finally {
@@ -49,6 +51,13 @@ export default function OrdersPage() {
   }, []);
 
   useEffect(() => { if (!sessionLoading) load(); }, [load, sessionLoading]);
+
+  function haveFor(o: Order): number {
+    if (o.potion_recipe_id != null) {
+      return potions.some((p) => p.potion_recipe_id === o.potion_recipe_id && !p.used) ? 1 : 0;
+    }
+    return inventory[o.product_id ?? -1] || 0;
+  }
 
   async function act(fn: () => Promise<unknown>, okMsg: string): Promise<boolean> {
     setBusy(true);
@@ -68,7 +77,7 @@ export default function OrdersPage() {
   }
 
   const openOrders = orders.filter((o) => o.status === 'open');
-  const doneOrders = orders.filter((o) => o.status !== 'open');
+  const doneOrders = orders.filter((o) => o.status === 'fulfilled');
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
@@ -94,10 +103,10 @@ export default function OrdersPage() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
               {openOrders.map((o) => {
-                const have = inventory[o.product_id] || 0;
+                const have = haveFor(o);
                 const need = o.qty;
                 const ok = have >= need;
-                const orderImg = o.image_url || o.product_image_url;
+                const orderImg = o.image_url || o.product_image_url || o.potion_image_url;
                 return (
                   <div key={o.id} className="fm-card fm-rise" style={{ cursor: 'pointer' }} onClick={() => setDetailOrder(o)}>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -156,7 +165,7 @@ export default function OrdersPage() {
                         <span className="fm-chip" style={{ fontSize: 12 }}>×{need}</span>
                       </span>
                       <span style={{ color: ok ? 'var(--success)' : 'var(--danger)', whiteSpace: 'nowrap' }}>
-                        {have}/{need} на складе
+                        {have}/{need} {o.potion_recipe_id != null ? 'зелье' : 'на складе'}
                       </span>
                       <span style={{ color: 'var(--accent-warm)', fontWeight: 600, whiteSpace: 'nowrap' }}>🪙 {o.reward_coins}</span>
                     </div>
@@ -220,17 +229,17 @@ export default function OrdersPage() {
 
       {detailOrder && (
         <Modal title="Детали заказа" onClose={() => setDetailOrder(null)}>
-          <SpritePedestal url={(detailOrder.image_url || detailOrder.product_image_url) ? mediaUrl(detailOrder.image_url || detailOrder.product_image_url) : null} emoji={detailOrder.product_emoji} height={160} onZoom={setZoomImg} />
+          <SpritePedestal url={(detailOrder.image_url || detailOrder.product_image_url || detailOrder.potion_image_url) ? mediaUrl(detailOrder.image_url || detailOrder.product_image_url || detailOrder.potion_image_url) : null} emoji={detailOrder.product_emoji} height={160} onZoom={setZoomImg} />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <strong style={{ fontSize: 18 }}>{detailOrder.product_name}</strong>
+            <strong style={{ fontSize: 18 }}>{detailOrder.potion_recipe_id != null ? `🧪 ${detailOrder.potion_name}` : detailOrder.product_name}</strong>
             <span className="fm-chip" style={{ fontSize: 16 }}>×{detailOrder.qty}</span>
           </div>
           <div style={{ fontSize: 14, marginBottom: 4 }}>
             {(() => {
-              const have = inventory[detailOrder.product_id] || 0;
+              const have = haveFor(detailOrder);
               const need = detailOrder.qty;
               const ok = have >= need;
-              return <span style={{ color: ok ? 'var(--success)' : 'var(--danger)' }}>На складе: {have} / {need}</span>;
+              return <span style={{ color: ok ? 'var(--success)' : 'var(--danger)' }}>{detailOrder.potion_recipe_id != null ? 'Зелье в котле' : 'На складе'}: {have} / {need}</span>;
             })()}
           </div>
           {detailOrder.name && (
@@ -285,7 +294,10 @@ export default function OrdersPage() {
                 className="fm-btn"
                 style={{ flex: 1 }}
                 disabled={busy}
-                onClick={() => act(() => api.fulfillOrder(detailOrder.id), `Заказ выполнен! +${detailOrder.reward_coins} монет`)}
+                onClick={async () => {
+                  const okDone = await act(() => api.fulfillOrder(detailOrder.id), `Заказ выполнен! +${detailOrder.reward_coins} монет`);
+                  if (okDone) setDetailOrder(null);
+                }}
               >
                 Выполнить
               </button>
@@ -293,7 +305,10 @@ export default function OrdersPage() {
                 className="fm-btn fm-btn-outline"
                 style={{ flex: 1 }}
                 disabled={busy}
-                onClick={() => act(() => api.cancelOrder(detailOrder.id), 'Заказ отменён')}
+                onClick={async () => {
+                  const okDone = await act(() => api.cancelOrder(detailOrder.id), 'Заказ отменён — он снова доступен в каталоге');
+                  if (okDone) setDetailOrder(null);
+                }}
               >
                 Отмена
               </button>

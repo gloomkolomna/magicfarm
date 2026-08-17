@@ -340,6 +340,7 @@ export interface Product {
   stars: number;
   production_kind: string | null;
   image_url: string | null;
+  available?: boolean;
 }
 
 export interface AdminRecipe {
@@ -399,11 +400,14 @@ export interface StitchReport {
 
 export interface Order {
   id: number;
-  product_id: number;
+  product_id: number | null;
   product_code: string;
   product_name: string;
   product_emoji: string | null;
   product_image_url: string | null;
+  potion_recipe_id: number | null;
+  potion_name: string | null;
+  potion_image_url: string | null;
   qty: number;
   reward_coins: number;
   customer: string | null;
@@ -1035,8 +1039,12 @@ export const api = {
   // ── Админ: заказы ──
   adminOrders: (userId?: number) =>
     client.get<AdminOrder[]>('/admin/orders', { params: userId !== undefined ? { user_id: userId } : {} }).then((r) => r.data),
-  adminGenerateOrder: (productId: number, qty?: number, customer?: string | null, customerPhrase?: string | null) =>
-    client.post<AdminOrder>('/admin/orders/generate', { product_id: productId, qty, customer, customer_phrase: customerPhrase }).then((r) => r.data),
+  adminGenerateOrder: (productId: number | null, qty?: number, customer?: string | null, customerPhrase?: string | null, potionRecipeId?: number | null) =>
+    client.post<AdminOrder>('/admin/orders/generate', {
+      product_id: productId,
+      potion_recipe_id: potionRecipeId ?? null,
+      qty, customer, customer_phrase: customerPhrase,
+    }).then((r) => r.data),
   adminUpdateOrder: (orderId: number, data: Partial<Pick<AdminOrder, 'product_id' | 'qty' | 'reward_coins' | 'customer' | 'customer_phrase' | 'status' | 'name'>>) =>
     client.put<AdminOrder>(`/admin/orders/${orderId}`, data).then((r) => r.data),
   adminCancelOrder: (orderId: number) =>

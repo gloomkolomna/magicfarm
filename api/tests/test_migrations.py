@@ -163,6 +163,7 @@ def test_migration_new_columns_exist(migrated_db):
 
     order_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(orders)")]
     assert "customer_phrase" in order_cols
+    assert "potion_recipe_id" in order_cols
 
     potion_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(user_potions)")]
     assert "used" in potion_cols
