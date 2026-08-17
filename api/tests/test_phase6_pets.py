@@ -141,3 +141,31 @@ def test_settle_pet_on_cell_wrong_kind(admin_client):
     with make_user_client(3003, "player") as c:
         r = c.post(f"/api/pets/cells/{cell['id']}/settle", json={"pet_id": 1})
         assert r.status_code == 404
+
+
+def test_field_detail_pet_zone_with_settled_pet(admin_client):
+    fid, cell_id = _make_pet_cell(admin_client)
+    r = admin_client.post(f"/api/admin/fields/{fid}/pet-zones", data={"col1": 0, "row1": 0, "col2": 1, "row2": 1})
+    assert r.status_code == 201, r.text
+
+    from models import Pet
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        pet = s.query(Pet).filter(Pet.id == 1).first()
+        pet.image_url = "/uploads/pet_dragon.png"
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(3005, "player") as c:
+        c.post(f"/api/pets/cells/{cell_id}/settle", json={"pet_id": 1})
+        _report_settle(c, 1, cell_id=cell_id)
+
+        detail = c.get(f"/api/fields/{fid}").json()
+        zones = detail["pet_zones"]
+        assert len(zones) == 1
+        assert zones[0]["col1"] == 0 and zones[0]["col2"] == 1
+        assert zones[0]["pet_id"] == 1
+        assert zones[0]["pet_name"] == "Дракон Эфир"
+        assert zones[0]["pet_image_url"] == "/uploads/pet_dragon.png"

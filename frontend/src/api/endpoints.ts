@@ -546,6 +546,11 @@ export interface PetZone {
   row1: number;
   col2: number;
   row2: number;
+  pet_id?: number | null;
+  pet_name?: string | null;
+  pet_emoji?: string | null;
+  pet_image_url?: string | null;
+  bonus_description?: string | null;
 }
 
 export interface BreweryZone {

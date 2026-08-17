@@ -99,6 +99,7 @@ class FieldDetailPublic(FieldOut):
     plants: list[PlantOut]
     tents: list[TentOut]
     plant_beds: list[PlantBedDetailOut]
+    pet_zones: list = []
     brewery_zones: list[BreweryZonePublic] = []
     potion_recipes: list = []
     active_cauldron: CauldronOut | None = None
@@ -296,6 +297,37 @@ def get_field(
     tents = [_tent_to_out_for_user(t, builds.get(t.id), houses.get(t.id)) for t in f.tents]
     plant_beds = [_plant_bed_detail(pb, db, user, bed_plots.get(pb.id)) for pb in f.plant_beds]
 
+    pet_zone_cells: dict[int, list[FieldCell]] = {}
+    for pz in f.pet_zones:
+        pet_zone_cells[pz.id] = [
+            c for c in f.cells
+            if c.kind == "pet"
+            and pz.col1 <= c.col <= pz.col2 and pz.row1 <= c.row <= pz.row2
+        ]
+    pet_zone_pets: dict[int, UserPet] = {}
+    if pet_zone_cells:
+        all_pet_cell_ids = [c.id for cells_in_zone in pet_zone_cells.values() for c in cells_in_zone]
+        if all_pet_cell_ids:
+            for up in db.query(UserPet).filter(
+                UserPet.user_id == user.vk_id, UserPet.cell_id.in_(all_pet_cell_ids)
+            ).all():
+                for zid, cells_in_zone in pet_zone_cells.items():
+                    if any(c.id == up.cell_id for c in cells_in_zone):
+                        pet_zone_pets[zid] = up
+                        break
+    pet_zones = []
+    for pz in f.pet_zones:
+        up = pet_zone_pets.get(pz.id)
+        pet = up.pet if up is not None and up.pet is not None else None
+        pet_zones.append({
+            "id": pz.id, "col1": pz.col1, "row1": pz.row1, "col2": pz.col2, "row2": pz.row2,
+            "pet_id": up.pet_id if up is not None else None,
+            "pet_name": pet.name if pet else None,
+            "pet_emoji": pet.emoji if pet else None,
+            "pet_image_url": pet.image_url if pet else None,
+            "bonus_description": pet.bonus_description if pet else None,
+        })
+
     brewery_zones = []
     potion_recipes = []
     active_cauldron = None
@@ -324,6 +356,7 @@ def get_field(
         field_kind=f.field_kind,
         created_at=f.created_at,
         cells=cells, plants=plants, tents=tents, plant_beds=plant_beds,
+        pet_zones=pet_zones,
         brewery_zones=brewery_zones, potion_recipes=potion_recipes,
         active_cauldron=active_cauldron,
     )

@@ -699,6 +699,19 @@ export default function FieldPage() {
     }
   }
 
+  const petZoneOfCell = new Map<number, number>();
+  const petZoneDrawn = new Map<number, boolean>();
+  (field.pet_zones ?? []).forEach((z) => {
+    const drawn = z.pet_id != null;
+    petZoneDrawn.set(z.id, drawn);
+    if (!drawn) return;
+    field.cells.forEach((c) => {
+      if (c.kind === 'pet' && c.col >= z.col1 && c.col <= z.col2 && c.row >= z.row1 && c.row <= z.row2) {
+        petZoneOfCell.set(c.id, z.id);
+      }
+    });
+  });
+
   return (
     <>
       <div
@@ -814,7 +827,7 @@ export default function FieldPage() {
                           )}
                         </>
                       )}
-                      {cell.kind === 'pet' && (
+                      {cell.kind === 'pet' && !petZoneOfCell.has(cell.id) && (
                         <>
                           {cell.pet?.pet_id ? (
                             cell.pet.pet_image_url ? (
@@ -925,6 +938,43 @@ export default function FieldPage() {
                       <div style={{ fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600, lineHeight: 1.15, maxWidth: '100%' }}>
                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🔨 {t.name}</div>
                         <div style={{ fontSize: 10 }}>{t.accumulated}/{t.required}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Зоны питомцев: картинка питомца на всю зону (как у шатров). */}
+            {(field.pet_zones ?? []).filter((z) => z.pet_id != null).map((z) => {
+              const spanCols = z.col2 - z.col1 + 1;
+              const spanRows = z.row2 - z.row1 + 1;
+              return (
+                <div
+                  key={`petzone-${z.id}`}
+                  style={{
+                    position: 'absolute', inset: 0, pointerEvents: 'none', display: 'grid',
+                    gridTemplateColumns: `repeat(${field.cols}, 1fr)`,
+                    gridTemplateRows: `repeat(${field.rows}, 1fr)`,
+                  }}
+                >
+                  <div
+                    style={{
+                      gridColumn: `${z.col1 + 1} / span ${spanCols}`,
+                      gridRow: `${z.row1 + 1} / span ${spanRows}`,
+                      position: 'relative', overflow: 'hidden',
+                    }}
+                  >
+                    {z.pet_image_url && (
+                      <img
+                        src={mediaUrl(z.pet_image_url)}
+                        alt=""
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
+                      />
+                    )}
+                    {z.pet_name && (
+                      <div style={{ position: 'absolute', left: 2, right: 2, bottom: 1, fontSize: 'clamp(9px,2.2vw,13px)', color: '#e6d9ff', textAlign: 'center', fontWeight: 600, background: 'rgba(10,16,8,0.5)', borderRadius: 4, padding: '0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {z.pet_name}
                       </div>
                     )}
                   </div>
