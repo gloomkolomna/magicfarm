@@ -462,8 +462,9 @@ def test_rebrew_after_use_restores_potion(admin_client):
         brew(c)
 
         potions = c.get("/api/potions").json()
-        assert len(potions) == 1
-        assert potions[0]["used"] is False
+        assert len(potions) == 2
+        unused = [p for p in potions if not p["used"]]
+        assert len(unused) == 1
 
         potions_inv = [i for i in c.get("/api/farm/inventory").json() if i["item_kind"] == "potion"]
         assert len(potions_inv) == 1
@@ -654,8 +655,9 @@ def test_activate_conditional_bonus_arms(admin_client):
 def test_double_order_reward(admin_client):
     _seed_product_inventory(123, 1, 2)
     _seed_potion(123, "double_order_reward", activated=True, used=False)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": 1, "qty": 2}).json()["id"]
     with make_user_client(123, "player") as c:
-        oid = c.post("/api/orders/generate", json={"product_id": 1, "qty": 2}).json()["id"]
+        c.post(f"/api/orders/{oid}/take")
         r = c.post(f"/api/orders/{oid}/fulfill")
         assert r.status_code == 200
         assert c.get("/api/me").json()["coins"] == 180
@@ -665,13 +667,44 @@ def test_double_order_reward(admin_client):
 def test_partial_order_full_reward(admin_client):
     _seed_product_inventory(123, 1, 1)
     _seed_potion(123, "partial_order", activated=True, used=False)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": 1, "qty": 2}).json()["id"]
     with make_user_client(123, "player") as c:
-        oid = c.post("/api/orders/generate", json={"product_id": 1, "qty": 2}).json()["id"]
+        c.post(f"/api/orders/{oid}/take")
         r = c.post(f"/api/orders/{oid}/fulfill")
         assert r.status_code == 200
         assert r.json()["status"] == "fulfilled"
         assert c.get("/api/me").json()["coins"] == 90
         assert c.get("/api/potions").json()[0]["used"] is True
+
+
+def test_fulfill_potion_order_prefers_non_activated(admin_client):
+    from models import UserPotion
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        s.add(UserPotion(user_id=123, potion_recipe_id=1, bonus_code="skip_plant_stitch", activated=True, used=False))
+        s.add(UserPotion(user_id=123, potion_recipe_id=1, bonus_code="skip_plant_stitch", activated=False, used=False))
+        s.commit()
+    finally:
+        s.close()
+
+    oid = admin_client.post("/api/admin/orders/generate", json={"potion_recipe_id": 1}).json()["id"]
+    with make_user_client(123, "player") as c:
+        c.post(f"/api/orders/{oid}/take")
+        r = c.post(f"/api/orders/{oid}/fulfill")
+        assert r.status_code == 200
+
+    s = TestingSessionLocal()
+    try:
+        rows = s.query(UserPotion).filter(UserPotion.user_id == 123).order_by(UserPotion.id).all()
+        activated = [p for p in rows if p.activated]
+        used = [p for p in rows if p.used]
+        assert len(activated) == 1
+        assert activated[0].used is False
+        assert len(used) == 1
+        assert used[0].activated is False
+    finally:
+        s.close()
 
 
 def test_skip_plant_stitch_grows_instantly(admin_client):

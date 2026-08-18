@@ -241,17 +241,18 @@ def test_plant_triggers_achievement(admin_client):
 
 
 def test_fulfill_trigger_coin_achievement(admin_client):
-    from models import Achievement, OrderReq, Inventory
+    from models import Achievement, OrderReq, UserOrder, Inventory
     from tests.conftest import TestingSessionLocal
     s = TestingSessionLocal()
     try:
         _seed_achievement(s, "ach_coin", "Монеты 100", "coins_reached", 100)
         inv = Inventory(user_id=123, product_id=1, qty=10)
         s.add(inv)
-        o = OrderReq(user_id=123, product_id=1, qty=2, reward_coins=200, status="open")
+        o = OrderReq(product_id=1, qty=2, reward_coins=200, status="open")
         s.add(o)
+        s.flush()
+        s.add(UserOrder(user_id=123, order_id=o.id))
         s.commit()
-        s.refresh(o)
         oid = o.id
     finally:
         s.close()

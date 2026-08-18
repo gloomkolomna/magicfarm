@@ -11,8 +11,8 @@ def _img_bytes():
     return buf.getvalue()
 
 
-def _poison_id(player_client):
-    for p in player_client.get("/api/farm/products").json():
+def _poison_id(client):
+    for p in client.get("/api/farm/products").json():
         if p["code"] == "poison":
             return p["id"]
     raise AssertionError("product poison not seeded")
@@ -53,45 +53,8 @@ def _seed_product_inventory(vk_id: int, product_id: int, qty: int):
         s.close()
 
 
-def _make_production(vk_id: int, kind: str = "alchemy", required: int = 500):
-    from models import Production, PRODUCTION_NAMES
-    from tests.conftest import TestingSessionLocal
-    s = TestingSessionLocal()
-    try:
-        pr = Production(
-            user_id=vk_id, kind=kind, name=PRODUCTION_NAMES.get(kind, kind),
-            status="installed", accumulated=0, required=required,
-        )
-        s.add(pr)
-        s.commit()
-        s.refresh(pr)
-        return pr.id
-    finally:
-        s.close()
-
-
 def test_list_orders_empty(player_client):
     assert player_client.get("/api/orders").json() == []
-
-
-def test_generate_order(player_client):
-    pid = _poison_id(player_client)
-    res = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 3, "customer": "Леди Бейлин"})
-    assert res.status_code == 201
-    data = res.json()
-    assert data["product_id"] == pid
-    assert data["qty"] == 3
-    assert data["status"] == "open"
-    assert data["customer"] == "Леди Бейлин"
-    # reward = (база растения ур.1 = 5 + надбавка alchemy = 40) * 3 = 135.
-    assert data["reward_coins"] == 135
-
-
-def test_generate_order_without_customer(player_client):
-    pid = _poison_id(player_client)
-    res = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 1})
-    assert res.status_code == 201
-    assert res.json()["customer"] is None
 
 
 def test_list_customer_names(player_client):
@@ -100,90 +63,96 @@ def test_list_customer_names(player_client):
     assert data == ["Леди Бейлин", "Русалка Марин", "Маг Годвин"]
 
 
-def test_generate_order_default_qty(player_client):
-    pid = _poison_id(player_client)
-    res = player_client.post("/api/orders/generate", json={"product_id": pid})
-    assert res.status_code == 201
-    assert res.json()["qty"] == 7
-
-
-def test_generate_order_invalid_qty(player_client):
-    pid = _poison_id(player_client)
-    res = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 0})
-    assert res.status_code == 400
-    res = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 99})
-    assert res.status_code == 400
-
-
-def test_generate_order_unknown_product(player_client):
-    res = player_client.post("/api/orders/generate", json={"product_id": 9999})
-    assert res.status_code == 404
-
-
-def test_fulfill_order_success(player_client, monkeypatch):
-    # Крафтим 3 яда (1 цикл, qty=3) → выполняем заказ на 2.
-    pid = _craft_poison(player_client, monkeypatch, cycles=1, qty=3)
-    oid = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
-
-    res = player_client.post(f"/api/orders/{oid}/fulfill")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["status"] == "fulfilled"
-    assert data["fulfilled_at"] is not None
-
-    me = player_client.get("/api/me").json()
-    assert me["coins"] == 90  # (5 + 40) * 2
-
-    inv = player_client.get("/api/farm/inventory").json()
-    assert inv[0]["qty"] == 1  # 3 - 2
-
-
-def test_fulfill_insufficient_stock(player_client):
-    pid = _poison_id(player_client)
-    oid = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
-    res = player_client.post(f"/api/orders/{oid}/fulfill")
-    assert res.status_code == 400
-
-
-def test_fulfill_already_fulfilled(player_client, monkeypatch):
-    pid = _craft_poison(player_client, monkeypatch, cycles=1, qty=5)
-    oid = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
-    assert player_client.post(f"/api/orders/{oid}/fulfill").status_code == 200
-    res = player_client.post(f"/api/orders/{oid}/fulfill")
-    assert res.status_code == 409
-
-
-def test_cancel_order_returns_to_catalog(player_client):
-    pid = _poison_id(player_client)
-    oid = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
-    res = player_client.post(f"/api/orders/{oid}/cancel")
-    assert res.status_code == 200
-    assert res.json()["status"] == "open"
-
-    assert player_client.get("/api/orders").json() == []
-
-    avail = player_client.get("/api/orders/available").json()
-    assert any(o["id"] == oid for o in avail)
-
-    res2 = player_client.post(f"/api/orders/{oid}/take")
-    assert res2.status_code == 200
-
-
-def test_cancel_already_fulfilled(player_client, monkeypatch):
-    pid = _craft_poison(player_client, monkeypatch, cycles=1, qty=5)
-    oid = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
-    player_client.post(f"/api/orders/{oid}/fulfill")
-    res = player_client.post(f"/api/orders/{oid}/cancel")
-    assert res.status_code == 409
-
-
-def test_fulfill_other_user_order(player_client):
-    pid = _poison_id(player_client)
-    oid = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+def test_fulfill_order_success(admin_client, monkeypatch):
     from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
+    with make_user_client(123, "player") as player:
+        _craft_poison(player, monkeypatch, cycles=1, qty=3)
+        assert player.post(f"/api/orders/{oid}/take").status_code == 200
+        res = player.post(f"/api/orders/{oid}/fulfill")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "fulfilled"
+        assert data["fulfilled_at"] is not None
+
+        me = player.get("/api/me").json()
+        assert me["coins"] == 90  # (5 + 40) * 2
+
+        inv = player.get("/api/farm/inventory").json()
+        assert inv[0]["qty"] == 1  # 3 - 2
+
+
+def test_fulfill_insufficient_stock(admin_client):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    with make_user_client(123, "player") as player:
+        assert player.post(f"/api/orders/{oid}/take").status_code == 200
+        res = player.post(f"/api/orders/{oid}/fulfill")
+        assert res.status_code == 400
+
+
+def test_fulfill_already_fulfilled(admin_client, monkeypatch):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
+    with make_user_client(123, "player") as player:
+        _craft_poison(player, monkeypatch, cycles=1, qty=5)
+        player.post(f"/api/orders/{oid}/take")
+        assert player.post(f"/api/orders/{oid}/fulfill").status_code == 200
+        res = player.post(f"/api/orders/{oid}/fulfill")
+        assert res.status_code == 409
+
+
+def test_cancel_order_returns_to_pool(admin_client):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    with make_user_client(123, "player") as player:
+        assert player.post(f"/api/orders/{oid}/take").status_code == 200
+        res = player.post(f"/api/orders/{oid}/cancel")
+        assert res.status_code == 200
+        assert res.json()["status"] == "open"
+
+        assert player.get("/api/orders").json() == []
+
+        avail = player.get("/api/orders/available").json()
+        assert any(o["id"] == oid for o in avail)
+
+        assert player.post(f"/api/orders/{oid}/take").status_code == 200
+
+
+def test_cancel_already_fulfilled(admin_client, monkeypatch):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
+    with make_user_client(123, "player") as player:
+        _craft_poison(player, monkeypatch, cycles=1, qty=5)
+        player.post(f"/api/orders/{oid}/take")
+        player.post(f"/api/orders/{oid}/fulfill")
+        res = player.post(f"/api/orders/{oid}/cancel")
+        assert res.status_code == 409
+
+
+def test_fulfill_without_take_404(admin_client):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    with make_user_client(123, "player") as player:
+        res = player.post(f"/api/orders/{oid}/fulfill")
+        assert res.status_code == 404
+
+
+def test_fulfill_other_user_order(admin_client):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    with make_user_client(123, "player") as player:
+        player.post(f"/api/orders/{oid}/take")
     with make_user_client(999, "player") as other:
         res = other.post(f"/api/orders/{oid}/fulfill")
-        assert res.status_code == 403
+        assert res.status_code == 404
 
 
 def test_fulfill_not_found(player_client):
@@ -191,14 +160,18 @@ def test_fulfill_not_found(player_client):
     assert res.status_code == 404
 
 
-def test_list_orders_filter(player_client):
-    pid = _poison_id(player_client)
-    a = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
-    b = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
-    player_client.post(f"/api/orders/{a}/cancel")
-    open_orders = player_client.get("/api/orders?status_filter=open").json()
-    assert len(open_orders) == 1
-    assert open_orders[0]["id"] == b
+def test_list_orders_filter(admin_client):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    a = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    b = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
+    with make_user_client(123, "player") as player:
+        player.post(f"/api/orders/{a}/take")
+        player.post(f"/api/orders/{b}/take")
+        assert len(player.get("/api/orders?status_filter=open").json()) == 2
+        player.post(f"/api/orders/{a}/cancel")
+        open_orders = player.get("/api/orders?status_filter=open").json()
+        assert [o["id"] for o in open_orders] == [b]
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -209,14 +182,35 @@ def test_list_orders_filter(player_client):
 def test_admin_generate_order(admin_client):
     pid = _poison_id(admin_client)
     res = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 3})
-    assert res.status_code == 201, res.text
+    assert res.status_code == 201
     data = res.json()
-    assert data["user_id"] is None
     assert data["product_id"] == pid
     assert data["qty"] == 3
     assert data["status"] == "open"
     assert data["customer"] is None
     assert data["reward_coins"] == 135
+
+
+def test_orders_remain_in_admin_and_customer_after_fulfill(admin_client, monkeypatch):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    ids = [
+        admin_client.post("/api/admin/orders/generate", json={
+            "product_id": pid, "qty": 1, "customer": "Леди Бейлин",
+        }).json()["id"]
+        for _ in range(3)
+    ]
+    assert admin_client.get("/api/admin/orders").json()
+    assert admin_client.get("/api/admin/customers").json()[0]["open_orders_count"] == 3
+
+    with make_user_client(123, "player") as player:
+        _craft_poison(player, monkeypatch, cycles=1, qty=5)
+        player.post(f"/api/orders/{ids[0]}/take")
+        assert player.post(f"/api/orders/{ids[0]}/fulfill").status_code == 200
+
+    admin_orders = admin_client.get("/api/admin/orders").json()
+    assert all(any(o["id"] == i for o in admin_orders) for i in ids)
+    assert admin_client.get("/api/admin/customers").json()[0]["open_orders_count"] == 3
 
 
 def test_admin_generate_order_default_qty(admin_client):
@@ -334,7 +328,7 @@ def test_admin_generate_order_forbidden(player_client):
 
 
 # ═══════════════════════════════════════════════════════════════
-# Каталог свободных заказов и взятие
+# Каталог свободных заказов и взятие (общий пул, per-player прогресс)
 # ═══════════════════════════════════════════════════════════════
 
 
@@ -368,16 +362,25 @@ def test_take_order_success(admin_client):
         assert player.get("/api/orders/available").json() == []
 
 
-def test_take_order_already_taken(admin_client):
+def test_take_order_repeat_same_player_409(admin_client):
     from tests.conftest import make_user_client
     pid = _poison_id(admin_client)
     oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
     with make_user_client(123, "player") as player:
         assert player.post(f"/api/orders/{oid}/take").status_code == 200
-    with make_user_client(999, "player") as other:
-        res = other.post(f"/api/orders/{oid}/take")
+        res = player.post(f"/api/orders/{oid}/take")
         assert res.status_code == 409
-        assert other.get("/api/orders").json() == []
+
+
+def test_take_order_shared_pool_both_players(admin_client):
+    from tests.conftest import make_user_client
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    with make_user_client(123, "player") as p1:
+        assert p1.post(f"/api/orders/{oid}/take").status_code == 200
+    with make_user_client(999, "player") as p2:
+        assert p2.post(f"/api/orders/{oid}/take").status_code == 200
+        assert [o["id"] for o in p2.get("/api/orders").json()] == [oid]
 
 
 def test_take_order_not_open(admin_client):
@@ -396,39 +399,8 @@ def test_take_order_not_found(player_client):
 
 
 # ═══════════════════════════════════════════════════════════════
-# Выполнил заказ — больше не может взять/выполнить его снова
+# Выполнил заказ — скрыт из пула для себя, доступен другим
 # ═══════════════════════════════════════════════════════════════
-
-
-def _return_order_to_pool(order_id: int):
-    from models import OrderReq
-    from tests.conftest import TestingSessionLocal
-    s = TestingSessionLocal()
-    try:
-        o = s.query(OrderReq).filter(OrderReq.id == order_id).first()
-        o.user_id = None
-        o.status = "open"
-        s.commit()
-    finally:
-        s.close()
-
-
-def test_fulfill_sets_fulfilled_by(admin_client, monkeypatch):
-    from tests.conftest import make_user_client
-    from models import OrderReq
-    from tests.conftest import TestingSessionLocal
-    pid = _poison_id(admin_client)
-    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
-    with make_user_client(123, "player") as player:
-        _craft_poison(player, monkeypatch, cycles=1, qty=3)
-        player.post(f"/api/orders/{oid}/take")
-        assert player.post(f"/api/orders/{oid}/fulfill").status_code == 200
-    s = TestingSessionLocal()
-    try:
-        o = s.query(OrderReq).filter(OrderReq.id == oid).first()
-        assert o.fulfilled_by == 123
-    finally:
-        s.close()
 
 
 def test_fulfilled_order_not_retakeable_by_same_player(admin_client, monkeypatch):
@@ -440,7 +412,6 @@ def test_fulfilled_order_not_retakeable_by_same_player(admin_client, monkeypatch
         player.post(f"/api/orders/{oid}/take")
         player.post(f"/api/orders/{oid}/fulfill")
 
-        _return_order_to_pool(oid)
         available = player.get("/api/orders/available").json()
         assert all(a["id"] != oid for a in available)
         res = player.post(f"/api/orders/{oid}/take")
@@ -457,36 +428,11 @@ def test_fulfilled_order_takeable_by_other_player(admin_client, monkeypatch):
         player.post(f"/api/orders/{oid}/take")
         player.post(f"/api/orders/{oid}/fulfill")
 
-    _return_order_to_pool(oid)
     with make_user_client(999, "player") as other:
         available = other.get("/api/orders/available").json()
         assert any(a["id"] == oid for a in available)
         res = other.post(f"/api/orders/{oid}/take")
         assert res.status_code == 200
-
-
-def test_refulfill_after_reopen_forbidden(admin_client, monkeypatch):
-    from tests.conftest import make_user_client
-    from models import OrderReq
-    from tests.conftest import TestingSessionLocal
-    pid = _poison_id(admin_client)
-    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 2}).json()["id"]
-    with make_user_client(123, "player") as player:
-        _craft_poison(player, monkeypatch, cycles=1, qty=5)
-        player.post(f"/api/orders/{oid}/take")
-        player.post(f"/api/orders/{oid}/fulfill")
-
-        s = TestingSessionLocal()
-        try:
-            o = s.query(OrderReq).filter(OrderReq.id == oid).first()
-            o.status = "open"
-            s.commit()
-        finally:
-            s.close()
-
-        res = player.post(f"/api/orders/{oid}/fulfill")
-        assert res.status_code == 409
-        assert res.json()["detail"] == "Вы уже выполняли этот заказ"
 
 
 def test_taken_order_fulfill(admin_client, monkeypatch):
@@ -509,7 +455,7 @@ def test_untaken_global_order_fulfill_forbidden(admin_client):
     oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
     with make_user_client(123, "player") as player:
         res = player.post(f"/api/orders/{oid}/fulfill")
-        assert res.status_code == 403
+        assert res.status_code == 404
 
 
 def test_global_order_cancel_forbidden(admin_client):
@@ -518,7 +464,7 @@ def test_global_order_cancel_forbidden(admin_client):
     oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
     with make_user_client(123, "player") as player:
         res = player.post(f"/api/orders/{oid}/cancel")
-        assert res.status_code == 403
+        assert res.status_code == 404
 
 
 def test_global_order_admin_cancel(admin_client):
@@ -529,7 +475,7 @@ def test_global_order_admin_cancel(admin_client):
     assert res.json()["status"] == "cancelled"
 
 
-def test_reward_includes_tent_surcharge(player_client):
+def test_reward_includes_tent_surcharge(admin_client):
     """Лунная фасоль ур.1 (5 монет) + шатёр 30 → 35/шт; 10 шт → 350.
 
     Сценарий из правил: цена товара = база уровня растения + надбавка шатра.
@@ -551,12 +497,12 @@ def test_reward_includes_tent_surcharge(player_client):
     finally:
         s.close()
 
-    res = player_client.post("/api/orders/generate", json={"product_id": prod_id, "qty": 10})
+    res = admin_client.post("/api/admin/orders/generate", json={"product_id": prod_id, "qty": 10})
     assert res.status_code == 201
     assert res.json()["reward_coins"] == 350
 
 
-def test_reward_plant_level_scales(player_client):
+def test_reward_plant_level_scales(admin_client):
     """Растение ур.2 (10 монет) в том же шатре (30) → 40/шт."""
     from models import Plant, Product
     from tests.conftest import TestingSessionLocal
@@ -575,12 +521,12 @@ def test_reward_plant_level_scales(player_client):
     finally:
         s.close()
 
-    res = player_client.post("/api/orders/generate", json={"product_id": prod_id, "qty": 3})
+    res = admin_client.post("/api/admin/orders/generate", json={"product_id": prod_id, "qty": 3})
     assert res.status_code == 201
     assert res.json()["reward_coins"] == 120  # (10 + 30) * 3
 
 
-def test_reward_product_without_plant_uses_level1_base(player_client):
+def test_reward_product_without_plant_uses_level1_base(admin_client):
     """Товар без растения (продукт животного): база ур.1 (5) + надбавка производства."""
     from models import Product
     from tests.conftest import TestingSessionLocal
@@ -595,7 +541,7 @@ def test_reward_product_without_plant_uses_level1_base(player_client):
     finally:
         s.close()
 
-    res = player_client.post("/api/orders/generate", json={"product_id": prod_id, "qty": 4})
+    res = admin_client.post("/api/admin/orders/generate", json={"product_id": prod_id, "qty": 4})
     assert res.status_code == 201
     assert res.json()["reward_coins"] == 160  # (5 + 35) * 4
 
@@ -624,11 +570,10 @@ def test_admin_update_order_customer(admin_client):
 def test_admin_update_order_status(admin_client):
     pid = _poison_id(admin_client)
     oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
-    res = admin_client.put(f"/api/admin/orders/{oid}", json={"status": "fulfilled"})
+    res = admin_client.put(f"/api/admin/orders/{oid}", json={"status": "cancelled"})
     assert res.status_code == 200
     data = res.json()
-    assert data["status"] == "fulfilled"
-    assert data["fulfilled_at"] is not None
+    assert data["status"] == "cancelled"
 
 
 def test_admin_update_order_reward(admin_client):
@@ -652,14 +597,14 @@ def test_admin_update_order_all_fields(admin_client):
     oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
     res = admin_client.put(f"/api/admin/orders/{oid}", json={
         "qty": 10, "customer": "Гость", "reward_coins": 100,
-        "status": "fulfilled", "name": "Тест",
+        "status": "cancelled", "name": "Тест",
     })
     assert res.status_code == 200
     data = res.json()
     assert data["qty"] == 10
     assert data["customer"] == "Гость"
     assert data["reward_coins"] == 100
-    assert data["status"] == "fulfilled"
+    assert data["status"] == "cancelled"
     assert data["name"] == "Тест"
 
 
@@ -682,53 +627,13 @@ def test_admin_update_order_invalid_qty(admin_client):
     assert res.status_code == 400
 
 
-def test_admin_update_order_forbidden(player_client):
-    pid = _poison_id(player_client)
-    oid = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
-    res = player_client.put(f"/api/admin/orders/{oid}", json={"qty": 5})
-    assert res.status_code == 403
-
-
-def test_upload_own_order_image(player_client, monkeypatch):
-    import tempfile
-    tmp = tempfile.mkdtemp(prefix="farm_ord_img_")
-    monkeypatch.setattr(config, "UPLOADS_DIR", tmp)
-    pid = _poison_id(player_client)
-    oid = player_client.post("/api/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
-    res = player_client.post(
-        f"/api/orders/{oid}/image",
-        files={"image": ("test.png", io.BytesIO(_img_bytes()), "image/png")},
-    )
-    assert res.status_code == 200
-    data = res.json()
-    assert data["image_url"] is not None
-    assert data["image_url"].startswith("/api/uploads/order_")
-
-
-def test_upload_order_image_not_found(player_client, monkeypatch):
-    import tempfile
-    tmp = tempfile.mkdtemp(prefix="farm_ord_img_")
-    monkeypatch.setattr(config, "UPLOADS_DIR", tmp)
-    res = player_client.post(
-        "/api/orders/99999/image",
-        files={"image": ("test.png", io.BytesIO(_img_bytes()), "image/png")},
-    )
-    assert res.status_code == 404
-
-
-def test_upload_order_image_other_user(player_client, monkeypatch):
+def test_admin_update_order_forbidden(admin_client):
     from tests.conftest import make_user_client
-    import tempfile
-    tmp = tempfile.mkdtemp(prefix="farm_ord_img_")
-    monkeypatch.setattr(config, "UPLOADS_DIR", tmp)
-    pid = _poison_id(player_client)
-    with make_user_client(99999001, "player") as other:
-        oid = other.post("/api/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
-    res = player_client.post(
-        f"/api/orders/{oid}/image",
-        files={"image": ("test.png", io.BytesIO(_img_bytes()), "image/png")},
-    )
-    assert res.status_code == 403
+    pid = _poison_id(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": pid, "qty": 1}).json()["id"]
+    with make_user_client(123, "player") as player:
+        res = player.put(f"/api/admin/orders/{oid}", json={"qty": 5})
+        assert res.status_code == 403
 
 
 # ── Доступность заказов по уровню ──

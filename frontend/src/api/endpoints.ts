@@ -444,9 +444,7 @@ export interface Order {
   lock_reason?: string | null;
 }
 
-export interface AdminOrder extends Order {
-  user_id: number | null;
-}
+export interface AdminOrder extends Order {}
 
 export interface Setting {
   key: string;
@@ -852,8 +850,6 @@ export const api = {
     client
       .get<Order[]>('/orders', { params: status_filter ? { status_filter } : {} })
       .then((r) => r.data),
-  generateOrder: (product_id: number, qty?: number, customer?: string | null) =>
-    client.post<Order>('/orders/generate', { product_id, qty, customer }).then((r) => r.data),
   availableOrders: () =>
     client.get<Order[]>('/orders/available').then((r) => r.data),
   takeOrder: (id: number) =>
@@ -862,12 +858,6 @@ export const api = {
     client.get<string[]>('/orders/customers').then((r) => r.data),
   fulfillOrder: (id: number) => client.post<Order>(`/orders/${id}/fulfill`).then((r) => r.data),
   cancelOrder: (id: number) => client.post<Order>(`/orders/${id}/cancel`).then((r) => r.data),
-  uploadOrderImage: async (orderId: number, file: File) => {
-    const compressed = await compressImage(file, 1280, 0.85).catch(() => file);
-    const form = new FormData();
-    form.append('image', compressed);
-    return client.post<Order>(`/orders/${orderId}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
-  },
 
   // ── Библиотека рецептов ──
   library: () =>
@@ -1139,8 +1129,8 @@ export const api = {
     client.delete(`/admin/players/${vkId}/plots/${plotId}`).then((r) => r.data),
 
   // ── Админ: заказы ──
-  adminOrders: (userId?: number) =>
-    client.get<AdminOrder[]>('/admin/orders', { params: userId !== undefined ? { user_id: userId } : {} }).then((r) => r.data),
+  adminOrders: () =>
+    client.get<AdminOrder[]>('/admin/orders').then((r) => r.data),
   adminGenerateOrder: (productId: number | null, qty?: number, customer?: string | null, customerPhrase?: string | null, potionRecipeId?: number | null) =>
     client.post<AdminOrder>('/admin/orders/generate', {
       product_id: productId,

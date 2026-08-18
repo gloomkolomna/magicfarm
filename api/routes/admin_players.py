@@ -406,9 +406,9 @@ def restart_player(
 ):
     """РЕСТАРТ: полное обнуление прогресса игрока (как будто только пришёл в игру)."""
     from models import (
-        BarnyardSlot, Cauldron, CraftSession, HouseBuild, Inventory, OrderReq,
+        BarnyardSlot, Cauldron, CraftSession, HouseBuild, Inventory,
         Plot, Production, StitchReport, TentBuild, UserAchievement, UserCrystalNorm,
-        UserPet, UserPlantNorm, UserPotion, UserRecipe,
+        UserOrder, UserPet, UserPlantNorm, UserPotion, UserRecipe,
     )
 
     target = db.query(User).filter(User.vk_id == vk_id).first()
@@ -418,7 +418,7 @@ def restart_player(
     for model in (
         UserPlantNorm, UserCrystalNorm, UserAchievement, UserPotion, Cauldron,
         UserPet, BarnyardSlot, CraftSession, UserRecipe, HouseBuild, TentBuild,
-        OrderReq, Inventory, Production, Plot, StitchReport,
+        UserOrder, Inventory, Production, Plot, StitchReport,
     ):
         db.query(model).filter(model.user_id == vk_id).delete(synchronize_session=False)
 

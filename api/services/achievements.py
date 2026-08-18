@@ -49,8 +49,10 @@ def _meets_condition(user_id: int, a: Achievement, db: Session) -> bool:
         count = db.query(Plot).filter(Plot.user_id == user_id, Plot.cell_id.isnot(None)).count()
         return count >= a.condition_value
     if a.condition_kind == "first_order":
-        from models import OrderReq
-        count = db.query(OrderReq).filter(OrderReq.user_id == user_id, OrderReq.status == "fulfilled").count()
+        from models import UserOrder
+        count = db.query(UserOrder).filter(
+            UserOrder.user_id == user_id, UserOrder.fulfilled_at.isnot(None)
+        ).count()
         return count >= a.condition_value
     if a.condition_kind == "coins_reached":
         from models import User

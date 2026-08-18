@@ -5,7 +5,7 @@ PLAYER_VK = 600
 _MODELS = [
     "UserPlantNorm", "UserCrystalNorm", "UserAchievement", "UserPotion", "Cauldron",
     "UserPet", "BarnyardSlot", "CraftSession", "UserRecipe", "HouseBuild", "TentBuild",
-    "OrderReq", "Inventory", "Production", "Plot", "StitchReport",
+    "UserOrder", "Inventory", "Production", "Plot", "StitchReport",
 ]
 
 
@@ -21,7 +21,7 @@ def _seed_everything(vk_id):
     from models import (
         BarnyardSlot, Cauldron, CraftSession, Field, HouseBuild, Inventory, OrderReq,
         Plot, Production, StitchReport, Tent, TentBuild, User, UserAchievement,
-        UserCrystalNorm, UserPet, UserPlantNorm, UserPotion, UserRecipe,
+        UserCrystalNorm, UserOrder, UserPet, UserPlantNorm, UserPotion, UserRecipe,
     )
     s = TestingSessionLocal()
     try:
@@ -52,7 +52,10 @@ def _seed_everything(vk_id):
         s.add(Plot(user_id=vk_id, plant_id=1, qty=2, status="planted", accumulated=5, required=60))
         s.add(Production(user_id=vk_id, kind="alchemy", name="Стол", required=500))
         s.add(Inventory(user_id=vk_id, qty=7))
-        s.add(OrderReq(user_id=vk_id, product_id=1, qty=1))
+        o = OrderReq(product_id=1, qty=1)
+        s.add(o)
+        s.flush()
+        s.add(UserOrder(user_id=vk_id, order_id=o.id))
         s.add(StitchReport(user_id=vk_id, amount=42, photo_after_url="x.png", status="accepted"))
         s.add(UserCrystalNorm(user_id=vk_id, color="treasure_green", count=0, value=400))
         s.add(UserPlantNorm(user_id=vk_id, plant_id=1, norm_per_unit=30))
@@ -135,3 +138,29 @@ def test_restart_requires_admin(player_client):
 def test_restart_unknown_player(admin_client):
     res = admin_client.post("/api/admin/players/999999/restart")
     assert res.status_code == 404
+
+
+def test_restart_keeps_order_catalog(admin_client):
+    from models import OrderReq, UserOrder
+    with make_user_client(PLAYER_VK, "player") as c:
+        c.get("/api/me")
+    s = TestingSessionLocal()
+    try:
+        o = OrderReq(product_id=1, qty=1)
+        s.add(o)
+        s.flush()
+        s.add(UserOrder(user_id=PLAYER_VK, order_id=o.id))
+        s.commit()
+        oid = o.id
+    finally:
+        s.close()
+
+    res = admin_client.post(f"/api/admin/players/{PLAYER_VK}/restart")
+    assert res.status_code == 200
+
+    s = TestingSessionLocal()
+    try:
+        assert s.query(OrderReq).filter(OrderReq.id == oid).count() == 1
+        assert s.query(UserOrder).filter(UserOrder.user_id == PLAYER_VK).count() == 0
+    finally:
+        s.close()

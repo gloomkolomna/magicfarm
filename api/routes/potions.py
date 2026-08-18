@@ -422,16 +422,8 @@ def brew(
     c.status = "done"
     recipe = db.query(PotionRecipe).filter(PotionRecipe.id == c.recipe_id).first()
     if recipe:
-        existing = db.query(UserPotion).filter(
-            UserPotion.user_id == user.vk_id, UserPotion.potion_recipe_id == recipe.id
-        ).first()
-        if existing is None:
-            db.add(UserPotion(user_id=user.vk_id, potion_recipe_id=recipe.id,
-                             bonus_code=recipe.bonus_code, activated=False))
-        elif existing.used:
-            existing.used = False
-            existing.activated = False
-            existing.bonus_code = recipe.bonus_code
+        db.add(UserPotion(user_id=user.vk_id, potion_recipe_id=recipe.id,
+                          bonus_code=recipe.bonus_code, activated=False))
 
     db.commit()
 
@@ -489,7 +481,18 @@ def list_bonuses(
     user: User = Depends(get_current_user),
 ):
     potions = db.query(UserPotion).filter(UserPotion.user_id == user.vk_id).all()
-    by_code = {p.bonus_code: p for p in potions if p.bonus_code}
+    by_code: dict[str, UserPotion] = {}
+    for p in potions:
+        if not p.bonus_code:
+            continue
+        cur = by_code.get(p.bonus_code)
+        if cur is None:
+            by_code[p.bonus_code] = p
+            continue
+        p_rank = 0 if (p.activated and not p.used) else (1 if not p.used else 2)
+        cur_rank = 0 if (cur.activated and not cur.used) else (1 if not cur.used else 2)
+        if p_rank < cur_rank:
+            by_code[p.bonus_code] = p
     result = []
     for code in POTION_BONUS_LABELS.keys():
         p = by_code.get(code)

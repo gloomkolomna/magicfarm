@@ -70,15 +70,6 @@ def test_take_order_forbidden_without_kassa(admin_client):
         assert "касс" in res.json()["detail"].lower()
 
 
-def test_generate_order_forbidden_without_kassa(admin_client):
-    pid = _product_id(admin_client)
-    with make_user_client(3002, "player") as c:
-        c.get("/api/me")
-        _remove_kassa(3002)
-        res = c.post("/api/orders/generate", json={"product_id": pid, "qty": 1})
-        assert res.status_code == 403
-
-
 def test_available_orders_empty_without_kassa(admin_client):
     _open_order_id(admin_client)
     with make_user_client(3003, "player") as c:

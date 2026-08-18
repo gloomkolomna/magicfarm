@@ -58,10 +58,11 @@ def test_no_duplicate_order_on_replant(admin_client):
 
 def test_fulfill_order_shows_have_need(admin_client):
     fid = _field_with_bed(admin_client)
+    oid = admin_client.post("/api/admin/orders/generate", json={"product_id": 1, "qty": 3}).json()["id"]
     with make_user_client(123, "player") as c:
         _credit(c, 10000)
         c.post(f"/api/fields/{fid}/cells/1/1/plant", json={"plant_id": 1, "qty": 1})
-        oid = c.post("/api/orders/generate", json={"product_id": 1, "qty": 3}).json()["id"]
+        c.post(f"/api/orders/{oid}/take")
 
         r = c.post(f"/api/orders/{oid}/fulfill")
         assert r.status_code == 400

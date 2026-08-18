@@ -8,12 +8,6 @@ import CrystalStandardEditor from '../components/CrystalStandardEditor';
 import { confirmDialog } from '../components/Confirm';
 import SpritePedestal from '../components/SpritePedestal';
 
-const ORDER_STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  open: { label: 'Открыт', color: 'var(--accent-warm)' },
-  fulfilled: { label: 'Выполнен', color: 'var(--success)' },
-  cancelled: { label: 'Отменён', color: 'var(--text-muted)' },
-};
-
 const BONUS_KIND_OPTIONS = [
   { value: 'harvest_orchard', label: '🍎 +1 к урожаю сада' },
   { value: 'harvest_plot', label: '🌱 +1 к урожаю грядки' },
@@ -577,7 +571,6 @@ export default function AdminPage() {
       reward_coins: String(o.reward_coins),
       customer: o.customer || '',
       customer_phrase: o.customer_phrase || '',
-      status: o.status,
       name: o.name || '',
     });
     setOrderEditingId(o.id);
@@ -603,7 +596,6 @@ export default function AdminPage() {
           reward_coins: orderForm.reward_coins ? Number(orderForm.reward_coins) : undefined,
           customer: customer,
           customer_phrase: orderForm.customer_phrase ?? undefined,
-          status: orderForm.status || undefined,
           name: orderForm.name || undefined,
         });
         setMsg('✓ Заказ обновлён');
@@ -1389,7 +1381,7 @@ export default function AdminPage() {
   const qActive = query.trim().length > 0;
   const fl = <T,>(items: T[]): T[] => (qActive ? items.filter((it) => matchesAny(it, query)) : items);
 
-  const shownOrders = fl(adminOrders.map((o) => ({ ...o, status_label: ORDER_STATUS_LABEL[o.status]?.label || '' })));
+  const shownOrders = fl(adminOrders);
   const shownFields = fl(fields);
   const shownPlants = fl(plants);
   const shownAnimals = fl(animals);
@@ -1943,14 +1935,6 @@ export default function AdminPage() {
                         <input className="fm-input" type="number" value={orderForm.reward_coins || ''} onChange={(e) => setOrderForm({ ...orderForm, reward_coins: e.target.value })} />
                       </div>
                       <div style={{ marginBottom: 8 }}>
-                        <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Статус</label>
-                        <select className="fm-input" value={orderForm.status || ''} onChange={(e) => setOrderForm({ ...orderForm, status: e.target.value })}>
-                          <option value="open">Открыт</option>
-                          <option value="fulfilled">Выполнен</option>
-                          <option value="cancelled">Отменён</option>
-                        </select>
-                      </div>
-                      <div style={{ marginBottom: 8 }}>
                         <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Название (на карточке)</label>
                         <input className="fm-input" value={orderForm.name || ''} onChange={(e) => setOrderForm({ ...orderForm, name: e.target.value })} />
                       </div>
@@ -1973,7 +1957,6 @@ export default function AdminPage() {
               ) : (
                 <div className="fm-grid">
                   {shownOrders.map((o) => {
-                    const st = ORDER_STATUS_LABEL[o.status] || ORDER_STATUS_LABEL.open;
                     return (
                       <div key={o.id} className="fm-card fm-rise" style={{ textAlign: 'center' }}>
                         <SpritePedestal url={o.image_url || o.product_image_url || o.potion_image_url ? mediaUrl(o.image_url || o.product_image_url || o.potion_image_url) : null} emoji={o.product_emoji} height={100} />
@@ -1984,7 +1967,6 @@ export default function AdminPage() {
                             ? <img src={mediaUrl(o.customer_image_url)} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
                             : o.customer ? <span>🧑</span> : null}
                           <span>{o.customer || '—'}</span>
-                          {o.user_id != null && <span> · игрок #{o.user_id}</span>}
                         </div>
                         {o.customer_phrase && (
                           <div style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text-secondary)', marginBottom: 8 }}>
@@ -2003,10 +1985,6 @@ export default function AdminPage() {
                             marginBottom: 8,
                           }}
                         >
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: st.color, whiteSpace: 'nowrap' }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: st.color, flexShrink: 0 }} />
-                            {st.label}
-                          </span>
                           <span style={{ color: 'var(--accent-warm)', fontWeight: 600, whiteSpace: 'nowrap' }}>🪙 {o.reward_coins}</span>
                         </div>
                         <div style={{ display: 'flex', gap: 6 }}>

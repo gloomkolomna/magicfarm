@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_role
-from models import Customer, Inventory, OrderReq, Product, User
+from models import Customer, Inventory, OrderReq, Product, User, UserOrder
 from routes.settings import get_default_plant_qty
 from services.achievements import check_and_award
 from services.availability import has_installed_kassa
@@ -29,11 +29,13 @@ def _get_order_or_404(order_id: int, db: Session) -> OrderReq:
     return o
 
 
-def _get_user_order(order_id: int, user: User, db: Session) -> OrderReq:
-    o = _get_order_or_404(order_id, db)
-    if o.user_id != user.vk_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Это не ваш заказ")
-    return o
+def _get_user_order(user: User, order_id: int, db: Session) -> UserOrder:
+    uo = db.query(UserOrder).filter(
+        UserOrder.user_id == user.vk_id, UserOrder.order_id == order_id
+    ).first()
+    if uo is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Вы не брали этот заказ")
+    return uo
 
 
 def _calc_order_reward(db: Session, product: Product, qty: int) -> int:
@@ -84,7 +86,12 @@ def _customer_images(db: Session) -> dict[str, str]:
     return {c.name: c.image_url for c in rows}
 
 
-def _to_out(o: OrderReq, customer_images: dict[str, str] | None = None, lock_reason: str | None = None) -> OrderOut:
+def _to_out(
+    o: OrderReq,
+    customer_images: dict[str, str] | None = None,
+    lock_reason: str | None = None,
+    uo: UserOrder | None = None,
+) -> OrderOut:
     if o.product is not None:
         product_code = o.product.code
         product_name = o.product.name
@@ -95,6 +102,12 @@ def _to_out(o: OrderReq, customer_images: dict[str, str] | None = None, lock_rea
         product_name = o.potion_recipe.name if o.potion_recipe else "Зелье"
         product_emoji = "🧪"
         product_image_url = None
+    if uo is not None:
+        out_status = "fulfilled" if uo.fulfilled_at is not None else "open"
+        fulfilled_at = uo.fulfilled_at
+    else:
+        out_status = o.status
+        fulfilled_at = None
     return OrderOut(
         id=o.id, product_id=o.product_id, product_code=product_code,
         product_name=product_name, product_emoji=product_emoji,
@@ -106,8 +119,8 @@ def _to_out(o: OrderReq, customer_images: dict[str, str] | None = None, lock_rea
         customer=o.customer,
         customer_phrase=o.customer_phrase,
         customer_image_url=(customer_images or {}).get(o.customer) if o.customer else None,
-        status=o.status, name=o.name, image_url=o.image_url,
-        created_at=o.created_at, fulfilled_at=o.fulfilled_at,
+        status=out_status, name=o.name, image_url=o.image_url,
+        created_at=o.created_at, fulfilled_at=fulfilled_at,
         available=lock_reason is None, lock_reason=lock_reason,
     )
 
@@ -126,12 +139,14 @@ def list_orders(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    q = db.query(OrderReq).filter(OrderReq.user_id == user.vk_id)
-    if status_filter is not None:
-        q = q.filter(OrderReq.status == status_filter)
-    rows = q.order_by(OrderReq.created_at.desc()).limit(200).all()
+    q = db.query(UserOrder).filter(UserOrder.user_id == user.vk_id)
+    if status_filter == "open":
+        q = q.filter(UserOrder.fulfilled_at.is_(None))
+    elif status_filter == "fulfilled":
+        q = q.filter(UserOrder.fulfilled_at.isnot(None))
+    rows = q.order_by(UserOrder.taken_at.desc()).limit(200).all()
     imgs = _customer_images(db)
-    return [_to_out(o, imgs) for o in rows]
+    return [_to_out(uo.order, imgs, uo=uo) for uo in rows]
 
 
 @router.get("/available", response_model=list[OrderOut])
@@ -141,10 +156,14 @@ def list_available_orders(
 ):
     if not has_installed_kassa(user, db):
         return []
-    rows = db.query(OrderReq).filter(
-        OrderReq.user_id == None, OrderReq.status == "open",
-        (OrderReq.fulfilled_by == None) | (OrderReq.fulfilled_by != user.vk_id),
-    ).order_by(OrderReq.created_at.desc()).limit(200).all()
+    mine = [
+        row[0] for row in db.query(UserOrder.order_id)
+        .filter(UserOrder.user_id == user.vk_id).all()
+    ]
+    q = db.query(OrderReq).filter(OrderReq.status == "open")
+    if mine:
+        q = q.filter(~OrderReq.id.in_(mine))
+    rows = q.order_by(OrderReq.created_at.desc()).limit(200).all()
     imgs = _customer_images(db)
     visible = [o for o in rows if _order_lock_reason(o, user, db) is None]
     return [_to_out(o, imgs) for o in visible]
@@ -162,79 +181,23 @@ def take_order(
             detail="Установите шатёр-кассу, чтобы брать заказы",
         )
     o = _get_order_or_404(order_id, db)
-    if o.fulfilled_by == user.vk_id:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Вы уже выполняли этот заказ")
-    if o.user_id is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже взят")
+    existing = db.query(UserOrder).filter(
+        UserOrder.user_id == user.vk_id, UserOrder.order_id == o.id
+    ).first()
+    if existing is not None:
+        if existing.fulfilled_at is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Вы уже выполняли этот заказ")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже взят вами")
     if o.status != "open":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен или отменён")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ скрыт и недоступен")
     lock_reason = _order_lock_reason(o, user, db)
     if lock_reason is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lock_reason)
-    o.user_id = user.vk_id
+    uo = UserOrder(user_id=user.vk_id, order_id=o.id)
+    db.add(uo)
     db.commit()
-    db.refresh(o)
-    return _to_out(o, _customer_images(db))
-
-
-class GenerateRequest(BaseModel):
-    product_id: int
-    qty: int | None = None
-    customer: str | None = None
-
-
-@router.post("/generate", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
-def generate_order(
-    req: GenerateRequest,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    """Создаёт NPC-заказ для игрока.
-
-    В правилах Фермы заказ приходит из игры (карточка). В цифре заказ генерируется
-    по запросу: заказчик выбирается из списка, награда = цена товара
-    (база уровня растения + надбавка шатра) × qty.
-    """
-    if not has_installed_kassa(user, db):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Установите шатёр-кассу, чтобы брать заказы",
-        )
-    product = db.query(Product).filter(Product.id == req.product_id).first()
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")
-    qty = req.qty if req.qty is not None else get_default_plant_qty(db)
-    if qty < MIN_QTY or qty > MAX_QTY:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Количество должно быть от {MIN_QTY} до {MAX_QTY}",
-        )
-
-    reward = _calc_order_reward(db, product, qty)
-    o = OrderReq(
-        user_id=user.vk_id, product_id=product.id, qty=qty,
-        reward_coins=reward, customer=req.customer,
-        status="open",
-    )
-    db.add(o)
-    db.commit()
-    db.refresh(o)
-    return _to_out(o, _customer_images(db))
-
-
-@router.post("/{order_id}/image", response_model=OrderOut)
-def upload_own_order_image(
-    order_id: int,
-    image: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    o = _get_user_order(order_id, user, db)
-    remove_upload(o.image_url)
-    o.image_url = save_upload(image, f"order_{order_id}", max_size=800)
-    db.commit()
-    db.refresh(o)
-    return _to_out(o, _customer_images(db))
+    db.refresh(uo)
+    return _to_out(o, _customer_images(db), uo=uo)
 
 
 @router.post("/{order_id}/fulfill", response_model=OrderOut)
@@ -243,11 +206,10 @@ def fulfill_order(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    o = _get_user_order(order_id, user, db)
-    if o.fulfilled_by == user.vk_id:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Вы уже выполняли этот заказ")
-    if o.status != "open":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен или отменён")
+    o = _get_order_or_404(order_id, db)
+    uo = _get_user_order(user, order_id, db)
+    if uo.fulfilled_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен")
 
     double_reward = is_potion_active(user.vk_id, "double_order_reward", db)
 
@@ -257,7 +219,14 @@ def fulfill_order(
             UserPotion.user_id == user.vk_id,
             UserPotion.potion_recipe_id == o.potion_recipe_id,
             UserPotion.used.is_(False),
+            UserPotion.activated.is_(False),
         ).first()
+        if up is None:
+            up = db.query(UserPotion).filter(
+                UserPotion.user_id == user.vk_id,
+                UserPotion.potion_recipe_id == o.potion_recipe_id,
+                UserPotion.used.is_(False),
+            ).first()
         if up is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -276,12 +245,11 @@ def fulfill_order(
         if double_reward:
             consume_potion(user.vk_id, "double_order_reward", db)
 
-        o.status = "fulfilled"
-        o.fulfilled_by = user.vk_id
-        o.fulfilled_at = datetime.datetime.utcnow()
+        uo.fulfilled_at = datetime.datetime.utcnow()
+        uo.reward_coins = reward + bonus
 
         db.commit()
-        db.refresh(o)
+        db.refresh(uo)
 
         check_and_award(user.vk_id, "first_order", db)
         check_and_award(user.vk_id, "coins_reached", db)
@@ -289,7 +257,7 @@ def fulfill_order(
         from services.leveling import check_level_up
         check_level_up(db, u)
 
-        return _to_out(o, _customer_images(db))
+        return _to_out(o, _customer_images(db), uo=uo)
 
     inv = db.query(Inventory).filter(
         Inventory.user_id == user.vk_id, Inventory.product_id == o.product_id
@@ -326,12 +294,11 @@ def fulfill_order(
     if double_reward:
         consume_potion(user.vk_id, "double_order_reward", db)
 
-    o.status = "fulfilled"
-    o.fulfilled_by = user.vk_id
-    o.fulfilled_at = datetime.datetime.utcnow()
+    uo.fulfilled_at = datetime.datetime.utcnow()
+    uo.reward_coins = reward + bonus
 
     db.commit()
-    db.refresh(o)
+    db.refresh(uo)
 
     check_and_award(user.vk_id, "first_order", db)
     check_and_award(user.vk_id, "coins_reached", db)
@@ -339,7 +306,7 @@ def fulfill_order(
     from services.leveling import check_level_up
     check_level_up(db, u)
 
-    return _to_out(o, _customer_images(db))
+    return _to_out(o, _customer_images(db), uo=uo)
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
@@ -348,12 +315,12 @@ def cancel_order(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    o = _get_user_order(order_id, user, db)
-    if o.status != "open":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен или отменён")
-    o.user_id = None
+    o = _get_order_or_404(order_id, db)
+    uo = _get_user_order(user, order_id, db)
+    if uo.fulfilled_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен")
+    db.delete(uo)
     db.commit()
-    db.refresh(o)
     return _to_out(o, _customer_images(db))
 
 
@@ -361,25 +328,15 @@ def cancel_order(
 
 admin_router = APIRouter(prefix="/api/admin/orders", tags=["admin-orders"])
 
-class AdminOrderOut(OrderOut):
-    user_id: int | None = None
 
-def _admin_to_out(o: OrderReq, customer_images: dict[str, str] | None = None) -> AdminOrderOut:
-    d = _to_out(o, customer_images).model_dump()
-    d["user_id"] = o.user_id
-    return AdminOrderOut(**d)
-
-@admin_router.get("", response_model=list[AdminOrderOut])
+@admin_router.get("", response_model=list[OrderOut])
 def admin_list_orders(
-    user_id: int | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
     q = db.query(OrderReq).order_by(OrderReq.id.desc())
-    if user_id is not None:
-        q = q.filter(OrderReq.user_id == user_id)
     imgs = _customer_images(db)
-    return [_admin_to_out(o, imgs) for o in q.limit(200).all()]
+    return [_to_out(o, imgs) for o in q.limit(500).all()]
 
 class AdminGenerateRequest(BaseModel):
     product_id: int | None = None
@@ -389,7 +346,7 @@ class AdminGenerateRequest(BaseModel):
     customer_phrase: str | None = None
 
 
-@admin_router.post("/generate", response_model=AdminOrderOut, status_code=status.HTTP_201_CREATED)
+@admin_router.post("/generate", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 def admin_generate_order(
     req: AdminGenerateRequest,
     db: Session = Depends(get_db),
@@ -406,7 +363,7 @@ def admin_generate_order(
         if recipe is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт зелья не найден")
         o = OrderReq(
-            user_id=None, product_id=None, potion_recipe_id=recipe.id, qty=1,
+            product_id=None, potion_recipe_id=recipe.id, qty=1,
             reward_coins=recipe.reward_coins, customer=req.customer,
             customer_phrase=req.customer_phrase,
             status="open",
@@ -414,7 +371,7 @@ def admin_generate_order(
         db.add(o)
         db.commit()
         db.refresh(o)
-        return _admin_to_out(o, _customer_images(db))
+        return _to_out(o, _customer_images(db))
 
     product = db.query(Product).filter(Product.id == req.product_id).first()
     if product is None:
@@ -428,7 +385,7 @@ def admin_generate_order(
     reward = _calc_order_reward(db, product, qty)
     customer = req.customer
     o = OrderReq(
-        user_id=None, product_id=product.id, qty=qty,
+        product_id=product.id, qty=qty,
         reward_coins=reward, customer=customer,
         customer_phrase=req.customer_phrase,
         status="open",
@@ -436,7 +393,7 @@ def admin_generate_order(
     db.add(o)
     db.commit()
     db.refresh(o)
-    return _admin_to_out(o, _customer_images(db))
+    return _to_out(o, _customer_images(db))
 
 
 class AdminUpdateOrder(BaseModel):
@@ -449,7 +406,7 @@ class AdminUpdateOrder(BaseModel):
     name: str | None = None
 
 
-@admin_router.put("/{order_id}", response_model=AdminOrderOut)
+@admin_router.put("/{order_id}", response_model=OrderOut)
 def admin_update_order(
     order_id: int,
     data: AdminUpdateOrder,
@@ -478,22 +435,20 @@ def admin_update_order(
     if data.customer_phrase is not None:
         o.customer_phrase = data.customer_phrase or None
     if data.status is not None:
-        if data.status not in ("open", "fulfilled", "cancelled"):
+        if data.status not in ("open", "cancelled"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Статус должен быть open, fulfilled или cancelled",
+                detail="Статус должен быть open или cancelled",
             )
         o.status = data.status
-        if data.status == "fulfilled" and o.fulfilled_at is None:
-            o.fulfilled_at = datetime.datetime.utcnow()
     if data.name is not None:
         o.name = data.name
     db.commit()
     db.refresh(o)
-    return _admin_to_out(o, _customer_images(db))
+    return _to_out(o, _customer_images(db))
 
 
-@admin_router.post("/{order_id}/cancel", response_model=AdminOrderOut)
+@admin_router.post("/{order_id}/cancel", response_model=OrderOut)
 def admin_cancel_order(
     order_id: int,
     db: Session = Depends(get_db),
@@ -501,11 +456,11 @@ def admin_cancel_order(
 ):
     o = _get_order_or_404(order_id, db)
     if o.status != "open":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже выполнен или отменён")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Заказ уже скрыт")
     o.status = "cancelled"
     db.commit()
     db.refresh(o)
-    return _admin_to_out(o, _customer_images(db))
+    return _to_out(o, _customer_images(db))
 
 
 @admin_router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -520,7 +475,7 @@ def admin_delete_order(
     return None
 
 
-@admin_router.put("/{order_id}/image", response_model=AdminOrderOut)
+@admin_router.put("/{order_id}/image", response_model=OrderOut)
 def upload_order_image(
     order_id: int,
     image: UploadFile = File(...),
@@ -532,7 +487,7 @@ def upload_order_image(
     o.image_url = save_upload(image, f"order_{order_id}", max_size=800)
     db.commit()
     db.refresh(o)
-    return _admin_to_out(o, _customer_images(db))
+    return _to_out(o, _customer_images(db))
 
 
 # ── Customers (admin) ──

@@ -51,7 +51,8 @@ def migrated_db(tmp_path, monkeypatch):
                 id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL,
                 potion_recipe_id INTEGER NOT NULL, bonus_code VARCHAR,
                 activated BOOLEAN NOT NULL DEFAULT 0,
-                acquired_at DATETIME NOT NULL);
+                acquired_at DATETIME NOT NULL,
+                CONSTRAINT uq_userpotion_user_recipe UNIQUE (user_id, potion_recipe_id));
             CREATE TABLE orders (
                 id INTEGER PRIMARY KEY, user_id INTEGER, product_id INTEGER NOT NULL,
                 qty INTEGER NOT NULL, reward_coins INTEGER NOT NULL DEFAULT 0,
@@ -188,9 +189,12 @@ def test_migration_seeds_customers(migrated_db):
     assert "Ледяная Сванекильда" in names
 
 
-def test_migration_backfills_fulfilled_by(migrated_db):
-    rows = _fetch(
-        migrated_db,
-        "SELECT id, fulfilled_by FROM orders ORDER BY id",
-    )
-    assert rows == [(1, 1), (2, None)]
+def test_migration_orders_single_model(migrated_db):
+    order_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(orders)")]
+    assert "user_id" not in order_cols
+    assert "fulfilled_by" not in order_cols
+    assert "fulfilled_at" not in order_cols
+    uo_cols = [r[1] for r in _fetch(migrated_db, "PRAGMA table_info(user_orders)")]
+    assert {"user_id", "order_id", "taken_at", "fulfilled_at", "reward_coins"} <= set(uo_cols)
+    rows = _fetch(migrated_db, "SELECT status FROM orders ORDER BY id")
+    assert rows == [("open",), ("open",)]

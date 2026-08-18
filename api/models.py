@@ -86,7 +86,6 @@ class User(Base):
     plots = relationship("Plot", back_populates="user", cascade="all, delete-orphan")
     productions = relationship("Production", back_populates="user", cascade="all, delete-orphan")
     inventory = relationship("Inventory", back_populates="user", cascade="all, delete-orphan")
-    orders = relationship("OrderReq", back_populates="user", foreign_keys="OrderReq.user_id", cascade="all, delete-orphan")
     reports = relationship("StitchReport", foreign_keys="StitchReport.user_id", cascade="all, delete-orphan")
     crystal_norms = relationship("UserCrystalNorm", back_populates="user", cascade="all, delete-orphan")
 
@@ -267,8 +266,6 @@ class OrderReq(Base):
     __tablename__ = "orders"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=True)
-    fulfilled_by = Column(Integer, ForeignKey("users.vk_id", ondelete="SET NULL"), nullable=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=True)
     potion_recipe_id = Column(Integer, ForeignKey("potion_recipes.id", ondelete="CASCADE"), nullable=True)
     qty = Column(Integer, nullable=False)
@@ -279,11 +276,26 @@ class OrderReq(Base):
     name = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
-    fulfilled_at = Column(DateTime, nullable=True)
 
-    user = relationship("User", back_populates="orders", foreign_keys=[user_id])
     product = relationship("Product")
     potion_recipe = relationship("PotionRecipe")
+
+
+class UserOrder(Base):
+    __tablename__ = "user_orders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    taken_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+    fulfilled_at = Column(DateTime, nullable=True)
+    reward_coins = Column(Integer, nullable=False, default=0, server_default="0")
+
+    order = relationship("OrderReq")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "order_id", name="uq_userorder_user_order"),
+    )
 
 
 class RequestLog(Base):
@@ -736,10 +748,6 @@ class UserPotion(Base):
     activated = Column(Boolean, nullable=False, default=False, server_default="0")
     used = Column(Boolean, nullable=False, default=False, server_default="0")
     acquired_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
-
-    __table_args__ = (
-        UniqueConstraint("user_id", "potion_recipe_id", name="uq_userpotion_user_recipe"),
-    )
 
 
 class Achievement(Base):
