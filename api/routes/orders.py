@@ -11,6 +11,7 @@ from deps import get_current_user, require_role
 from models import Customer, Inventory, OrderReq, Product, User
 from routes.settings import get_default_plant_qty
 from services.achievements import check_and_award
+from services.availability import has_installed_kassa
 from services.pet_bonuses import apply_pet_bonus_fulfill
 from services.potion_bonuses import consume_potion, is_potion_active
 from services.uploads import remove_upload, save_upload
@@ -138,6 +139,8 @@ def list_available_orders(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if not has_installed_kassa(user, db):
+        return []
     rows = db.query(OrderReq).filter(
         OrderReq.user_id == None, OrderReq.status == "open",
         (OrderReq.fulfilled_by == None) | (OrderReq.fulfilled_by != user.vk_id),
@@ -153,6 +156,11 @@ def take_order(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if not has_installed_kassa(user, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Установите шатёр-кассу, чтобы брать заказы",
+        )
     o = _get_order_or_404(order_id, db)
     if o.fulfilled_by == user.vk_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Вы уже выполняли этот заказ")
@@ -187,6 +195,11 @@ def generate_order(
     по запросу: заказчик выбирается из списка, награда = цена товара
     (база уровня растения + надбавка шатра) × qty.
     """
+    if not has_installed_kassa(user, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Установите шатёр-кассу, чтобы брать заказы",
+        )
     product = db.query(Product).filter(Product.id == req.product_id).first()
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден")

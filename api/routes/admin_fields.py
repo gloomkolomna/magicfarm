@@ -10,7 +10,7 @@ from db import get_db
 from deps import require_role
 from models import (
     BREWERY_MAX_INGREDIENT_CELLS, BREWERY_ZONE_KINDS, Animal, BreweryZone, Field, FieldAnimal,
-    FieldCell, FieldPet, FieldPlant, FieldPotionRecipe, Pet, PetZone, Plant, PlantBed,
+    FieldCell, FieldPet, FieldPlant, FieldPotionRecipe, KASSA_KIND, Pet, PetZone, Plant, PlantBed,
     PotionRecipe, ProductionTemplate, Tent, User, WITCH_HOUSE_KIND,
 )
 from services.uploads import remove_upload, save_upload
@@ -514,6 +514,13 @@ def create_tent(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Тип шатра должен быть одним из: {', '.join(sorted(all_kinds))}",
             )
+    if kind == KASSA_KIND:
+        existing = db.query(Tent).filter(Tent.kind == KASSA_KIND).first()
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Касса уже размещена — касса может быть только одна",
+            )
     nm = name.strip()
     if not nm:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название шатра обязательно")
@@ -582,6 +589,58 @@ def delete_tent(
     db.delete(t)
     db.commit()
     return None
+
+
+class TentUpdate(BaseModel):
+    name: str | None = None
+    kind: str | None = None
+
+
+@router.put("/{field_id}/tents/{tent_id}", response_model=TentOut)
+def update_tent(
+    field_id: int,
+    tent_id: int,
+    req: TentUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    t = db.query(Tent).filter(Tent.id == tent_id, Tent.field_id == f.id).first()
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Шатёр не найден")
+    if req.name is not None:
+        nm = req.name.strip()
+        if not nm:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название шатра обязательно")
+        t.name = nm
+    if req.kind is not None and req.kind != t.kind:
+        kind = req.kind
+        if kind == WITCH_HOUSE_KIND and f.field_kind != "house":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Дом ведьмы размещается только на локациях типа «Дома»",
+            )
+        tmpl = None
+        if kind != WITCH_HOUSE_KIND:
+            tmpl = db.query(ProductionTemplate).filter(ProductionTemplate.code == kind).first()
+            if tmpl is None:
+                all_kinds = [pt.code for pt in db.query(ProductionTemplate).all()] + [WITCH_HOUSE_KIND]
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Тип шатра должен быть одним из: {', '.join(sorted(all_kinds))}",
+                )
+        if kind == KASSA_KIND:
+            existing = db.query(Tent).filter(Tent.kind == KASSA_KIND, Tent.id != t.id).first()
+            if existing is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Касса уже размещена — касса может быть только одна",
+                )
+        t.kind = kind
+        t.required = tmpl.required if tmpl else 0
+    db.commit()
+    db.refresh(t)
+    return _tent_to_out(t)
 
 
 def _detail(f: Field) -> FieldDetailOut:

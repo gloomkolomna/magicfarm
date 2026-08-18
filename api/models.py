@@ -7,8 +7,10 @@ from sqlalchemy.orm import declarative_base, relationship
 Base = declarative_base()
 
 
-PRODUCTION_KINDS = ("alchemy", "sewing", "workshop", "barnyard")
-PRODUCTION_NAMES = {"alchemy": "Стол зельеварения", "sewing": "Шатёр портнихи", "workshop": "Мастерская", "barnyard": "Шатёр скотного двора"}
+PRODUCTION_KINDS = ("alchemy", "sewing", "workshop", "barnyard", "kassa")
+PRODUCTION_NAMES = {"alchemy": "Стол зельеварения", "sewing": "Шатёр портнихи", "workshop": "Мастерская", "barnyard": "Шатёр скотного двора", "kassa": "Шатёр-касса"}
+
+KASSA_KIND = "kassa"
 
 MAX_PLOT_QTY = 20
 

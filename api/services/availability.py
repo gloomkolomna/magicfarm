@@ -3,6 +3,18 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 
+def has_installed_kassa(user, db: Session) -> bool:
+    """Построена ли у игрока шатёр-касса (Production kind=kassa)."""
+    from models import KASSA_KIND, Production
+
+    return (
+        db.query(Production)
+        .filter(Production.user_id == user.vk_id, Production.kind == KASSA_KIND)
+        .first()
+        is not None
+    )
+
+
 def product_lock_reason(product, user, db: Session) -> str | None:
     """Причина недоступности товара для игрока: уровень растения или закрытые локации.
 

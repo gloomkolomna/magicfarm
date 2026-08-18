@@ -35,7 +35,12 @@ def migrated_db(tmp_path, monkeypatch):
                 qty INTEGER NOT NULL DEFAULT 1, required INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME);
             CREATE TABLE settings (key VARCHAR PRIMARY KEY, value VARCHAR);
-            CREATE TABLE production_templates (id INTEGER PRIMARY KEY, code VARCHAR NOT NULL);
+            CREATE TABLE production_templates (
+                id INTEGER PRIMARY KEY, code VARCHAR NOT NULL,
+                name VARCHAR NOT NULL, emoji VARCHAR,
+                required INTEGER NOT NULL DEFAULT 500,
+                cards_to_draw INTEGER NOT NULL DEFAULT 3,
+                surcharge INTEGER NOT NULL DEFAULT 30);
             CREATE TABLE user_recipes (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL);
             CREATE TABLE potion_recipes (
                 id INTEGER PRIMARY KEY, code VARCHAR NOT NULL, name VARCHAR NOT NULL,

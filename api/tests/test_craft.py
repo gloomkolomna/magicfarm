@@ -125,7 +125,8 @@ def test_list_products(player_client):
 
 
 def test_list_productions_empty(player_client):
-    assert player_client.get("/api/farm/productions").json() == []
+    prods = player_client.get("/api/farm/productions").json()
+    assert [p for p in prods if p["kind"] != "kassa"] == []
 
 
 def test_list_inventory_empty(player_client):

@@ -53,7 +53,8 @@ def seed_farm():
             "('alchemy', 'Стол зельеварения', '🔮', 500, 5, 40), "
             "('sewing', 'Шатёр портнихи', '🧵', 500, 3, 30), "
             "('workshop', 'Мастерская', '🔨', 500, 4, 35), "
-            "('barnyard', 'Шатёр скотного двора', '🏚️', 500, 2, 30)"
+            "('barnyard', 'Шатёр скотного двора', '🏚️', 500, 2, 30), "
+            "('kassa', 'Шатёр-касса', '🧾', 500, 3, 0)"
         ))
         conn.execute(text(
             "INSERT INTO settings (key, value) VALUES "
@@ -156,6 +157,20 @@ def _seed_default_norms(db, user_id: int) -> None:
     db.commit()
 
 
+def _install_kassa(db, user_id: int) -> None:
+    """Ставит игроку построенный шатёр-кассу (Production kind=kassa)."""
+    from models import KASSA_KIND, PRODUCTION_NAMES, Production
+    if db.query(Production).filter(
+        Production.user_id == user_id, Production.kind == KASSA_KIND
+    ).first() is None:
+        db.add(Production(
+            user_id=user_id, kind=KASSA_KIND,
+            name=PRODUCTION_NAMES.get(KASSA_KIND, KASSA_KIND),
+            status="installed", accumulated=0, required=500,
+        ))
+        db.commit()
+
+
 def _make_user_override(vk_id: int, role: str):
     """Фабрика override'ов get_current_user под конкретную роль.
 
@@ -174,6 +189,7 @@ def _make_user_override(vk_id: int, role: str):
                 _seed_default_norms(db, user.vk_id)
                 user.onboarding_done = True
                 db.commit()
+                _install_kassa(db, user.vk_id)
             yield user
         finally:
             db.close()

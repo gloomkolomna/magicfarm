@@ -61,6 +61,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const [multiModal, setMultiModal] = useState<{ c1: number; r1: number; c2: number; r2: number } | null>(null);
   const [tentName, setTentName] = useState('');
   const [tentKind, setTentKind] = useState('alchemy');
+  const [tentIsKassa, setTentIsKassa] = useState(false);
   const [tentImage, setTentImage] = useState<File | null>(null);
   const [prodTemplates, setProdTemplates] = useState<ProductionTemplate[]>([]);
   const [allPotionRecipes, setAllPotionRecipes] = useState<PotionRecipe[]>([]);
@@ -110,6 +111,8 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const allowedAnimalIds = useMemo(() => new Set(field?.animal_ids ?? []), [field]);
   const allowedPetIds = useMemo(() => new Set(field?.pet_ids ?? []), [field]);
   const allowedPotionRecipeIds = useMemo(() => new Set(field?.potion_recipes?.map((r) => r.id) ?? []), [field]);
+
+  const hasKassa = field?.tents?.some((t) => t.kind === 'kassa') ?? false;
 
   function cellSize() {
     if (!field) return 60;
@@ -223,6 +226,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     }
     setTentImage(null);
     setBrewImage(null);
+    setTentIsKassa(false);
     setMultiModal({ c1, r1, c2, r2 });
   }
 
@@ -249,7 +253,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       } else {
         await api.adminCreateTent(
           fieldId,
-          { name: tentName, kind: brush === 'house' ? 'witch_house' : tentKind, col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2 },
+          { name: tentName, kind: brush === 'house' ? 'witch_house' : tentIsKassa ? 'kassa' : tentKind, col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2 },
           tentImage || undefined,
         );
         setMsg(brush === 'house' ? '✓ Дом ведьмы размещён' : '✓ Шатёр размещён');
@@ -302,6 +306,21 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       await api.adminDeleteTent(fieldId, tentId);
       await load();
       setMsg('✓ Шатёр удалён');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setTentKassa(t: Tent) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const newKind = t.kind === 'kassa' ? (prodTemplates[0]?.code || 'alchemy') : 'kassa';
+      await api.adminUpdateTent(fieldId, t.id, { kind: newKind });
+      await load();
+      setMsg(t.kind === 'kassa' ? '✓ Галочка «Касса» снята' : '✓ Шатёр отмечен кассой');
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally {
@@ -708,6 +727,15 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                   {t.col2 - t.col1 + 1}×{t.row2 - t.row1 + 1}
                 </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={t.kind === 'kassa'}
+                    disabled={busy || (hasKassa && t.kind !== 'kassa')}
+                    onChange={() => setTentKassa(t)}
+                  />
+                  🧾 Касса
+                </label>
                 <button className="fm-btn fm-btn-sm fm-btn-danger" style={{ marginTop: 8, width: '100%' }} disabled={busy} onClick={() => deleteTent(t.id)}>
                   Удалить
                 </button>
@@ -903,6 +931,15 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 </select>
                 <label style={lbl}>Картинка шатра (необязательно)</label>
                 <input type="file" accept="image/*" onChange={(e) => setTentImage(e.target.files?.[0] || null)} />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={tentIsKassa}
+                    disabled={hasKassa}
+                    onChange={(e) => setTentIsKassa(e.target.checked)}
+                  />
+                  🧾 Касса (доступно брать заказы)
+                </label>
               </>
             ) : (
               <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>

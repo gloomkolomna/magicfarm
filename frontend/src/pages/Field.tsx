@@ -1805,6 +1805,14 @@ export default function FieldPage() {
           {tentModal.build_status === 'built' && (
             <>
               <p style={{ fontSize: 14, color: 'var(--success)', marginBottom: 10 }}>✓ Шатёр построен!</p>
+              {tentModal.kind === 'kassa' && (
+                <div className="fm-card" style={{ textAlign: 'center', padding: '16px 12px', marginBottom: 12 }}>
+                  <div style={{ fontSize: 40, marginBottom: 8 }}>🧾</div>
+                  <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>
+                    Это касса. Крафта здесь нет — берите заказы в разделе «Заказы».
+                  </p>
+                </div>
+              )}
               {tentModal.kind === 'barnyard' && (
                 <div className="fm-card" style={{ marginBottom: 12 }}>
                   <strong style={{ display: 'block', marginBottom: 6 }}>📦 Склад продукции скотного двора</strong>
@@ -1917,6 +1925,8 @@ export default function FieldPage() {
                   <div style={{ borderTop: '1px solid var(--border)', margin: '10px 0' }} />
                 </>
               )}
+              {tentModal.kind !== 'kassa' && (
+              <>
               <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Новый крафт</label>
               <select className="fm-input" value={craftProduct ?? ''} onChange={(e) => void selectCraftProduct(Number(e.target.value))}>
                 <option value="">— выберите —</option>
@@ -1967,6 +1977,8 @@ export default function FieldPage() {
               >
                 Выдать норму
               </button>
+              </>
+              )}
             </>
           )}
         </Modal>

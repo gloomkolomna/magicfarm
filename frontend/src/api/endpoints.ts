@@ -871,6 +871,8 @@ export const api = {
   },
   adminDeleteTent: (fieldId: number, tentId: number) =>
     client.delete(`/admin/fields/${fieldId}/tents/${tentId}`).then((r) => r.data),
+  adminUpdateTent: (fieldId: number, tentId: number, data: { name?: string; kind?: string }) =>
+    client.put<Tent>(`/admin/fields/${fieldId}/tents/${tentId}`, data).then((r) => r.data),
 
   adminCreatePlantBed: (fieldId: number, col1: number, row1: number, col2: number, row2: number) => {
     const form = new FormData();
