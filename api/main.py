@@ -30,6 +30,9 @@ from routes.potions import router as potions_router, admin_router as admin_potio
 from routes.achievements import router as achievements_router, admin_router as admin_achievements_router
 from routes.game_media import router as game_media_admin_router, public_router as game_media_public_router
 from routes.logs import router as logs_router
+from routes.ingredients import router as ingredients_router, admin_router as admin_ingredients_router
+from routes.meadow import router as meadow_router
+from routes.shop import router as shop_router
 
 init_db()
 
@@ -82,6 +85,10 @@ app.include_router(game_media_admin_router)
 app.include_router(game_media_public_router)
 app.include_router(crystal_cards_public_router)
 app.include_router(logs_router)
+app.include_router(ingredients_router)
+app.include_router(admin_ingredients_router)
+app.include_router(meadow_router)
+app.include_router(shop_router)
 
 
 @app.get("/api/")

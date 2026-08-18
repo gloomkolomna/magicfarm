@@ -286,6 +286,24 @@ export interface InventoryItem {
   ingredient_icon: string | null;
 }
 
+export interface Ingredient {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  sort_order: number;
+}
+
+export interface ApothecaryItem {
+  ingredient_id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  qty: number;
+}
+
 export interface CraftInfo {
   source_kind: string;
   plant_id: number | null;
@@ -575,6 +593,77 @@ export interface BreweryZoneView extends BreweryZone {
   recipe_card_image?: string | null;
 }
 
+export interface GatherCell {
+  id: number;
+  field_id: number;
+  col: number;
+  row: number;
+  window: string;
+  ingredient_ids: number[];
+  ingredient_names: string[];
+}
+
+export interface TradeCell {
+  id: number;
+  field_id: number;
+  col: number;
+  row: number;
+  ingredient_ids: number[];
+  ingredient_names: string[];
+}
+
+export interface MeadowCell {
+  id: number;
+  col: number;
+  row: number;
+  window: string;
+  available: boolean;
+  collected_today: boolean;
+  next_open_at: string | null;
+  ingredients: Ingredient[];
+}
+
+export interface Meadow {
+  field_id: number;
+  name: string;
+  map_url: string | null;
+  cols: number;
+  rows: number;
+  now_msk: string;
+  cells: MeadowCell[];
+}
+
+export interface ShopCell {
+  id: number;
+  col: number;
+  row: number;
+  ingredients: Ingredient[];
+}
+
+export interface Shop {
+  field_id: number;
+  name: string;
+  map_url: string | null;
+  cols: number;
+  rows: number;
+  cells: ShopCell[];
+  apothecary: ApothecaryItem[];
+}
+
+export interface GatherResult {
+  cell_id: number;
+  ingredient: Ingredient;
+  apothecary_qty: number;
+}
+
+export interface BarterResult {
+  cell_id: number;
+  want: Ingredient;
+  give: Ingredient;
+  qty: number;
+  apothecary: ApothecaryItem[];
+}
+
 export interface FieldDetail extends FieldInfo {
   cells: FieldCellDetail[];
   plants: Plant[];
@@ -584,6 +673,8 @@ export interface FieldDetail extends FieldInfo {
   animal_ids?: number[];
   pet_ids?: number[];
   brewery_zones?: BreweryZoneView[];
+  gather_cells?: GatherCell[];
+  trade_cells?: TradeCell[];
   potion_recipes?: PotionRecipe[];
   active_cauldron?: Cauldron | null;
 }
@@ -1250,4 +1341,51 @@ export const api = {
   adminClearLogs: () => client.delete('/admin/logs').then((r) => r.data),
   vkLogReport: (payload: { level?: string; event?: string; message?: string; details?: unknown }) =>
     client.post('/logs/vk', payload).then((r) => r.data),
+
+  // ── Аптека: ингредиенты и склад ──
+  ingredients: () =>
+    client.get<Ingredient[]>('/ingredients').then((r) => r.data),
+  apothecary: () =>
+    client.get<ApothecaryItem[]>('/apothecary').then((r) => r.data),
+  adminIngredients: () =>
+    client.get<Ingredient[]>('/admin/ingredients').then((r) => r.data),
+  adminCreateIngredient: (data: { name: string; description?: string | null; sort_order?: number }) =>
+    client.post<Ingredient>('/admin/ingredients', data).then((r) => r.data),
+  adminUpdateIngredient: (id: number, data: { name?: string; description?: string | null; sort_order?: number }) =>
+    client.put<Ingredient>(`/admin/ingredients/${id}`, data).then((r) => r.data),
+  adminDeleteIngredient: (id: number) =>
+    client.delete(`/admin/ingredients/${id}`).then((r) => r.data),
+  adminUploadIngredientImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Ingredient>(`/admin/ingredients/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+
+  // ── Лесная поляна / городская лавка: игрок ──
+  meadow: (fieldId: number) =>
+    client.get<Meadow>(`/meadow/${fieldId}`).then((r) => r.data),
+  gatherCell: (cellId: number) =>
+    client.post<GatherResult>(`/meadow/cells/${cellId}/gather`).then((r) => r.data),
+  shop: (fieldId: number) =>
+    client.get<Shop>(`/shop/${fieldId}`).then((r) => r.data),
+  barterCell: (cellId: number, wantIngredientId: number, giveIngredientId: number, qty: number) =>
+    client.post<BarterResult>(`/shop/cells/${cellId}/barter`, {
+      want_ingredient_id: wantIngredientId,
+      give_ingredient_id: giveIngredientId,
+      qty,
+    }).then((r) => r.data),
+
+  // ── Админ: клетки поляны и лавки ──
+  adminCreateGatherCell: (fieldId: number, data: { col: number; row: number; window: string; ingredient_ids: number[] }) =>
+    client.post<GatherCell>(`/admin/fields/${fieldId}/gather-cells`, data).then((r) => r.data),
+  adminUpdateGatherCell: (fieldId: number, id: number, data: { window?: string; ingredient_ids?: number[] }) =>
+    client.put<GatherCell>(`/admin/fields/${fieldId}/gather-cells/${id}`, data).then((r) => r.data),
+  adminDeleteGatherCell: (fieldId: number, id: number) =>
+    client.delete(`/admin/fields/${fieldId}/gather-cells/${id}`).then((r) => r.data),
+  adminCreateTradeCell: (fieldId: number, data: { col: number; row: number; ingredient_ids: number[] }) =>
+    client.post<TradeCell>(`/admin/fields/${fieldId}/trade-cells`, data).then((r) => r.data),
+  adminUpdateTradeCell: (fieldId: number, id: number, data: { ingredient_ids?: number[] }) =>
+    client.put<TradeCell>(`/admin/fields/${fieldId}/trade-cells/${id}`, data).then((r) => r.data),
+  adminDeleteTradeCell: (fieldId: number, id: number) =>
+    client.delete(`/admin/fields/${fieldId}/trade-cells/${id}`).then((r) => r.data),
 };

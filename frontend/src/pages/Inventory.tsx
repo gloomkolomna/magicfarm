@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { api, type InventoryItem } from '../api/endpoints';
+import { api, type ApothecaryItem, type InventoryItem } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
 import SpritePedestal from '../components/SpritePedestal';
 
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [apothecary, setApothecary] = useState<ApothecaryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,11 +23,15 @@ export default function InventoryPage() {
     { key: 'product', label: '📦 Товары' },
     { key: 'potion', label: '🧪 Зелья' },
     { key: 'production', label: '🏭 Продукция' },
+    { key: 'apothecary', label: '⚗️ Аптека' },
   ];
 
   useEffect(() => {
-    api.inventory()
-      .then(setItems)
+    Promise.all([api.inventory(), api.apothecary()])
+      .then(([inv, apo]) => {
+        setItems(inv);
+        setApothecary(apo);
+      })
       .catch((e) => setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')))
       .finally(() => setLoading(false));
   }, []);
@@ -61,10 +66,6 @@ export default function InventoryPage() {
 
       {loading ? (
         <div className="fm-card">Загрузка…</div>
-      ) : items.length === 0 ? (
-        <div className="fm-card" style={{ color: 'var(--text-muted)' }}>
-          Склад пуст. Производите товары в шатрах на полях.
-        </div>
       ) : (
         <>
           <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -78,7 +79,39 @@ export default function InventoryPage() {
               </button>
             ))}
           </div>
-          {filtered.length === 0 ? (
+          {section === 'apothecary' ? (
+            apothecary.length === 0 ? (
+              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>
+                Аптекарский склад пуст. Собирайте ингредиенты на лесной поляне или меняйте в городской лавке.
+              </div>
+            ) : (
+              <div className="fm-grid">
+                {apothecary.map((i) => (
+                  <div key={`ing-${i.ingredient_id}`} className="fm-card fm-rise" style={{ textAlign: 'center' }}>
+                    <SpritePedestal url={i.image_url ? mediaUrl(i.image_url) : null} emoji="⚗️" height={110} />
+                    <strong style={{ display: 'block', marginBottom: 6 }}>{i.name}</strong>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        gap: 8,
+                        fontSize: 13,
+                        borderTop: '1px solid var(--border)',
+                        paddingTop: 8,
+                      }}
+                    >
+                      <span className="fm-chip">×{i.qty}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : items.length === 0 ? (
+            <div className="fm-card" style={{ color: 'var(--text-muted)' }}>
+              Склад пуст. Производите товары в шатрах на полях.
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет предметов в этой секции.</div>
           ) : (
             <div className="fm-grid">

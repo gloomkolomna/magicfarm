@@ -58,6 +58,4 @@ desktop.ini
 /.playwright-mcp
 /.pptx_work
 
-# ===== Документация (исходники) =====
-# docs/Правила фермы.pptx — слишком большой (90 МБ), хранится отдельно.
-docs/*.pptx
+docs/

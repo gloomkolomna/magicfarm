@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type Customer, type FieldDetail, type FieldInfo, type GameMedia, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
+import { api, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type Customer, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import Toast from '../components/Toast';
@@ -66,7 +66,7 @@ function matchesAny(item: unknown, q: string): boolean {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs'>('players');
+  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs' | 'ingredients'>('players');
   const [players, setPlayers] = useState<Player[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
@@ -217,6 +217,11 @@ export default function AdminPage() {
   const [potionForm, setPotionForm] = useState<PotionRecipeCreate>({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100, description: '' });
   const [potionEditingId, setPotionEditingId] = useState<number | null>(null);
   const [potionSlotInput, setPotionSlotInput] = useState('');
+
+  // ── Ингредиенты (аптека) ──
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [ingForm, setIngForm] = useState<{ name: string; description: string; sort_order: string }>({ name: '', description: '', sort_order: '0' });
+  const [ingEditingId, setIngEditingId] = useState<number | null>(null);
 
   // ── Рецепты библиотеки ──
   const [recipes, setRecipes] = useState<AdminRecipe[]>([]);
@@ -890,6 +895,106 @@ export default function AdminPage() {
     finally { setBusy(false); }
   }
 
+  // ── Ингредиенты (аптека) ──
+  async function loadIngredients() {
+    try { setIngredients(await api.adminIngredients()); }
+    catch { /* ignore */ }
+  }
+  async function saveIngredient() {
+    if (!ingForm.name.trim()) { setMsg('✗ Введите название'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const data = {
+        name: ingForm.name.trim(),
+        description: ingForm.description || null,
+        sort_order: Number(ingForm.sort_order) || 0,
+      };
+      if (ingEditingId) { await api.adminUpdateIngredient(ingEditingId, data); }
+      else { await api.adminCreateIngredient(data); }
+      await loadIngredients();
+      setIngForm({ name: '', description: '', sort_order: '0' });
+      setIngEditingId(null);
+      setMsg('✓ Сохранено');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function uploadIngredientImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminUploadIngredientImage(id, file);
+      await loadIngredients();
+      setMsg('✓ Картинка загружена');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function deleteIngredient(id: number) {
+    if (!(await confirmDialog('Удалить ингредиент?'))) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeleteIngredient(id); await loadIngredients(); setMsg('✓ Удалено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  function renderIngredients() {
+    return (
+      <div>
+        <h2>⚗️ Ингредиенты</h2>
+        <div className="fm-card" style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <input className="fm-input" placeholder="Название" value={ingForm.name} onChange={(e) => setIngForm({ ...ingForm, name: e.target.value })} />
+            <input className="fm-input" type="number" placeholder="Порядок" value={ingForm.sort_order} onChange={(e) => setIngForm({ ...ingForm, sort_order: e.target.value })} style={{ width: 80 }} />
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Описание</label>
+            <textarea
+              className="fm-input"
+              value={ingForm.description}
+              onChange={(e) => setIngForm({ ...ingForm, description: e.target.value })}
+              rows={2}
+              style={{ width: '100%' }}
+            />
+          </div>
+          {ingEditingId && (
+            <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer', marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              🖼 Картинка
+              <input type="file" accept="image/*" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadIngredientImage(ingEditingId, f); }}
+              />
+            </label>
+          )}
+          <button className="fm-btn" disabled={busy} onClick={saveIngredient}>
+            {ingEditingId ? '✎ Сохранить' : '➕ Создать'}
+          </button>
+          {ingEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setIngEditingId(null); setIngForm({ name: '', description: '', sort_order: '0' }); }}>Отмена</button>}
+        </div>
+        <table className="fm-table" style={{ width: '100%' }}>
+          <thead><tr><th>ID</th><th>Картинка</th><th>Название</th><th>Код</th><th>Описание</th><th>Порядок</th><th></th></tr></thead>
+          <tbody>
+            {shownIngredients.map((ing) => (
+              <tr key={ing.id}>
+                <td>{ing.id}</td>
+                <td>
+                  {ing.image_url
+                    ? <img src={mediaUrl(ing.image_url)} alt="" style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 6 }} />
+                    : <span style={{ fontSize: 22 }}>⚗️</span>}
+                </td>
+                <td><strong>{ing.name}</strong></td>
+                <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{ing.code}</td>
+                <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{ing.description || '—'}</td>
+                <td>{ing.sort_order}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button className="fm-btn fm-btn-xs" onClick={() => { setIngEditingId(ing.id); setIngForm({ name: ing.name, description: ing.description || '', sort_order: String(ing.sort_order) }); }}>✎</button>{' '}
+                  <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteIngredient(ing.id)}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {qActive && shownIngredients.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', marginTop: 8 }}>{NO_MATCH}</div>}
+      </div>
+    );
+  }
+
   function renderPotionRecipes() {
     return (
       <div>
@@ -1295,6 +1400,7 @@ export default function AdminPage() {
   const shownCustomers = fl(customers);
   const shownLevels = fl(levels);
   const shownPotionRecipes = fl(potionRecipes);
+  const shownIngredients = fl(ingredients);
   const shownMedia = fl(gameMedia);
   const shownCards = fl(crystalCards);
   const shownAchievements = fl(achievements);
@@ -1312,6 +1418,7 @@ export default function AdminPage() {
     customers: { total: customers.length, shown: shownCustomers.length },
     levels: { total: levels.length, shown: shownLevels.length },
     'potion-recipes': { total: potionRecipes.length, shown: shownPotionRecipes.length },
+    ingredients: { total: ingredients.length, shown: shownIngredients.length },
     media: { total: gameMedia.length, shown: shownMedia.length },
     'crystal-cards': { total: crystalCards.length, shown: shownCards.length },
     achievements: { total: achievements.length, shown: shownAchievements.length },
@@ -1336,6 +1443,7 @@ export default function AdminPage() {
         <TabBtn active={tab === 'customers'} onClick={() => { setTab('customers'); loadCustomers(); }}>🧑 Заказчики</TabBtn>
         <TabBtn active={tab === 'levels'} onClick={() => { setTab('levels'); loadLevels(); }}>📊 Уровни</TabBtn>
         <TabBtn active={tab === 'potion-recipes'} onClick={() => { setTab('potion-recipes'); loadPotionRecipes(); }}>🧪 Рецепты зелий</TabBtn>
+        <TabBtn active={tab === 'ingredients'} onClick={() => { setTab('ingredients'); loadIngredients(); }}>⚗️ Ингредиенты</TabBtn>
         <TabBtn active={tab === 'media'} onClick={() => setTab('media')}>🎬 Медиа</TabBtn>
         <TabBtn active={tab === 'crystal-cards'} onClick={() => setTab('crystal-cards')}>🃏 Карты</TabBtn>
         <TabBtn active={tab === 'achievements'} onClick={() => { setTab('achievements'); loadAchievements(); }}>🏆 Достижения</TabBtn>
@@ -1751,6 +1859,7 @@ export default function AdminPage() {
           {tab === 'customers' && renderCustomers()}
           {tab === 'levels' && renderLevels()}
           {tab === 'potion-recipes' && renderPotionRecipes()}
+          {tab === 'ingredients' && renderIngredients()}
 
           {tab === 'orders' && (
             <div>

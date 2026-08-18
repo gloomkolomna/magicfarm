@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, type Animal, type BreweryZone, type FieldCell, type FieldDetail, type Pet, type Plant, type PlantBed, type PetZone, type PotionRecipe, type ProductionTemplate, type Tent } from '../api/endpoints';
+import { api, type Animal, type BreweryZone, type FieldCell, type FieldDetail, type Ingredient, type Pet, type Plant, type PlantBed, type PetZone, type PotionRecipe, type ProductionTemplate, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import { confirmDialog } from './Confirm';
 
-type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house' | 'brew_cauldron' | 'brew_jar' | 'brew_ingredient' | 'brew_card';
+type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house' | 'brew_cauldron' | 'brew_jar' | 'brew_ingredient' | 'brew_card' | 'gather' | 'trade';
 
 function isTentBrush(b: Brush) {
   return b === 'tent' || b === 'house';
@@ -20,6 +20,13 @@ const BREW_ZONE_LABEL: Record<string, string> = {
   recipe_card: '🃏 Карточка рецепта',
 };
 
+const WINDOW_LABEL: Record<string, string> = {
+  morning: '🌅 Утро (04:00–10:00)',
+  day: '☀️ День (12:00–15:00)',
+  night: '🌙 Ночь (21:00–03:00)',
+  always: '♾️ Всегда',
+};
+
 interface Props {
   fieldId: number;
   onClose: () => void;
@@ -31,6 +38,8 @@ const KIND_FILL: Record<string, string> = {
   tent: 'rgba(224,168,62,0.30)',
   pet: 'rgba(200,130,220,0.30)',
   barnyard: 'rgba(220,180,120,0.30)',
+  gather: 'rgba(120,200,110,0.30)',
+  trade: 'rgba(110,170,220,0.30)',
 };
 
 const TENT_KIND_LABEL: Record<string, string> = {};
@@ -66,17 +75,27 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const [prodTemplates, setProdTemplates] = useState<ProductionTemplate[]>([]);
   const [allPotionRecipes, setAllPotionRecipes] = useState<PotionRecipe[]>([]);
   const [brewImage, setBrewImage] = useState<File | null>(null);
+  const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
+  const [cellModal, setCellModal] = useState<{
+    kind: 'gather' | 'trade';
+    col: number;
+    row: number;
+    window: string;
+    ids: number[];
+    existingId: number | null;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [fd, pl, pts, an, pt, pr] = await Promise.all([api.adminGetField(fieldId), api.plants(), api.adminProductionTemplates(), api.adminAnimals(), api.adminPets(), api.adminPotionRecipes()]);
+      const [fd, pl, pts, an, pt, pr, ing] = await Promise.all([api.adminGetField(fieldId), api.plants(), api.adminProductionTemplates(), api.adminAnimals(), api.adminPets(), api.adminPotionRecipes(), api.adminIngredients()]);
       setField(fd);
       setAllPlants(pl);
       setProdTemplates(pts);
       setAllAnimals(an);
       setAllPets(pt);
       setAllPotionRecipes(pr);
+      setAllIngredients(ing);
       setMultiDraft(new Set());
       setCols(String(fd.cols));
       setRows(String(fd.rows));
@@ -126,6 +145,20 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     const key = `${c},${r}`;
     const cell = cellIndex.get(key);
     if (cell?.kind === 'tent') return;
+    if (brush === 'gather' || brush === 'trade') {
+      const existing = brush === 'gather'
+        ? field?.gather_cells?.find((gc) => gc.col === c && gc.row === r)
+        : field?.trade_cells?.find((tc) => tc.col === c && tc.row === r);
+      setCellModal({
+        kind: brush,
+        col: c,
+        row: r,
+        window: existing && 'window' in existing ? (existing as any).window : 'always',
+        ids: existing ? existing.ingredient_ids : [],
+        existingId: existing?.id ?? null,
+      });
+      return;
+    }
     if (brush === 'brew_ingredient') {
       setBusy(true); setMsg(null);
       try {
@@ -261,6 +294,63 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       setMultiModal(null);
       setMultiDraft(new Set());
       await load();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveCellConfig() {
+    if (!cellModal) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      if (cellModal.kind === 'gather') {
+        if (cellModal.existingId != null) {
+          await api.adminUpdateGatherCell(fieldId, cellModal.existingId, { window: cellModal.window, ingredient_ids: cellModal.ids });
+        } else {
+          await api.adminCreateGatherCell(fieldId, { col: cellModal.col, row: cellModal.row, window: cellModal.window, ingredient_ids: cellModal.ids });
+        }
+        setMsg('✓ Клетка добычи настроена');
+      } else {
+        if (cellModal.existingId != null) {
+          await api.adminUpdateTradeCell(fieldId, cellModal.existingId, { ingredient_ids: cellModal.ids });
+        } else {
+          await api.adminCreateTradeCell(fieldId, { col: cellModal.col, row: cellModal.row, ingredient_ids: cellModal.ids });
+        }
+        setMsg('✓ Клетка бартера настроена');
+      }
+      setCellModal(null);
+      await load();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteGatherCell(id: number) {
+    if (!(await confirmDialog('Удалить клетку добычи?'))) return;
+    setBusy(true);
+    try {
+      await api.adminDeleteGatherCell(fieldId, id);
+      await load();
+      setMsg('✓ Клетка добычи удалена');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteTradeCell(id: number) {
+    if (!(await confirmDialog('Удалить клетку бартера?'))) return;
+    setBusy(true);
+    try {
+      await api.adminDeleteTradeCell(fieldId, id);
+      await load();
+      setMsg('✓ Клетка бартера удалена');
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally {
@@ -533,6 +623,20 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             </div>
           );
         }
+        if (kind === 'meadow') {
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              <BrushBtn active={brush === 'gather'} onClick={() => setBrush('gather')}>🌿 Добыча</BrushBtn>
+            </div>
+          );
+        }
+        if (kind === 'shop') {
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              <BrushBtn active={brush === 'trade'} onClick={() => setBrush('trade')}>🛒 Бартер</BrushBtn>
+            </div>
+          );
+        }
         return (
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <BrushBtn active={brush === 'bed'} onClick={() => setBrush('bed')}>🟩 Грядка</BrushBtn>
@@ -547,6 +651,10 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           ? 'Тапайте по клеткам для шатра, затем «Разместить шатёр».'
           : brush === 'house'
           ? 'Тапайте по клеткам под дом ведьмы (2×2), затем «Разместить дом».'
+          : brush === 'gather'
+          ? 'Тап по клетке открывает настройку добычи: окно активности и список ингредиентов.'
+          : brush === 'trade'
+          ? 'Тап по клетке открывает настройку бартера: список ингредиентов, доступных к обмену.'
           : brush === 'bed' && field?.plant_category === 'orchard'
           ? 'Тапайте по клеткам под слот дерева (1…N), затем «Разместить слот дерева».'
           : brush === 'pet' && field?.field_kind === 'lawn'
@@ -676,6 +784,8 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             if (c.kind === 'bed') icon = '🟩';
             else if (c.kind === 'pet') icon = '🐾';
             else if (c.kind === 'barnyard') icon = '🐄';
+            else if (c.kind === 'gather') icon = '🌿';
+            else if (c.kind === 'trade') icon = '🛒';
             if (!icon) return null;
             return (
               <text
@@ -796,6 +906,97 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         </>
       )}
 
+      {/* Клетки добычи (лесная поляна) */}
+      {field?.field_kind === 'meadow' && (
+        <>
+          <h3>🌿 Клетки добычи</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Кистью «Добыча» тапните по клетке и задайте окно активности и список ингредиентов.
+          </p>
+          <div className="fm-grid" style={{ marginBottom: 14 }}>
+            {(field.gather_cells ?? []).map((gc) => (
+              <div key={gc.id} className="fm-card">
+                <strong>🌿 [{gc.col},{gc.row}]</strong>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {WINDOW_LABEL[gc.window] || gc.window}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {gc.ingredient_names.join(', ') || '—'}
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  <button
+                    className="fm-btn fm-btn-sm fm-btn-outline"
+                    style={{ flex: 1 }}
+                    disabled={busy}
+                    onClick={() => setCellModal({
+                      kind: 'gather', col: gc.col, row: gc.row,
+                      window: gc.window, ids: gc.ingredient_ids, existingId: gc.id,
+                    })}
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    className="fm-btn fm-btn-sm fm-btn-danger"
+                    style={{ flex: 1 }}
+                    disabled={busy}
+                    onClick={() => deleteGatherCell(gc.id)}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            ))}
+            {(field.gather_cells ?? []).length === 0 && (
+              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Клеток добычи пока нет — разместите кистью выше.</div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Клетки бартера (городская лавка) */}
+      {field?.field_kind === 'shop' && (
+        <>
+          <h3>🛒 Клетки бартера</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Кистью «Бартер» тапните по клетке и задайте список ингредиентов, которые можно получить в обмен.
+          </p>
+          <div className="fm-grid" style={{ marginBottom: 14 }}>
+            {(field.trade_cells ?? []).map((tc) => (
+              <div key={tc.id} className="fm-card">
+                <strong>🛒 [{tc.col},{tc.row}]</strong>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {tc.ingredient_names.join(', ') || '—'}
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  <button
+                    className="fm-btn fm-btn-sm fm-btn-outline"
+                    style={{ flex: 1 }}
+                    disabled={busy}
+                    onClick={() => setCellModal({
+                      kind: 'trade', col: tc.col, row: tc.row,
+                      window: 'always', ids: tc.ingredient_ids, existingId: tc.id,
+                    })}
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    className="fm-btn fm-btn-sm fm-btn-danger"
+                    style={{ flex: 1 }}
+                    disabled={busy}
+                    onClick={() => deleteTradeCell(tc.id)}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            ))}
+            {(field.trade_cells ?? []).length === 0 && (
+              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Клеток бартера пока нет — разместите кистью выше.</div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* Привязка объектов локации */}
       {field?.field_kind === 'barnyard' ? (
         <>
@@ -888,6 +1089,68 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           </div>
         </>
       ) : null}
+
+      {/* Модалка настройки клетки добычи/бартера */}
+      {cellModal && (
+        <div style={modalOverlay}>
+          <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'calc(var(--shell-max-width) * 0.7)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <h3 style={{ margin: 0 }}>
+                {cellModal.kind === 'gather' ? '🌿 Клетка добычи' : '🛒 Клетка бартера'} [{cellModal.col},{cellModal.row}]
+              </h3>
+              <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setCellModal(null)}>✕</button>
+            </div>
+            {cellModal.kind === 'gather' && (
+              <>
+                <label style={lbl}>Окно активности (МСК)</label>
+                <select
+                  className="fm-input"
+                  value={cellModal.window}
+                  onChange={(e) => setCellModal({ ...cellModal, window: e.target.value })}
+                >
+                  <option value="morning">🌅 Утро (04:00–10:00)</option>
+                  <option value="day">☀️ День (12:00–15:00)</option>
+                  <option value="night">🌙 Ночь (21:00–03:00)</option>
+                  <option value="always">♾️ Всегда</option>
+                </select>
+              </>
+            )}
+            <label style={lbl}>
+              {cellModal.kind === 'gather' ? 'Ингредиенты (случайный из списка)' : 'Ингредиенты (что можно получить в обмен)'}
+            </label>
+            <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 8 }}>
+              {allIngredients.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  Сначала создайте ингредиенты в разделе «Ингредиенты».
+                </div>
+              ) : allIngredients.map((ing) => (
+                <label key={ing.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px', fontSize: 14, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={cellModal.ids.includes(ing.id)}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...cellModal.ids, ing.id]
+                        : cellModal.ids.filter((x) => x !== ing.id);
+                      setCellModal({ ...cellModal, ids: next });
+                    }}
+                  />
+                  {ing.image_url && <img src={mediaUrl(ing.image_url)} alt="" style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 4 }} />}
+                  {ing.name}
+                </label>
+              ))}
+            </div>
+            <button
+              className="fm-btn"
+              style={{ width: '100%', marginTop: 14 }}
+              disabled={busy || (cellModal.kind === 'gather' && cellModal.ids.length === 0 && cellModal.existingId == null)}
+              onClick={saveCellConfig}
+            >
+              Сохранить
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Модалка создания мульти-зоны */}
       {multiModal && (

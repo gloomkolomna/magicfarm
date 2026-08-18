@@ -13,6 +13,8 @@ const FIELD_KIND_LABEL: Record<string, string> = {
   brewery: '🧪 Зельеварня',
   library: '📖 Библиотека',
   lawn: '🐾 Питомцы',
+  meadow: '🌿 Лесная поляна',
+  shop: '🛒 Городская лавка',
   default: '🗺️ Поля',
 };
 
@@ -141,10 +143,12 @@ export default function FieldsPage() {
                 <button
                   key={f.id}
                   className="fm-card fm-rise"
-                  onClick={() => nav(`/field/${f.id}`)}
+                  onClick={() => nav(f.field_kind === 'meadow' ? `/meadow/${f.id}` : f.field_kind === 'shop' ? `/shop/${f.id}` : `/field/${f.id}`)}
                   style={{ cursor: 'pointer', textAlign: 'left', display: 'block' }}
                 >
-                  <strong style={{ fontSize: 16 }}>🗺️ {f.name}</strong>
+                  <strong style={{ fontSize: 16 }}>
+                    {f.field_kind === 'meadow' ? '🌿' : f.field_kind === 'shop' ? '🛒' : '🗺️'} {f.name}
+                  </strong>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
                     {f.cols}×{f.rows} клеток
                   </div>

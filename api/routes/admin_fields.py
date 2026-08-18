@@ -10,8 +10,9 @@ from db import get_db
 from deps import require_role
 from models import (
     BREWERY_MAX_INGREDIENT_CELLS, BREWERY_ZONE_KINDS, Animal, BreweryZone, Field, FieldAnimal,
-    FieldCell, FieldPet, FieldPlant, FieldPotionRecipe, KASSA_KIND, Pet, PetZone, Plant, PlantBed,
-    PotionRecipe, ProductionTemplate, Tent, User, WITCH_HOUSE_KIND,
+    FieldCell, FieldPet, FieldPlant, FieldPotionRecipe, GATHER_WINDOW_KINDS, GatherCell,
+    GatherCellIngredient, Ingredient, KASSA_KIND, Pet, PetZone, Plant, PlantBed,
+    PotionRecipe, ProductionTemplate, Tent, TradeCell, TradeCellIngredient, User, WITCH_HOUSE_KIND,
 )
 from services.uploads import remove_upload, save_upload
 from routes.potions import _recipe_out
@@ -164,6 +165,25 @@ class BreweryZoneOut(BaseModel):
     recipe_id: int | None
 
 
+class GatherCellOut(BaseModel):
+    id: int
+    field_id: int
+    col: int
+    row: int
+    window: str
+    ingredient_ids: list[int] = []
+    ingredient_names: list[str] = []
+
+
+class TradeCellOut(BaseModel):
+    id: int
+    field_id: int
+    col: int
+    row: int
+    ingredient_ids: list[int] = []
+    ingredient_names: list[str] = []
+
+
 class PlantOut(BaseModel):
     id: int
     code: str
@@ -194,6 +214,8 @@ class FieldDetailOut(FieldOut):
     animal_ids: list[int] = []
     pet_ids: list[int] = []
     brewery_zones: list[BreweryZoneOut] = []
+    gather_cells: list[GatherCellOut] = []
+    trade_cells: list[TradeCellOut] = []
     potion_recipes: list = []
     potion_recipe_ids: list[int] = []
 
@@ -669,6 +691,8 @@ def _detail(f: Field) -> FieldDetailOut:
                            image_url=z.image_url, recipe_id=z.recipe_id)
             for z in f.brewery_zones
         ],
+        gather_cells=[_gather_cell_out(gc) for gc in f.gather_cells] if f.field_kind == "meadow" else [],
+        trade_cells=[_trade_cell_out(tc) for tc in f.trade_cells] if f.field_kind == "shop" else [],
         potion_recipes=[_recipe_out(fpr.recipe) for fpr in f.potion_recipes],
         potion_recipe_ids=[fpr.recipe_id for fpr in f.potion_recipes],
     )
@@ -872,6 +896,71 @@ def _zone_out(z: BreweryZone) -> BreweryZoneOut:
                           image_url=z.image_url, recipe_id=z.recipe_id)
 
 
+def _gather_cell_out(gc: GatherCell) -> GatherCellOut:
+    return GatherCellOut(
+        id=gc.id, field_id=gc.field_id, col=gc.col, row=gc.row, window=gc.window,
+        ingredient_ids=[gci.ingredient_id for gci in gc.ingredients],
+        ingredient_names=[gci.ingredient.name for gci in gc.ingredients],
+    )
+
+
+def _trade_cell_out(tc: TradeCell) -> TradeCellOut:
+    return TradeCellOut(
+        id=tc.id, field_id=tc.field_id, col=tc.col, row=tc.row,
+        ingredient_ids=[tci.ingredient_id for tci in tc.ingredients],
+        ingredient_names=[tci.ingredient.name for tci in tc.ingredients],
+    )
+
+
+def _get_gather_cell_on_field(gc_id: int, field_id: int, db: Session) -> GatherCell:
+    gc = db.query(GatherCell).filter(GatherCell.id == gc_id, GatherCell.field_id == field_id).first()
+    if gc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Клетка добычи не найдена")
+    return gc
+
+
+def _get_trade_cell_on_field(tc_id: int, field_id: int, db: Session) -> TradeCell:
+    tc = db.query(TradeCell).filter(TradeCell.id == tc_id, TradeCell.field_id == field_id).first()
+    if tc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Клетка бартера не найдена")
+    return tc
+
+
+def _check_gather_field(f: Field) -> None:
+    if f.field_kind != "meadow":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Клетки добычи размещаются только на локациях типа «Лесная поляна»",
+        )
+
+
+def _check_trade_field(f: Field) -> None:
+    if f.field_kind != "shop":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Клетки бартера размещаются только на локациях типа «Городская лавка»",
+        )
+
+
+def _valid_ingredient_ids(ids: list[int], db: Session) -> set[int]:
+    if not ids:
+        return set()
+    return {i.id for i in db.query(Ingredient).filter(Ingredient.id.in_(ids)).all()}
+
+
+def _mark_cell_kind(field_id: int, col: int, row: int, kind: str, db: Session) -> None:
+    cell = db.query(FieldCell).filter(
+        FieldCell.field_id == field_id, FieldCell.col == col, FieldCell.row == row
+    ).first()
+    if cell is None:
+        cell = FieldCell(field_id=field_id, col=col, row=row)
+        db.add(cell)
+    if cell.kind != "tent":
+        cell.kind = kind
+        cell.plant_id = None
+        cell.occupant_user_id = None
+
+
 @router.post("/{field_id}/brewery-zones", response_model=BreweryZoneOut, status_code=status.HTTP_201_CREATED)
 def create_brewery_zone(
     field_id: int,
@@ -987,3 +1076,177 @@ def set_field_potion_recipes(
     db.commit()
     db.refresh(f)
     return [fpr.recipe_id for fpr in f.potion_recipes]
+
+
+# ── Клетки добычи (лесная поляна) ──
+
+class GatherCellCreate(BaseModel):
+    col: int
+    row: int
+    window: str = "always"
+    ingredient_ids: list[int] = []
+
+
+class GatherCellUpdate(BaseModel):
+    window: str | None = None
+    ingredient_ids: list[int] | None = None
+
+
+@router.post("/{field_id}/gather-cells", response_model=GatherCellOut, status_code=status.HTTP_201_CREATED)
+def create_gather_cell(
+    field_id: int,
+    req: GatherCellCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    _check_gather_field(f)
+    if req.window not in GATHER_WINDOW_KINDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Окно должно быть одним из: {', '.join(GATHER_WINDOW_KINDS)}",
+        )
+    if req.col < 0 or req.row < 0 or req.col >= f.cols or req.row >= f.rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Клетка вне поля")
+    existing = db.query(GatherCell).filter(
+        GatherCell.field_id == f.id, GatherCell.col == req.col, GatherCell.row == req.row
+    ).first()
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="На этой клетке уже настроена добыча")
+
+    gc = GatherCell(field_id=f.id, col=req.col, row=req.row, window=req.window)
+    db.add(gc)
+    db.flush()
+    valid_ids = _valid_ingredient_ids(req.ingredient_ids, db)
+    for iid in req.ingredient_ids:
+        if iid in valid_ids:
+            db.add(GatherCellIngredient(gather_cell_id=gc.id, ingredient_id=iid))
+    _mark_cell_kind(f.id, req.col, req.row, "gather", db)
+    db.commit()
+    db.refresh(gc)
+    return _gather_cell_out(gc)
+
+
+@router.put("/{field_id}/gather-cells/{gc_id}", response_model=GatherCellOut)
+def update_gather_cell(
+    field_id: int,
+    gc_id: int,
+    req: GatherCellUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    gc = _get_gather_cell_on_field(gc_id, field_id, db)
+    if req.window is not None:
+        if req.window not in GATHER_WINDOW_KINDS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Окно должно быть одним из: {', '.join(GATHER_WINDOW_KINDS)}",
+            )
+        gc.window = req.window
+    if req.ingredient_ids is not None:
+        db.query(GatherCellIngredient).filter(GatherCellIngredient.gather_cell_id == gc.id).delete()
+        valid_ids = _valid_ingredient_ids(req.ingredient_ids, db)
+        for iid in req.ingredient_ids:
+            if iid in valid_ids:
+                db.add(GatherCellIngredient(gather_cell_id=gc.id, ingredient_id=iid))
+    db.commit()
+    db.refresh(gc)
+    return _gather_cell_out(gc)
+
+
+@router.delete("/{field_id}/gather-cells/{gc_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_gather_cell(
+    field_id: int,
+    gc_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    gc = _get_gather_cell_on_field(gc_id, field_id, db)
+    cell = db.query(FieldCell).filter(
+        FieldCell.field_id == gc.field_id, FieldCell.col == gc.col, FieldCell.row == gc.row
+    ).first()
+    if cell is not None and cell.kind == "gather":
+        cell.kind = "empty"
+    db.delete(gc)
+    db.commit()
+    return None
+
+
+# ── Клетки бартера (городская лавка) ──
+
+class TradeCellCreate(BaseModel):
+    col: int
+    row: int
+    ingredient_ids: list[int] = []
+
+
+class TradeCellUpdate(BaseModel):
+    ingredient_ids: list[int] | None = None
+
+
+@router.post("/{field_id}/trade-cells", response_model=TradeCellOut, status_code=status.HTTP_201_CREATED)
+def create_trade_cell(
+    field_id: int,
+    req: TradeCellCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    _check_trade_field(f)
+    if req.col < 0 or req.row < 0 or req.col >= f.cols or req.row >= f.rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Клетка вне поля")
+    existing = db.query(TradeCell).filter(
+        TradeCell.field_id == f.id, TradeCell.col == req.col, TradeCell.row == req.row
+    ).first()
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="На этой клетке уже настроен бартер")
+
+    tc = TradeCell(field_id=f.id, col=req.col, row=req.row)
+    db.add(tc)
+    db.flush()
+    valid_ids = _valid_ingredient_ids(req.ingredient_ids, db)
+    for iid in req.ingredient_ids:
+        if iid in valid_ids:
+            db.add(TradeCellIngredient(trade_cell_id=tc.id, ingredient_id=iid))
+    _mark_cell_kind(f.id, req.col, req.row, "trade", db)
+    db.commit()
+    db.refresh(tc)
+    return _trade_cell_out(tc)
+
+
+@router.put("/{field_id}/trade-cells/{tc_id}", response_model=TradeCellOut)
+def update_trade_cell(
+    field_id: int,
+    tc_id: int,
+    req: TradeCellUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    tc = _get_trade_cell_on_field(tc_id, field_id, db)
+    if req.ingredient_ids is not None:
+        db.query(TradeCellIngredient).filter(TradeCellIngredient.trade_cell_id == tc.id).delete()
+        valid_ids = _valid_ingredient_ids(req.ingredient_ids, db)
+        for iid in req.ingredient_ids:
+            if iid in valid_ids:
+                db.add(TradeCellIngredient(trade_cell_id=tc.id, ingredient_id=iid))
+    db.commit()
+    db.refresh(tc)
+    return _trade_cell_out(tc)
+
+
+@router.delete("/{field_id}/trade-cells/{tc_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_trade_cell(
+    field_id: int,
+    tc_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    tc = _get_trade_cell_on_field(tc_id, field_id, db)
+    cell = db.query(FieldCell).filter(
+        FieldCell.field_id == tc.field_id, FieldCell.col == tc.col, FieldCell.row == tc.row
+    ).first()
+    if cell is not None and cell.kind == "trade":
+        cell.kind = "empty"
+    db.delete(tc)
+    db.commit()
+    return None

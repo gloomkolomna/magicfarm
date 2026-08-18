@@ -321,6 +321,8 @@ class Field(Base):
     pets = relationship("FieldPet", back_populates="field", cascade="all, delete-orphan")
     potion_recipes = relationship("FieldPotionRecipe", back_populates="field", cascade="all, delete-orphan")
     brewery_zones = relationship("BreweryZone", back_populates="field", cascade="all, delete-orphan")
+    gather_cells = relationship("GatherCell", back_populates="field", cascade="all, delete-orphan")
+    trade_cells = relationship("TradeCell", back_populates="field", cascade="all, delete-orphan")
 
 
 class FieldPlant(Base):
@@ -780,3 +782,108 @@ class Log(Base):
     user_id = Column(Integer, nullable=True)
     client_ip = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow, index=True)
+
+
+class Ingredient(Base):
+    __tablename__ = "ingredients"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    image_url = Column(String, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0, server_default="0")
+
+
+class UserIngredient(Base):
+    __tablename__ = "user_ingredients"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False)
+    qty = Column(Integer, nullable=False, default=0, server_default="0")
+
+    ingredient = relationship("Ingredient")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "ingredient_id", name="uq_useringredient_user_ingredient"),
+    )
+
+
+GATHER_WINDOW_KINDS = ("morning", "day", "night", "always")
+
+
+class GatherCell(Base):
+    __tablename__ = "gather_cells"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False)
+    col = Column(Integer, nullable=False)
+    row = Column(Integer, nullable=False)
+    window = Column(String, nullable=False, default="always", server_default="always")
+
+    field = relationship("Field")
+    ingredients = relationship("GatherCellIngredient", back_populates="gather_cell", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("field_id", "col", "row", name="uq_gathercell_field_col_row"),
+    )
+
+
+class GatherCellIngredient(Base):
+    __tablename__ = "gather_cell_ingredients"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    gather_cell_id = Column(Integer, ForeignKey("gather_cells.id", ondelete="CASCADE"), nullable=False)
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False)
+
+    gather_cell = relationship("GatherCell", back_populates="ingredients")
+    ingredient = relationship("Ingredient")
+
+    __table_args__ = (
+        UniqueConstraint("gather_cell_id", "ingredient_id", name="uq_gathercell_ingredient"),
+    )
+
+
+class UserGatherLog(Base):
+    __tablename__ = "user_gather_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    gather_cell_id = Column(Integer, ForeignKey("gather_cells.id", ondelete="CASCADE"), nullable=False)
+    date = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "gather_cell_id", "date", name="uq_usergatherlog_user_cell_date"),
+    )
+
+
+class TradeCell(Base):
+    __tablename__ = "trade_cells"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False)
+    col = Column(Integer, nullable=False)
+    row = Column(Integer, nullable=False)
+
+    field = relationship("Field")
+    ingredients = relationship("TradeCellIngredient", back_populates="trade_cell", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("field_id", "col", "row", name="uq_tradecell_field_col_row"),
+    )
+
+
+class TradeCellIngredient(Base):
+    __tablename__ = "trade_cell_ingredients"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    trade_cell_id = Column(Integer, ForeignKey("trade_cells.id", ondelete="CASCADE"), nullable=False)
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False)
+
+    trade_cell = relationship("TradeCell", back_populates="ingredients")
+    ingredient = relationship("Ingredient")
+
+    __table_args__ = (
+        UniqueConstraint("trade_cell_id", "ingredient_id", name="uq_tradecell_ingredient"),
+    )
