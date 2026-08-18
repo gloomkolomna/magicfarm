@@ -6,18 +6,6 @@ import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
 import SpritePedestal from '../components/SpritePedestal';
 
-const STATUS_LABEL: Record<string, { label: string; emoji: string }> = {
-  open: { label: 'Открыт', emoji: '📋' },
-  fulfilled: { label: 'Выполнен', emoji: '✅' },
-  cancelled: { label: 'Отменён', emoji: '✖️' },
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  open: 'var(--accent-warm)',
-  fulfilled: 'var(--success)',
-  cancelled: 'var(--text-muted)',
-};
-
 export default function OrdersPage() {
   const { refresh, loading: sessionLoading } = useSession();
   const nav = useNavigate();
@@ -77,7 +65,6 @@ export default function OrdersPage() {
   }
 
   const openOrders = orders.filter((o) => o.status === 'open');
-  const doneOrders = orders.filter((o) => o.status === 'fulfilled');
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
@@ -190,39 +177,6 @@ export default function OrdersPage() {
                 );
               })}
             </div>
-          )}
-
-          {doneOrders.length > 0 && (
-            <>
-              <h2 style={{ fontSize: 16, margin: '18px 0 10px' }}>История</h2>
-              <div className="fm-grid">
-                {doneOrders.map((o) => {
-                  const s = STATUS_LABEL[o.status] || STATUS_LABEL.open;
-                  return (
-                    <div key={o.id} className="fm-card" style={{ textAlign: 'center', opacity: 0.8 }}>
-                      <SpritePedestal url={(o.image_url || o.product_image_url) ? mediaUrl(o.image_url || o.product_image_url) : null} emoji={o.product_emoji} height={80} onZoom={setZoomImg} />
-                      <strong style={{ display: 'block', marginBottom: 6 }}>{o.product_name}</strong>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
-                        ×{o.qty} · {o.customer || '—'}
-                      </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6,
-                          fontSize: 13,
-                          color: STATUS_COLOR[o.status] || 'var(--text-muted)',
-                        }}
-                      >
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLOR[o.status] || 'var(--text-muted)', flexShrink: 0 }} />
-                        {s.label} {s.emoji}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
           )}
         </>
       )}

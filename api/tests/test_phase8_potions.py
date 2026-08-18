@@ -423,6 +423,53 @@ def test_brewed_potion_appears_in_inventory(admin_client):
         assert not any(i["item_kind"] == "potion" for i in plants)
 
 
+def test_rebrew_after_use_restores_potion(admin_client):
+    for pid in (1, 2, 3):
+        _seed_plant_inventory(123, pid, 10)
+    _seed_product_inventory(123, 1, 10)
+    rid = _seed_recipe("Зелье переварки", ["plant_garden", "plant_garden", "plant_garden", "alchemy"])
+
+    def brew(c):
+        cid = c.post("/api/potions/cauldrons", json={"recipe_id": rid}).json()["id"]
+        for i, pid in enumerate((1, 2, 3)):
+            assert c.post(f"/api/potions/cauldrons/{cid}/slot/{i}", json={
+                "item_kind": "plant", "item_id": pid,
+            }).status_code == 200
+        assert c.post(f"/api/potions/cauldrons/{cid}/slot/3", json={
+            "item_kind": "product", "item_id": 1,
+        }).status_code == 200
+        assert c.post(f"/api/potions/cauldrons/{cid}/brew").status_code == 200
+
+    with make_user_client(123, "player") as c:
+        brew(c)
+        potions = c.get("/api/potions").json()
+        assert len(potions) == 1
+        assert potions[0]["used"] is False
+
+        from models import UserPotion
+        from tests.conftest import TestingSessionLocal
+        s = TestingSessionLocal()
+        try:
+            up = s.query(UserPotion).filter(UserPotion.user_id == 123).first()
+            up.used = True
+            s.commit()
+        finally:
+            s.close()
+
+        inv = c.get("/api/farm/inventory").json()
+        assert not any(i["item_kind"] == "potion" for i in inv)
+
+        brew(c)
+
+        potions = c.get("/api/potions").json()
+        assert len(potions) == 1
+        assert potions[0]["used"] is False
+
+        potions_inv = [i for i in c.get("/api/farm/inventory").json() if i["item_kind"] == "potion"]
+        assert len(potions_inv) == 1
+        assert potions_inv[0]["qty"] == 1
+
+
 def test_admin_crud_recipes(admin_client):
     r = admin_client.get("/api/admin/potion-recipes")
     assert r.status_code == 200

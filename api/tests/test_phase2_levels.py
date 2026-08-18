@@ -82,6 +82,75 @@ def test_advance_level_requires_plots(admin_client):
         assert r.status_code == 400
 
 
+def _setup_orchard_field(admin_client):
+    r = admin_client.post("/api/admin/fields", json={
+        "name": "МаршрутСад", "plant_category": "orchard", "cols": 4, "rows": 3,
+    })
+    fid = r.json()["id"]
+    pids = []
+    for name in ("ЯблоняМ", "ГранатМ"):
+        pr = admin_client.post("/api/admin/catalog/plants", json={
+            "name": name, "emoji": "🍎", "category": "orchard", "level": 1,
+        })
+        pids.append(pr.json()["id"])
+    admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": pids})
+    pb_ids = []
+    for col1, col2 in ((0, 1), (2, 3)):
+        br = admin_client.post(f"/api/admin/fields/{fid}/plant-beds", data={
+            "col1": col1, "row1": 0, "col2": col2, "row2": 0,
+        })
+        assert br.status_code == 201, br.text
+        pb_ids.append(br.json()["id"])
+    return fid, pids, pb_ids
+
+
+def _set_user(vk_id: int, **fields):
+    from tests.conftest import TestingSessionLocal
+    from models import User
+    s = TestingSessionLocal()
+    try:
+        u = s.query(User).filter(User.vk_id == vk_id).first()
+        for k, v in fields.items():
+            setattr(u, k, v)
+        s.commit()
+    finally:
+        s.close()
+
+
+def test_advance_counts_orchard_trees(admin_client):
+    fid, pids, pb_ids = _setup_orchard_field(admin_client)
+    with make_user_client(123, "player") as c:
+        c.get("/api/me")
+        _set_user(123, coins=50000, unlocked_garden_level=1)
+        for pb_id, pid in zip(pb_ids, pids):
+            rr = c.post(f"/api/fields/{fid}/plant-beds/{pb_id}/plant", json={
+                "plant_id": pid, "qty": 1,
+            })
+            assert rr.status_code == 201, rr.text
+
+        r = c.post("/api/levels/advance")
+        assert r.status_code == 200, r.text
+        me = c.get("/api/me").json()
+        assert me["level"] == 1
+
+
+def test_advance_ignores_plots_without_place(admin_client):
+    from models import Plot
+    from tests.conftest import TestingSessionLocal
+    with make_user_client(123, "player") as c:
+        c.get("/api/me")
+        s = TestingSessionLocal()
+        try:
+            s.add(Plot(user_id=123, plant_id=1, qty=1, required=0))
+            s.commit()
+        finally:
+            s.close()
+        _set_user(123, coins=50000)
+
+        r = c.post("/api/levels/advance")
+        assert r.status_code == 400
+
+
 def test_admin_crud_levels(admin_client):
     r = admin_client.get("/api/admin/levels")
     assert r.status_code == 200

@@ -72,8 +72,12 @@ export default function ProfilePage() {
               const passed = g.level < cur;
               const current = g.level === cur;
               const next = g.level === cur + 1;
-              const coinsProgress = g.coins_required > 0 && (passed || current || next)
-                ? Math.min(100, Math.round(((user.coins ?? 0) / g.coins_required) * 100))
+              const nextGate = current ? levels.find((x) => x.level === cur + 1) : undefined;
+              const coinsMissing = nextGate ? Math.max(0, nextGate.coins_required - (user.coins ?? 0)) : 0;
+              const plotsMissing = nextGate ? Math.max(0, nextGate.plots_required - (user.plots_placed ?? 0)) : 0;
+              const ready = nextGate !== undefined && coinsMissing === 0 && plotsMissing === 0;
+              const nextCoinsProgress = nextGate && nextGate.coins_required > 0
+                ? Math.min(100, Math.round(((user.coins ?? 0) / nextGate.coins_required) * 100))
                 : null;
               return (
                 <div
@@ -107,12 +111,26 @@ export default function ProfilePage() {
                     )}
                     {!passed && (
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                        🪙 {g.coins_required} монет{g.plots_required > 0 ? <> · 🌱 {g.plots_required} грядок</> : null}
+                        🪙 {g.coins_required} монет{g.plots_required > 0 ? <> · 🌱 {g.plots_required} грядок и садов</> : null}
                       </div>
                     )}
-                    {coinsProgress !== null && !passed && (
-                      <div className="fm-progress" style={{ marginTop: 4, height: 6 }}>
-                        <div className="fm-progress-fill" style={{ width: `${coinsProgress}%` }} />
+                    {current && nextGate && (
+                      <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+                        {nextCoinsProgress !== null && (
+                          <>
+                            <div className="fm-progress" style={{ height: 6 }}>
+                              <div className="fm-progress-fill" style={{ width: `${nextCoinsProgress}%` }} />
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                              {user.coins ?? 0} / {nextGate.coins_required} 🪙
+                            </div>
+                          </>
+                        )}
+                        <div style={{ fontSize: 12, marginTop: 4, color: ready ? 'var(--success)' : 'var(--accent-warm)' }}>
+                          {ready
+                            ? '✅ Всё готово — переход после следующего выполненного заказа'
+                            : <>Не хватает:{coinsMissing > 0 && <> 🪙 {coinsMissing}</>}{coinsMissing > 0 && plotsMissing > 0 && ' ·'}{plotsMissing > 0 && <> 🌱 {plotsMissing}</>}</>}
+                        </div>
                       </div>
                     )}
                   </div>

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from models import LevelGate, Plot, User
 
@@ -33,6 +34,13 @@ def _apply_unlock(user: User, unlock_type: str | None) -> None:
             user.unlocked_plot_level = value
 
 
+def count_route_plots(db: Session, vk_id: int) -> int:
+    return db.query(Plot).filter(
+        Plot.user_id == vk_id,
+        or_(Plot.cell_id.isnot(None), Plot.plant_bed_id.isnot(None)),
+    ).count()
+
+
 def check_level_up(db: Session, user: User) -> int | None:
     current = user.level or 0
     next_level = current + 1
@@ -47,9 +55,7 @@ def check_level_up(db: Session, user: User) -> int | None:
     if (u.coins or 0) < gate.coins_required:
         return None
 
-    plot_count = db.query(Plot).filter(
-        Plot.user_id == user.vk_id, Plot.cell_id.isnot(None)
-    ).count()
+    plot_count = count_route_plots(db, user.vk_id)
     if plot_count < gate.plots_required:
         return None
 

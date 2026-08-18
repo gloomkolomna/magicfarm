@@ -1,9 +1,12 @@
 from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from db import get_db
 from deps import get_current_user
 from models import User
+from services.leveling import count_route_plots
 
 router = APIRouter(prefix="/api", tags=["me"])
 
@@ -22,10 +25,14 @@ class MeResponse(BaseModel):
     unlocked_plot_level: int
     unlocked_garden_level: int
     onboarding_done: bool
+    plots_placed: int
 
 
 @router.get("/me", response_model=MeResponse)
-def get_me(user: User = Depends(get_current_user)):
+def get_me(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     return MeResponse(
         vk_id=user.vk_id,
         role=user.role,
@@ -40,4 +47,5 @@ def get_me(user: User = Depends(get_current_user)):
         unlocked_plot_level=user.unlocked_plot_level or 1,
         unlocked_garden_level=user.unlocked_garden_level or 0,
         onboarding_done=bool(user.onboarding_done),
+        plots_placed=count_route_plots(db, user.vk_id),
     )

@@ -960,6 +960,29 @@ def test_fulfill_potion_order_rejects_used(player_client):
     assert res.status_code == 400
 
 
+def test_fulfill_potion_order_after_rebrew(player_client):
+    o = _generate_potion_order({"potion_recipe_id": 1})
+    oid = player_client.post(f"/api/orders/{o['id']}/take").json()["id"]
+
+    _seed_user_potion(123, recipe_id=1, used=True)
+    assert player_client.post(f"/api/orders/{oid}/fulfill").status_code == 400
+
+    from models import UserPotion
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        up = s.query(UserPotion).filter(UserPotion.user_id == 123).first()
+        up.used = False
+        up.activated = False
+        s.commit()
+    finally:
+        s.close()
+
+    res = player_client.post(f"/api/orders/{oid}/fulfill")
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "fulfilled"
+
+
 def test_products_endpoint_marks_unavailable(player_client):
     plant = _make_plant("shtuchnyy_cvetok2", category="orchard", level=2)
     prod = _make_plant_product(plant, "cvetok_tovar2")

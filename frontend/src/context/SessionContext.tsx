@@ -13,6 +13,7 @@ export interface MeUser {
   round: number;
   level: number;
   onboarding_done: boolean;
+  plots_placed: number;
 }
 
 interface SessionState {

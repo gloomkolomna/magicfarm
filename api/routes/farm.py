@@ -511,7 +511,7 @@ def list_inventory(
         potion_rows = (
             db.query(PotionRecipe, func.count(UserPotion.id))
             .join(UserPotion, UserPotion.potion_recipe_id == PotionRecipe.id)
-            .filter(UserPotion.user_id == user.vk_id)
+            .filter(UserPotion.user_id == user.vk_id, UserPotion.used.is_(False))
             .group_by(PotionRecipe.id)
             .all()
         )

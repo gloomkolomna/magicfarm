@@ -428,6 +428,10 @@ def brew(
         if existing is None:
             db.add(UserPotion(user_id=user.vk_id, potion_recipe_id=recipe.id,
                              bonus_code=recipe.bonus_code, activated=False))
+        elif existing.used:
+            existing.used = False
+            existing.activated = False
+            existing.bonus_code = recipe.bonus_code
 
     db.commit()
 
