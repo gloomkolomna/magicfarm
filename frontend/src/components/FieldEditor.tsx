@@ -3,7 +3,7 @@ import { api, type Animal, type BreweryZone, type FieldCell, type FieldDetail, t
 import { mediaUrl } from '../api/media';
 import { confirmDialog } from './Confirm';
 
-type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house' | 'brew_cauldron' | 'brew_jar' | 'brew_ingredient' | 'brew_card' | 'gather' | 'trade';
+type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house' | 'brew_cauldron' | 'brew_jar' | 'brew_ingredient' | 'brew_card' | 'gather' | 'trade' | 'body_part';
 
 function isTentBrush(b: Brush) {
   return b === 'tent' || b === 'house';
@@ -40,6 +40,7 @@ const KIND_FILL: Record<string, string> = {
   barnyard: 'rgba(220,180,120,0.30)',
   gather: 'rgba(120,200,110,0.30)',
   trade: 'rgba(110,170,220,0.30)',
+  body_part: 'rgba(220,150,120,0.30)',
 };
 
 const TENT_KIND_LABEL: Record<string, string> = {};
@@ -77,11 +78,12 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const [brewImage, setBrewImage] = useState<File | null>(null);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
   const [cellModal, setCellModal] = useState<{
-    kind: 'gather' | 'trade';
+    kind: 'gather' | 'trade' | 'body_part';
     col: number;
     row: number;
     window: string;
     ids: number[];
+    partCode: string;
     existingId: number | null;
   } | null>(null);
 
@@ -155,6 +157,20 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         row: r,
         window: existing && 'window' in existing ? (existing as any).window : 'always',
         ids: existing ? existing.ingredient_ids : [],
+        partCode: '',
+        existingId: existing?.id ?? null,
+      });
+      return;
+    }
+    if (brush === 'body_part') {
+      const existing = field?.part_cells?.find((pc) => pc.col === c && pc.row === r);
+      setCellModal({
+        kind: 'body_part',
+        col: c,
+        row: r,
+        window: 'always',
+        ids: [],
+        partCode: existing?.part_code ?? '',
         existingId: existing?.id ?? null,
       });
       return;
@@ -313,13 +329,20 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           await api.adminCreateGatherCell(fieldId, { col: cellModal.col, row: cellModal.row, window: cellModal.window, ingredient_ids: cellModal.ids });
         }
         setMsg('✓ Клетка добычи настроена');
-      } else {
+      } else if (cellModal.kind === 'trade') {
         if (cellModal.existingId != null) {
           await api.adminUpdateTradeCell(fieldId, cellModal.existingId, { ingredient_ids: cellModal.ids });
         } else {
           await api.adminCreateTradeCell(fieldId, { col: cellModal.col, row: cellModal.row, ingredient_ids: cellModal.ids });
         }
         setMsg('✓ Клетка бартера настроена');
+      } else {
+        if (cellModal.existingId != null) {
+          await api.adminUpdatePartCell(fieldId, cellModal.existingId, { part_code: cellModal.partCode });
+        } else {
+          await api.adminCreatePartCell(fieldId, { col: cellModal.col, row: cellModal.row, part_code: cellModal.partCode });
+        }
+        setMsg('✓ Часть тела настроена');
       }
       setCellModal(null);
       await load();
@@ -351,6 +374,20 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       await api.adminDeleteTradeCell(fieldId, id);
       await load();
       setMsg('✓ Клетка бартера удалена');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deletePartCell(id: number) {
+    if (!(await confirmDialog('Удалить часть тела?'))) return;
+    setBusy(true);
+    try {
+      await api.adminDeletePartCell(fieldId, id);
+      await load();
+      setMsg('✓ Часть тела удалена');
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally {
@@ -637,6 +674,13 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             </div>
           );
         }
+        if (kind === 'infirmary') {
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              <BrushBtn active={brush === 'body_part'} onClick={() => setBrush('body_part')}>🔍 Часть тела</BrushBtn>
+            </div>
+          );
+        }
         return (
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <BrushBtn active={brush === 'bed'} onClick={() => setBrush('bed')}>🟩 Грядка</BrushBtn>
@@ -655,6 +699,8 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           ? 'Тап по клетке открывает настройку добычи: окно активности и список ингредиентов.'
           : brush === 'trade'
           ? 'Тап по клетке открывает настройку бартера: список ингредиентов, доступных к обмену.'
+          : brush === 'body_part'
+          ? 'Тап по клетке открывает настройку части тела: код части (например, nose, ear, tail).'
           : brush === 'bed' && field?.plant_category === 'orchard'
           ? 'Тапайте по клеткам под слот дерева (1…N), затем «Разместить слот дерева».'
           : brush === 'pet' && field?.field_kind === 'lawn'
@@ -786,6 +832,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             else if (c.kind === 'barnyard') icon = '🐄';
             else if (c.kind === 'gather') icon = '🌿';
             else if (c.kind === 'trade') icon = '🛒';
+            else if (c.kind === 'body_part') icon = '🔍';
             if (!icon) return null;
             return (
               <text
@@ -930,7 +977,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     disabled={busy}
                     onClick={() => setCellModal({
                       kind: 'gather', col: gc.col, row: gc.row,
-                      window: gc.window, ids: gc.ingredient_ids, existingId: gc.id,
+                      window: gc.window, ids: gc.ingredient_ids, partCode: '', existingId: gc.id,
                     })}
                   >
                     ✏️
@@ -974,7 +1021,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     disabled={busy}
                     onClick={() => setCellModal({
                       kind: 'trade', col: tc.col, row: tc.row,
-                      window: 'always', ids: tc.ingredient_ids, existingId: tc.id,
+                      window: 'always', ids: tc.ingredient_ids, partCode: '', existingId: tc.id,
                     })}
                   >
                     ✏️
@@ -992,6 +1039,50 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             ))}
             {(field.trade_cells ?? []).length === 0 && (
               <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Клеток бартера пока нет — разместите кистью выше.</div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Части тела (лесная лечебница) */}
+      {field?.field_kind === 'infirmary' && (
+        <>
+          <h3>🔍 Части тела</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Кистью «Часть тела» тапните по клетке и задайте код части (например nose, ear, tail).
+          </p>
+          <div className="fm-grid" style={{ marginBottom: 14 }}>
+            {(field.part_cells ?? []).map((pc) => (
+              <div key={pc.id} className="fm-card">
+                <strong>🔍 [{pc.col},{pc.row}]</strong>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {pc.part_code}
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  <button
+                    className="fm-btn fm-btn-sm fm-btn-outline"
+                    style={{ flex: 1 }}
+                    disabled={busy}
+                    onClick={() => setCellModal({
+                      kind: 'body_part', col: pc.col, row: pc.row,
+                      window: 'always', ids: [], partCode: pc.part_code, existingId: pc.id,
+                    })}
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    className="fm-btn fm-btn-sm fm-btn-danger"
+                    style={{ flex: 1 }}
+                    disabled={busy}
+                    onClick={() => deletePartCell(pc.id)}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            ))}
+            {(field.part_cells ?? []).length === 0 && (
+              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Частей тела пока нет — разместите кистью выше.</div>
             )}
           </div>
         </>
@@ -1096,7 +1187,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'calc(var(--shell-max-width) * 0.7)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <h3 style={{ margin: 0 }}>
-                {cellModal.kind === 'gather' ? '🌿 Клетка добычи' : '🛒 Клетка бартера'} [{cellModal.col},{cellModal.row}]
+                {cellModal.kind === 'gather' ? '🌿 Клетка добычи' : cellModal.kind === 'trade' ? '🛒 Клетка бартера' : '🔍 Часть тела'} [{cellModal.col},{cellModal.row}]
               </h3>
               <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setCellModal(null)}>✕</button>
             </div>
@@ -1115,35 +1206,49 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 </select>
               </>
             )}
-            <label style={lbl}>
-              {cellModal.kind === 'gather' ? 'Ингредиенты (случайный из списка)' : 'Ингредиенты (что можно получить в обмен)'}
-            </label>
-            <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 8 }}>
-              {allIngredients.length === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                  Сначала создайте ингредиенты в разделе «Ингредиенты».
-                </div>
-              ) : allIngredients.map((ing) => (
-                <label key={ing.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px', fontSize: 14, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={cellModal.ids.includes(ing.id)}
-                    onChange={(e) => {
-                      const next = e.target.checked
-                        ? [...cellModal.ids, ing.id]
-                        : cellModal.ids.filter((x) => x !== ing.id);
-                      setCellModal({ ...cellModal, ids: next });
-                    }}
-                  />
-                  {ing.image_url && <img src={mediaUrl(ing.image_url)} alt="" style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 4 }} />}
-                  {ing.name}
+            {cellModal.kind === 'body_part' ? (
+              <>
+                <label style={lbl}>Код части тела</label>
+                <input
+                  className="fm-input"
+                  value={cellModal.partCode}
+                  onChange={(e) => setCellModal({ ...cellModal, partCode: e.target.value })}
+                  placeholder="nose / ear / tail / wing…"
+                />
+              </>
+            ) : (
+              <>
+                <label style={lbl}>
+                  {cellModal.kind === 'gather' ? 'Ингредиенты (случайный из списка)' : 'Ингредиенты (что можно получить в обмен)'}
                 </label>
-              ))}
-            </div>
+                <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 8 }}>
+                  {allIngredients.length === 0 ? (
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                      Сначала создайте ингредиенты в разделе «Ингредиенты».
+                    </div>
+                  ) : allIngredients.map((ing) => (
+                    <label key={ing.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px', fontSize: 14, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={cellModal.ids.includes(ing.id)}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...cellModal.ids, ing.id]
+                            : cellModal.ids.filter((x) => x !== ing.id);
+                          setCellModal({ ...cellModal, ids: next });
+                        }}
+                      />
+                      {ing.image_url && <img src={mediaUrl(ing.image_url)} alt="" style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 4 }} />}
+                      {ing.name}
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
             <button
               className="fm-btn"
               style={{ width: '100%', marginTop: 14 }}
-              disabled={busy || (cellModal.kind === 'gather' && cellModal.ids.length === 0 && cellModal.existingId == null)}
+              disabled={busy || (cellModal.kind === 'gather' && cellModal.ids.length === 0 && cellModal.existingId == null) || (cellModal.kind === 'body_part' && !cellModal.partCode.trim())}
               onClick={saveCellConfig}
             >
               Сохранить

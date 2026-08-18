@@ -92,7 +92,8 @@ def admin_create(
 ):
     if req.condition_kind not in known_kinds():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный тип условия")
-    _validate_production_code(req.production_code, db)
+    if req.condition_kind != "infirmary_level_complete":
+        _validate_production_code(req.production_code, db)
     code = (req.code or "").strip() or _unique_code(_auto_code(req.name, "ach"), Achievement, db)
     a = Achievement(
         code=code, name=req.name,
@@ -118,7 +119,8 @@ def admin_update(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Достижение не найдено")
     if req.condition_kind not in known_kinds():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный тип условия")
-    _validate_production_code(req.production_code, db)
+    if req.condition_kind != "infirmary_level_complete":
+        _validate_production_code(req.production_code, db)
     a.name = req.name
     a.condition_kind = req.condition_kind
     a.condition_value = req.condition_value

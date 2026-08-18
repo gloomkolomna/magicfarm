@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type Customer, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Setting, type StitchReport } from '../api/endpoints';
+import { api, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import Toast from '../components/Toast';
@@ -60,7 +60,7 @@ function matchesAny(item: unknown, q: string): boolean {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs' | 'ingredients'>('players');
+  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs' | 'ingredients' | 'infirmary'>('players');
   const [players, setPlayers] = useState<Player[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
@@ -216,6 +216,17 @@ export default function AdminPage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [ingForm, setIngForm] = useState<{ name: string; description: string; sort_order: string }>({ name: '', description: '', sort_order: '0' });
   const [ingEditingId, setIngEditingId] = useState<number | null>(null);
+
+  // ── Лечебница: мази, болезни, пациенты ──
+  const [remedies, setRemedies] = useState<Remedy[]>([]);
+  const [remedyForm, setRemedyForm] = useState<{ name: string; description: string; itemsText: string }>({ name: '', description: '', itemsText: '' });
+  const [remedyEditingId, setRemedyEditingId] = useState<number | null>(null);
+  const [diseases, setDiseases] = useState<Disease[]>([]);
+  const [diseaseForm, setDiseaseForm] = useState<{ name: string; description: string; remedyId: string; symptomsText: string }>({ name: '', description: '', remedyId: '', symptomsText: '' });
+  const [diseaseEditingId, setDiseaseEditingId] = useState<number | null>(null);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [patientForm, setPatientForm] = useState<{ name: string; level: string; diseaseId: string; fieldId: string }>({ name: '', level: '1', diseaseId: '', fieldId: '' });
+  const [patientEditingId, setPatientEditingId] = useState<number | null>(null);
 
   // ── Рецепты библиотеки ──
   const [recipes, setRecipes] = useState<AdminRecipe[]>([]);
@@ -987,6 +998,201 @@ export default function AdminPage() {
     );
   }
 
+  // ── Лечебница: мази, болезни, пациенты ──
+  function parseRecipeItems(text: string): { ingredient_id: number; qty: number }[] {
+    const items: { ingredient_id: number; qty: number }[] = [];
+    for (const line of text.split('\n')) {
+      const t = line.trim();
+      if (!t) continue;
+      const [idStr, qtyStr] = t.split(':');
+      const id = Number((idStr || '').trim());
+      const qty = Number((qtyStr || '1').trim()) || 1;
+      if (Number.isFinite(id)) items.push({ ingredient_id: id, qty });
+    }
+    return items;
+  }
+  function parseSymptoms(text: string): { part_code: string; text: string }[] {
+    const items: { part_code: string; text: string }[] = [];
+    for (const line of text.split('\n')) {
+      const t = line.trim();
+      if (!t) continue;
+      const idx = t.indexOf(':');
+      if (idx <= 0) continue;
+      items.push({ part_code: t.slice(0, idx).trim(), text: t.slice(idx + 1).trim() });
+    }
+    return items;
+  }
+  async function loadInfirmary() {
+    try {
+      const [r, d, p] = await Promise.all([api.adminRemedies(), api.adminDiseases(), api.adminPatients()]);
+      setRemedies(r); setDiseases(d); setPatients(p);
+    } catch { /* ignore */ }
+  }
+  async function saveRemedy() {
+    if (!remedyForm.name.trim()) { setMsg('✗ Введите название'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const data = { name: remedyForm.name.trim(), description: remedyForm.description || null, recipe_items: parseRecipeItems(remedyForm.itemsText) };
+      if (remedyEditingId) await api.adminUpdateRemedy(remedyEditingId, data);
+      else await api.adminCreateRemedy(data);
+      await loadInfirmary();
+      setRemedyForm({ name: '', description: '', itemsText: '' });
+      setRemedyEditingId(null);
+      setMsg('✓ Сохранено');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function deleteRemedy(id: number) {
+    if (!(await confirmDialog('Удалить мазь?'))) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeleteRemedy(id); await loadInfirmary(); setMsg('✓ Удалено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function saveDisease() {
+    if (!diseaseForm.name.trim()) { setMsg('✗ Введите название'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const data = { name: diseaseForm.name.trim(), description: diseaseForm.description || null, remedy_id: diseaseForm.remedyId ? Number(diseaseForm.remedyId) : null, symptoms: parseSymptoms(diseaseForm.symptomsText) };
+      if (diseaseEditingId) await api.adminUpdateDisease(diseaseEditingId, data);
+      else await api.adminCreateDisease(data);
+      await loadInfirmary();
+      setDiseaseForm({ name: '', description: '', remedyId: '', symptomsText: '' });
+      setDiseaseEditingId(null);
+      setMsg('✓ Сохранено');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function deleteDisease(id: number) {
+    if (!(await confirmDialog('Удалить болезнь?'))) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeleteDisease(id); await loadInfirmary(); setMsg('✓ Удалено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function savePatient() {
+    if (!patientForm.name.trim()) { setMsg('✗ Введите название'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const data = { name: patientForm.name.trim(), level: Number(patientForm.level) || 1, disease_id: patientForm.diseaseId ? Number(patientForm.diseaseId) : null, field_id: patientForm.fieldId ? Number(patientForm.fieldId) : null };
+      if (patientEditingId) await api.adminUpdatePatient(patientEditingId, data);
+      else await api.adminCreatePatient(data);
+      await loadInfirmary();
+      setPatientForm({ name: '', level: '1', diseaseId: '', fieldId: '' });
+      setPatientEditingId(null);
+      setMsg('✓ Сохранено');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function deletePatient(id: number) {
+    if (!(await confirmDialog('Удалить пациента?'))) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeletePatient(id); await loadInfirmary(); setMsg('✓ Удалено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  function renderInfirmary() {
+    return (
+      <div>
+        <h2>🌲 Лечебница</h2>
+        <div className="fm-card" style={{ marginBottom: 10 }}>
+          <h3 style={{ marginTop: 0 }}>Мази (состав)</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <input className="fm-input" placeholder="Название" value={remedyForm.name} onChange={(e) => setRemedyForm({ ...remedyForm, name: e.target.value })} />
+          </div>
+          <textarea className="fm-input" placeholder="Состав: ingredient_id:qty (по строке)" value={remedyForm.itemsText} onChange={(e) => setRemedyForm({ ...remedyForm, itemsText: e.target.value })} rows={2} style={{ width: '100%', marginBottom: 8 }} />
+          <button className="fm-btn" disabled={busy} onClick={saveRemedy}>{remedyEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
+          {remedyEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setRemedyEditingId(null); setRemedyForm({ name: '', description: '', itemsText: '' }); }}>Отмена</button>}
+        </div>
+        <table className="fm-table" style={{ width: '100%', marginBottom: 16 }}>
+          <thead><tr><th>ID</th><th>Название</th><th>Состав</th><th></th></tr></thead>
+          <tbody>
+            {remedies.map((r) => (
+              <tr key={r.id}>
+                <td>{r.id}</td>
+                <td><strong>{r.name}</strong></td>
+                <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{r.recipe_items.map((i) => `${i.ingredient_name || i.ingredient_id} ×${i.qty}`).join(', ') || '—'}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button className="fm-btn fm-btn-xs" onClick={() => { setRemedyEditingId(r.id); setRemedyForm({ name: r.name, description: r.description || '', itemsText: r.recipe_items.map((i) => `${i.ingredient_id}:${i.qty}`).join('\n') }); }}>✎</button>{' '}
+                  <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteRemedy(r.id)}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="fm-card" style={{ marginBottom: 10 }}>
+          <h3 style={{ marginTop: 0 }}>Болезни (симптомы)</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <input className="fm-input" placeholder="Название" value={diseaseForm.name} onChange={(e) => setDiseaseForm({ ...diseaseForm, name: e.target.value })} />
+            <select className="fm-input" value={diseaseForm.remedyId} onChange={(e) => setDiseaseForm({ ...diseaseForm, remedyId: e.target.value })}>
+              <option value="">— мазь —</option>
+              {remedies.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+          <textarea className="fm-input" placeholder="Симптомы: part_code:текст (по строке)" value={diseaseForm.symptomsText} onChange={(e) => setDiseaseForm({ ...diseaseForm, symptomsText: e.target.value })} rows={2} style={{ width: '100%', marginBottom: 8 }} />
+          <button className="fm-btn" disabled={busy} onClick={saveDisease}>{diseaseEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
+          {diseaseEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setDiseaseEditingId(null); setDiseaseForm({ name: '', description: '', remedyId: '', symptomsText: '' }); }}>Отмена</button>}
+        </div>
+        <table className="fm-table" style={{ width: '100%', marginBottom: 16 }}>
+          <thead><tr><th>ID</th><th>Название</th><th>Мазь</th><th>Симптомы</th><th></th></tr></thead>
+          <tbody>
+            {diseases.map((d) => (
+              <tr key={d.id}>
+                <td>{d.id}</td>
+                <td><strong>{d.name}</strong></td>
+                <td style={{ fontSize: 12 }}>{d.remedy_name || '—'}</td>
+                <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.symptoms.map((s) => `${s.part_code}: ${s.text}`).join('; ') || '—'}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button className="fm-btn fm-btn-xs" onClick={() => { setDiseaseEditingId(d.id); setDiseaseForm({ name: d.name, description: d.description || '', remedyId: d.remedy_id ? String(d.remedy_id) : '', symptomsText: d.symptoms.map((s) => `${s.part_code}:${s.text}`).join('\n') }); }}>✎</button>{' '}
+                  <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteDisease(d.id)}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="fm-card" style={{ marginBottom: 10 }}>
+          <h3 style={{ marginTop: 0 }}>Пациенты (животные)</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <input className="fm-input" placeholder="Название" value={patientForm.name} onChange={(e) => setPatientForm({ ...patientForm, name: e.target.value })} />
+            <select className="fm-input" value={patientForm.level} onChange={(e) => setPatientForm({ ...patientForm, level: e.target.value })}>
+              <option value="1">Уровень 1</option>
+              <option value="2">Уровень 2</option>
+              <option value="3">Уровень 3</option>
+            </select>
+            <select className="fm-input" value={patientForm.diseaseId} onChange={(e) => setPatientForm({ ...patientForm, diseaseId: e.target.value })}>
+              <option value="">— болезнь —</option>
+              {diseases.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <input className="fm-input" type="number" placeholder="Локация (field id)" value={patientForm.fieldId} onChange={(e) => setPatientForm({ ...patientForm, fieldId: e.target.value })} style={{ width: 120 }} />
+          </div>
+          <button className="fm-btn" disabled={busy} onClick={savePatient}>{patientEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
+          {patientEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setPatientEditingId(null); setPatientForm({ name: '', level: '1', diseaseId: '', fieldId: '' }); }}>Отмена</button>}
+        </div>
+        <table className="fm-table" style={{ width: '100%' }}>
+          <thead><tr><th>ID</th><th>Название</th><th>Ур.</th><th>Болезнь</th><th>Локация</th><th></th></tr></thead>
+          <tbody>
+            {patients.map((p) => (
+              <tr key={p.id}>
+                <td>{p.id}</td>
+                <td><strong>{p.name}</strong></td>
+                <td>{p.level}</td>
+                <td style={{ fontSize: 12 }}>{p.disease_name || '—'}</td>
+                <td style={{ fontSize: 12 }}>{p.field_id ?? '—'}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button className="fm-btn fm-btn-xs" onClick={() => { setPatientEditingId(p.id); setPatientForm({ name: p.name, level: String(p.level), diseaseId: p.disease_id ? String(p.disease_id) : '', fieldId: p.field_id ? String(p.field_id) : '' }); }}>✎</button>{' '}
+                  <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deletePatient(p.id)}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
   function renderPotionRecipes() {
     return (
       <div>
@@ -1436,6 +1642,7 @@ export default function AdminPage() {
         <TabBtn active={tab === 'levels'} onClick={() => { setTab('levels'); loadLevels(); }}>📊 Уровни</TabBtn>
         <TabBtn active={tab === 'potion-recipes'} onClick={() => { setTab('potion-recipes'); loadPotionRecipes(); }}>🧪 Рецепты зелий</TabBtn>
         <TabBtn active={tab === 'ingredients'} onClick={() => { setTab('ingredients'); loadIngredients(); }}>⚗️ Ингредиенты</TabBtn>
+        <TabBtn active={tab === 'infirmary'} onClick={() => { setTab('infirmary'); loadInfirmary(); }}>🌲 Лечебница</TabBtn>
         <TabBtn active={tab === 'media'} onClick={() => setTab('media')}>🎬 Медиа</TabBtn>
         <TabBtn active={tab === 'crystal-cards'} onClick={() => setTab('crystal-cards')}>🃏 Карты</TabBtn>
         <TabBtn active={tab === 'achievements'} onClick={() => { setTab('achievements'); loadAchievements(); }}>🏆 Достижения</TabBtn>
@@ -1781,6 +1988,10 @@ export default function AdminPage() {
                             <option value="barnyard">🐄 Скотный двор</option>
                             <option value="library">📖 Библиотека</option>
                             <option value="brewery">🧪 Зельеварня</option>
+                            <option value="meadow">🌿 Лесная поляна</option>
+                            <option value="shop">🛒 Городская лавка</option>
+                            <option value="infirmary">🌲 Лесная лечебница</option>
+                            <option value="remedy_lab">⚗️ Лаборатория снадобий</option>
                           </select>
                         </div>
                         <div style={{ marginTop: 8 }}>
@@ -1852,6 +2063,7 @@ export default function AdminPage() {
           {tab === 'levels' && renderLevels()}
           {tab === 'potion-recipes' && renderPotionRecipes()}
           {tab === 'ingredients' && renderIngredients()}
+          {tab === 'infirmary' && renderInfirmary()}
 
           {tab === 'orders' && (
             <div>

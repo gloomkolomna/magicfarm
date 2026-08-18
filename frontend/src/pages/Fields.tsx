@@ -15,6 +15,8 @@ const FIELD_KIND_LABEL: Record<string, string> = {
   lawn: '🐾 Питомцы',
   meadow: '🌿 Лесная поляна',
   shop: '🛒 Городская лавка',
+  infirmary: '🌲 Лесная лечебница',
+  remedy_lab: '⚗️ Лаборатория снадобий',
   default: '🗺️ Поля',
 };
 
@@ -143,11 +145,17 @@ export default function FieldsPage() {
                 <button
                   key={f.id}
                   className="fm-card fm-rise"
-                  onClick={() => nav(f.field_kind === 'meadow' ? `/meadow/${f.id}` : f.field_kind === 'shop' ? `/shop/${f.id}` : `/field/${f.id}`)}
+                  onClick={() => nav(
+                    f.field_kind === 'meadow' ? `/meadow/${f.id}`
+                    : f.field_kind === 'shop' ? `/shop/${f.id}`
+                    : f.field_kind === 'infirmary' ? `/infirmary/${f.id}`
+                    : f.field_kind === 'remedy_lab' ? `/remedy-lab/${f.id}`
+                    : `/field/${f.id}`,
+                  )}
                   style={{ cursor: 'pointer', textAlign: 'left', display: 'block' }}
                 >
                   <strong style={{ fontSize: 16 }}>
-                    {f.field_kind === 'meadow' ? '🌿' : f.field_kind === 'shop' ? '🛒' : '🗺️'} {f.name}
+                    {f.field_kind === 'meadow' ? '🌿' : f.field_kind === 'shop' ? '🛒' : f.field_kind === 'infirmary' ? '🌲' : f.field_kind === 'remedy_lab' ? '⚗️' : '🗺️'} {f.name}
                   </strong>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
                     {f.cols}×{f.rows} клеток

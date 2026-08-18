@@ -14,6 +14,9 @@ ACHIEVEMENT_KINDS = [
     {"kind": "tents_count", "label": "Шатры", "hint": "построено шатров"},
     {"kind": "house_built", "label": "Дом ведьмы", "hint": "построен дом ведьмы"},
     {"kind": "level_reached", "label": "Уровень", "hint": "достигнут уровень"},
+    {"kind": "healed_count", "label": "Излечено животных", "hint": "вылечено пациентов в лечебнице"},
+    {"kind": "infirmary_level_complete", "label": "Уровень лечебницы", "hint": "пройден уровень лечебницы (production_code = 1/2/3)"},
+    {"kind": "full_collection", "label": "Полная коллекция", "hint": "вылечены все животные лечебницы"},
 ]
 
 
@@ -90,4 +93,33 @@ def _meets_condition(user_id: int, a: Achievement, db: Session) -> bool:
         from models import User
         u = db.query(User).filter(User.vk_id == user_id).first()
         return (u.level or 0) >= a.condition_value
+    if a.condition_kind == "healed_count":
+        from models import UserPatientState
+        count = db.query(UserPatientState).filter(
+            UserPatientState.user_id == user_id, UserPatientState.status == "healed"
+        ).count()
+        return count >= a.condition_value
+    if a.condition_kind == "infirmary_level_complete":
+        from models import PatientAnimal, UserPatientState
+        try:
+            level = int(a.production_code or 0)
+        except (TypeError, ValueError):
+            return False
+        patients = [p.id for p in db.query(PatientAnimal).filter(PatientAnimal.level == level).all()]
+        if not patients:
+            return False
+        healed = db.query(UserPatientState).filter(
+            UserPatientState.user_id == user_id, UserPatientState.status == "healed",
+            UserPatientState.patient_id.in_(patients),
+        ).count()
+        return healed >= len(patients)
+    if a.condition_kind == "full_collection":
+        from models import PatientAnimal, UserPatientState
+        total = db.query(PatientAnimal).count()
+        if total == 0:
+            return False
+        healed = db.query(UserPatientState).filter(
+            UserPatientState.user_id == user_id, UserPatientState.status == "healed"
+        ).count()
+        return healed >= total
     return False

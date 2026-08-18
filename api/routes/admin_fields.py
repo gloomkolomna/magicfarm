@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import require_role
 from models import (
-    BREWERY_MAX_INGREDIENT_CELLS, BREWERY_ZONE_KINDS, Animal, BreweryZone, Field, FieldAnimal,
-    FieldCell, FieldPet, FieldPlant, FieldPotionRecipe, GATHER_WINDOW_KINDS, GatherCell,
-    GatherCellIngredient, Ingredient, KASSA_KIND, Pet, PetZone, Plant, PlantBed,
-    PotionRecipe, ProductionTemplate, Tent, TradeCell, TradeCellIngredient, User, WITCH_HOUSE_KIND,
+    BREWERY_MAX_INGREDIENT_CELLS, BREWERY_ZONE_KINDS, Animal, BreweryZone, ClinicPartCell,
+    Field, FieldAnimal, FieldCell, FieldPet, FieldPlant, FieldPotionRecipe, GATHER_WINDOW_KINDS,
+    GatherCell, GatherCellIngredient, Ingredient, KASSA_KIND, PatientAnimal, Pet, PetZone, Plant,
+    PlantBed, PotionRecipe, ProductionTemplate, Tent, TradeCell, TradeCellIngredient, User,
+    WITCH_HOUSE_KIND,
 )
 from services.uploads import remove_upload, save_upload
 from routes.potions import _recipe_out
@@ -184,6 +185,15 @@ class TradeCellOut(BaseModel):
     ingredient_names: list[str] = []
 
 
+class ClinicPartCellOut(BaseModel):
+    id: int
+    field_id: int
+    animal_id: int
+    col: int
+    row: int
+    part_code: str
+
+
 class PlantOut(BaseModel):
     id: int
     code: str
@@ -216,6 +226,7 @@ class FieldDetailOut(FieldOut):
     brewery_zones: list[BreweryZoneOut] = []
     gather_cells: list[GatherCellOut] = []
     trade_cells: list[TradeCellOut] = []
+    part_cells: list[ClinicPartCellOut] = []
     potion_recipes: list = []
     potion_recipe_ids: list[int] = []
 
@@ -693,6 +704,7 @@ def _detail(f: Field) -> FieldDetailOut:
         ],
         gather_cells=[_gather_cell_out(gc) for gc in f.gather_cells] if f.field_kind == "meadow" else [],
         trade_cells=[_trade_cell_out(tc) for tc in f.trade_cells] if f.field_kind == "shop" else [],
+        part_cells=[_part_cell_out(pc) for pc in f.part_cells] if f.field_kind == "infirmary" else [],
         potion_recipes=[_recipe_out(fpr.recipe) for fpr in f.potion_recipes],
         potion_recipe_ids=[fpr.recipe_id for fpr in f.potion_recipes],
     )
@@ -909,6 +921,13 @@ def _trade_cell_out(tc: TradeCell) -> TradeCellOut:
         id=tc.id, field_id=tc.field_id, col=tc.col, row=tc.row,
         ingredient_ids=[tci.ingredient_id for tci in tc.ingredients],
         ingredient_names=[tci.ingredient.name for tci in tc.ingredients],
+    )
+
+
+def _part_cell_out(pc: ClinicPartCell) -> ClinicPartCellOut:
+    return ClinicPartCellOut(
+        id=pc.id, field_id=pc.field_id, animal_id=pc.animal_id,
+        col=pc.col, row=pc.row, part_code=pc.part_code,
     )
 
 
@@ -1248,5 +1267,108 @@ def delete_trade_cell(
     if cell is not None and cell.kind == "trade":
         cell.kind = "empty"
     db.delete(tc)
+    db.commit()
+    return None
+
+
+# ── Части тела (лесная лечебница) ──
+
+def _check_infirmary_field(f: Field) -> None:
+    if f.field_kind != "infirmary":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Части тела размещаются только на локациях типа «Лесная лечебница»",
+        )
+
+
+def _get_part_cell_on_field(pc_id: int, field_id: int, db: Session) -> ClinicPartCell:
+    pc = db.query(ClinicPartCell).filter(ClinicPartCell.id == pc_id, ClinicPartCell.field_id == field_id).first()
+    if pc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Часть тела не найдена")
+    return pc
+
+
+def _field_patient(f: Field, db: Session) -> PatientAnimal:
+    patient = db.query(PatientAnimal).filter(PatientAnimal.field_id == f.id).first()
+    if patient is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Сначала создайте животное-пациента для этой локации",
+        )
+    return patient
+
+
+class PartCellCreate(BaseModel):
+    col: int
+    row: int
+    part_code: str
+
+
+class PartCellUpdate(BaseModel):
+    part_code: str | None = None
+
+
+@router.post("/{field_id}/part-cells", response_model=ClinicPartCellOut, status_code=status.HTTP_201_CREATED)
+def create_part_cell(
+    field_id: int,
+    req: PartCellCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    _check_infirmary_field(f)
+    patient = _field_patient(f, db)
+    part_code = req.part_code.strip()
+    if not part_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код части тела обязателен")
+    if req.col < 0 or req.row < 0 or req.col >= f.cols or req.row >= f.rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Клетка вне поля")
+    existing = db.query(ClinicPartCell).filter(
+        ClinicPartCell.field_id == f.id, ClinicPartCell.col == req.col, ClinicPartCell.row == req.row
+    ).first()
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="На этой клетке уже настроена часть тела")
+
+    pc = ClinicPartCell(field_id=f.id, animal_id=patient.id, col=req.col, row=req.row, part_code=part_code)
+    db.add(pc)
+    _mark_cell_kind(f.id, req.col, req.row, "body_part", db)
+    db.commit()
+    db.refresh(pc)
+    return _part_cell_out(pc)
+
+
+@router.put("/{field_id}/part-cells/{pc_id}", response_model=ClinicPartCellOut)
+def update_part_cell(
+    field_id: int,
+    pc_id: int,
+    req: PartCellUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    pc = _get_part_cell_on_field(pc_id, field_id, db)
+    if req.part_code is not None:
+        part_code = req.part_code.strip()
+        if not part_code:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код части тела обязателен")
+        pc.part_code = part_code
+    db.commit()
+    db.refresh(pc)
+    return _part_cell_out(pc)
+
+
+@router.delete("/{field_id}/part-cells/{pc_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_part_cell(
+    field_id: int,
+    pc_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    pc = _get_part_cell_on_field(pc_id, field_id, db)
+    cell = db.query(FieldCell).filter(
+        FieldCell.field_id == pc.field_id, FieldCell.col == pc.col, FieldCell.row == pc.row
+    ).first()
+    if cell is not None and cell.kind == "body_part":
+        cell.kind = "empty"
+    db.delete(pc)
     db.commit()
     return None

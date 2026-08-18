@@ -662,6 +662,175 @@ export interface BarterResult {
   apothecary: ApothecaryItem[];
 }
 
+// ── Лесная лечебница ──
+export interface RemedyRecipeItem {
+  ingredient_id: number;
+  ingredient_name: string | null;
+  qty: number;
+}
+
+export interface Remedy {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  recipe_items: RemedyRecipeItem[];
+}
+
+export interface Symptom {
+  part_code: string;
+  text: string;
+}
+
+export interface Disease {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  remedy_id: number | null;
+  remedy_name: string | null;
+  symptoms: Symptom[];
+}
+
+export interface Patient {
+  id: number;
+  code: string;
+  name: string;
+  level: number;
+  image_url: string | null;
+  card_image_url: string | null;
+  disease_id: number | null;
+  disease_name: string | null;
+  field_id: number | null;
+}
+
+export interface ClinicPartCell {
+  id: number;
+  field_id: number;
+  animal_id: number;
+  col: number;
+  row: number;
+  part_code: string;
+}
+
+export interface InfirmaryPatient {
+  id: number;
+  field_id: number | null;
+  name: string;
+  level: number;
+  image_url: string | null;
+  healed: boolean;
+  card_earned: boolean;
+}
+
+export interface InfirmaryLevel {
+  level: number;
+  unlocked: boolean;
+  patients: InfirmaryPatient[];
+}
+
+export interface Infirmary {
+  levels: InfirmaryLevel[];
+}
+
+export interface InfirmaryPartCell {
+  id: number;
+  col: number;
+  row: number;
+  part_code: string;
+}
+
+export interface InfirmaryDetail {
+  field_id: number;
+  name: string;
+  map_url: string | null;
+  cols: number;
+  rows: number;
+  patient_id: number | null;
+  patient_name: string | null;
+  patient_level: number | null;
+  patient_image_url: string | null;
+  healed: boolean;
+  card_earned: boolean;
+  part_cells: InfirmaryPartCell[];
+}
+
+export interface HandbookDisease {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  remedy_id: number | null;
+  remedy_name: string | null;
+  remedy_image_url: string | null;
+  symptoms: Symptom[];
+}
+
+export interface ExamineResult {
+  part_code: string;
+  symptoms: string[];
+}
+
+export interface DiagnoseResult {
+  correct: boolean;
+  crosses_balance: number;
+  remedy_card_id: number | null;
+  remedy_id: number | null;
+  remedy_name: string | null;
+  remedy_description: string | null;
+  remedy_image_url: string | null;
+  recipe_items: RemedyRecipeItem[];
+}
+
+export interface RemedyCard {
+  id: number;
+  patient_id: number;
+  patient_name: string;
+  patient_level: number;
+  remedy_id: number;
+  remedy_name: string;
+  remedy_image_url: string | null;
+  recipe_items: RemedyRecipeItem[];
+}
+
+export interface RemedyLab {
+  field_id: number;
+  name: string;
+  map_url: string | null;
+  cols: number;
+  rows: number;
+  remedy_cards: RemedyCard[];
+  apothecary: ApothecaryItem[];
+}
+
+export interface BrewResult {
+  card_id: number;
+  patient_id: number;
+  patient_name: string;
+  remedy_name: string;
+  collection_card_earned: boolean;
+}
+
+export interface CollectionCard {
+  patient_id: number;
+  patient_name: string;
+  level: number;
+  card_image_url: string | null;
+  earned: boolean;
+}
+
+export interface CollectionLevel {
+  level: number;
+  earned_count: number;
+  total_count: number;
+  cards: CollectionCard[];
+}
+
+export interface Collection {
+  levels: CollectionLevel[];
+}
+
 export interface FieldDetail extends FieldInfo {
   cells: FieldCellDetail[];
   plants: Plant[];
@@ -673,6 +842,7 @@ export interface FieldDetail extends FieldInfo {
   brewery_zones?: BreweryZoneView[];
   gather_cells?: GatherCell[];
   trade_cells?: TradeCell[];
+  part_cells?: ClinicPartCell[];
   potion_recipes?: PotionRecipe[];
   active_cauldron?: Cauldron | null;
 }
@@ -1378,4 +1548,66 @@ export const api = {
     client.put<TradeCell>(`/admin/fields/${fieldId}/trade-cells/${id}`, data).then((r) => r.data),
   adminDeleteTradeCell: (fieldId: number, id: number) =>
     client.delete(`/admin/fields/${fieldId}/trade-cells/${id}`).then((r) => r.data),
+
+  // ── Лесная лечебница: игрок ──
+  infirmary: () =>
+    client.get<Infirmary>('/infirmary').then((r) => r.data),
+  infirmaryDetail: (fieldId: number) =>
+    client.get<InfirmaryDetail>(`/infirmary/${fieldId}`).then((r) => r.data),
+  handbook: () =>
+    client.get<{ diseases: HandbookDisease[] }>('/infirmary/handbook').then((r) => r.data),
+  examinePatient: (patientId: number, partCode: string) =>
+    client.post<ExamineResult>(`/infirmary/patients/${patientId}/examine`, { part_code: partCode }).then((r) => r.data),
+  diagnosePatient: (patientId: number, diseaseId: number) =>
+    client.post<DiagnoseResult>(`/infirmary/patients/${patientId}/diagnose`, { disease_id: diseaseId }).then((r) => r.data),
+  remedyLab: (fieldId: number) =>
+    client.get<RemedyLab>(`/remedy-lab/${fieldId}`).then((r) => r.data),
+  brewRemedy: (cardId: number) =>
+    client.post<BrewResult>(`/remedy-cards/${cardId}/brew`).then((r) => r.data),
+  collection: () =>
+    client.get<Collection>('/collection').then((r) => r.data),
+
+  // ── Админ: лечебница ──
+  adminRemedies: () => client.get<Remedy[]>('/admin/remedies').then((r) => r.data),
+  adminCreateRemedy: (data: { name: string; description?: string | null; recipe_items: { ingredient_id: number; qty: number }[] }) =>
+    client.post<Remedy>('/admin/remedies', data).then((r) => r.data),
+  adminUpdateRemedy: (id: number, data: { name?: string; description?: string | null; recipe_items?: { ingredient_id: number; qty: number }[] }) =>
+    client.put<Remedy>(`/admin/remedies/${id}`, data).then((r) => r.data),
+  adminDeleteRemedy: (id: number) =>
+    client.delete(`/admin/remedies/${id}`).then((r) => r.data),
+  adminUploadRemedyImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Remedy>(`/admin/remedies/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminDiseases: () => client.get<Disease[]>('/admin/diseases').then((r) => r.data),
+  adminCreateDisease: (data: { name: string; description?: string | null; remedy_id?: number | null; symptoms: Symptom[] }) =>
+    client.post<Disease>('/admin/diseases', data).then((r) => r.data),
+  adminUpdateDisease: (id: number, data: { name?: string; description?: string | null; remedy_id?: number | null; symptoms?: Symptom[] }) =>
+    client.put<Disease>(`/admin/diseases/${id}`, data).then((r) => r.data),
+  adminDeleteDisease: (id: number) =>
+    client.delete(`/admin/diseases/${id}`).then((r) => r.data),
+  adminPatients: () => client.get<Patient[]>('/admin/patients').then((r) => r.data),
+  adminCreatePatient: (data: { name: string; level: number; disease_id?: number | null; field_id?: number | null }) =>
+    client.post<Patient>('/admin/patients', data).then((r) => r.data),
+  adminUpdatePatient: (id: number, data: { name?: string; level?: number; disease_id?: number | null; field_id?: number | null }) =>
+    client.put<Patient>(`/admin/patients/${id}`, data).then((r) => r.data),
+  adminDeletePatient: (id: number) =>
+    client.delete(`/admin/patients/${id}`).then((r) => r.data),
+  adminUploadPatientImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Patient>(`/admin/patients/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadPatientCardImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Patient>(`/admin/patients/${id}/card-image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminCreatePartCell: (fieldId: number, data: { col: number; row: number; part_code: string }) =>
+    client.post<ClinicPartCell>(`/admin/fields/${fieldId}/part-cells`, data).then((r) => r.data),
+  adminUpdatePartCell: (fieldId: number, id: number, data: { part_code?: string }) =>
+    client.put<ClinicPartCell>(`/admin/fields/${fieldId}/part-cells/${id}`, data).then((r) => r.data),
+  adminDeletePartCell: (fieldId: number, id: number) =>
+    client.delete(`/admin/fields/${fieldId}/part-cells/${id}`).then((r) => r.data),
 };

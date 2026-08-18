@@ -335,6 +335,7 @@ class Field(Base):
     brewery_zones = relationship("BreweryZone", back_populates="field", cascade="all, delete-orphan")
     gather_cells = relationship("GatherCell", back_populates="field", cascade="all, delete-orphan")
     trade_cells = relationship("TradeCell", back_populates="field", cascade="all, delete-orphan")
+    part_cells = relationship("ClinicPartCell", back_populates="field", cascade="all, delete-orphan")
 
 
 class FieldPlant(Base):
@@ -894,4 +895,141 @@ class TradeCellIngredient(Base):
 
     __table_args__ = (
         UniqueConstraint("trade_cell_id", "ingredient_id", name="uq_tradecell_ingredient"),
+    )
+
+
+PATIENT_LEVELS = (1, 2, 3)
+
+
+class Remedy(Base):
+    __tablename__ = "remedies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    image_url = Column(String, nullable=True)
+
+    recipe_items = relationship("RemedyRecipeItem", back_populates="remedy", cascade="all, delete-orphan")
+
+
+class RemedyRecipeItem(Base):
+    __tablename__ = "remedy_recipe_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    remedy_id = Column(Integer, ForeignKey("remedies.id", ondelete="CASCADE"), nullable=False)
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False)
+    qty = Column(Integer, nullable=False, default=1, server_default="1")
+
+    remedy = relationship("Remedy", back_populates="recipe_items")
+    ingredient = relationship("Ingredient")
+
+    __table_args__ = (
+        UniqueConstraint("remedy_id", "ingredient_id", name="uq_remedyrecipe_remedy_ingredient"),
+    )
+
+
+class Disease(Base):
+    __tablename__ = "diseases"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    remedy_id = Column(Integer, ForeignKey("remedies.id", ondelete="SET NULL"), nullable=True)
+
+    remedy = relationship("Remedy")
+    symptoms = relationship("DiseaseSymptom", back_populates="disease", cascade="all, delete-orphan")
+
+
+class DiseaseSymptom(Base):
+    __tablename__ = "disease_symptoms"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    disease_id = Column(Integer, ForeignKey("diseases.id", ondelete="CASCADE"), nullable=False)
+    part_code = Column(String, nullable=False)
+    text = Column(Text, nullable=False)
+
+    disease = relationship("Disease", back_populates="symptoms")
+
+
+class PatientAnimal(Base):
+    __tablename__ = "patient_animals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False)
+    level = Column(Integer, nullable=False, default=1, server_default="1")
+    image_url = Column(String, nullable=True)
+    card_image_url = Column(String, nullable=True)
+    disease_id = Column(Integer, ForeignKey("diseases.id", ondelete="SET NULL"), nullable=True)
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=True)
+
+    disease = relationship("Disease")
+    field = relationship("Field")
+    part_cells = relationship("ClinicPartCell", back_populates="animal", cascade="all, delete-orphan")
+
+
+class ClinicPartCell(Base):
+    __tablename__ = "clinic_part_cells"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False)
+    animal_id = Column(Integer, ForeignKey("patient_animals.id", ondelete="CASCADE"), nullable=False)
+    col = Column(Integer, nullable=False)
+    row = Column(Integer, nullable=False)
+    part_code = Column(String, nullable=False)
+
+    animal = relationship("PatientAnimal", back_populates="part_cells")
+    field = relationship("Field", back_populates="part_cells")
+
+    __table_args__ = (
+        UniqueConstraint("field_id", "col", "row", name="uq_clinicpartcell_field_col_row"),
+    )
+
+
+class UserPatientState(Base):
+    __tablename__ = "user_patient_states"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patient_animals.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, nullable=False, default="sick", server_default="sick")
+    healed_at = Column(DateTime, nullable=True)
+
+    patient = relationship("PatientAnimal")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "patient_id", name="uq_userpatientstate_user_patient"),
+    )
+
+
+class UserRemedyCard(Base):
+    __tablename__ = "user_remedy_cards"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patient_animals.id", ondelete="CASCADE"), nullable=False)
+    remedy_id = Column(Integer, ForeignKey("remedies.id", ondelete="CASCADE"), nullable=False)
+
+    patient = relationship("PatientAnimal")
+    remedy = relationship("Remedy")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "patient_id", name="uq_userremedycard_user_patient"),
+    )
+
+
+class UserCard(Base):
+    __tablename__ = "user_cards"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patient_animals.id", ondelete="CASCADE"), nullable=False)
+    earned_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    patient = relationship("PatientAnimal")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "patient_id", name="uq_usercard_user_patient"),
     )

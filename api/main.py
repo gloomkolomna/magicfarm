@@ -33,6 +33,9 @@ from routes.logs import router as logs_router
 from routes.ingredients import router as ingredients_router, admin_router as admin_ingredients_router
 from routes.meadow import router as meadow_router
 from routes.shop import router as shop_router
+from routes.admin_infirmary import router as admin_infirmary_router
+from routes.infirmary import router as infirmary_router
+from routes.remedy_lab import router as remedy_lab_router
 
 init_db()
 
@@ -89,6 +92,9 @@ app.include_router(ingredients_router)
 app.include_router(admin_ingredients_router)
 app.include_router(meadow_router)
 app.include_router(shop_router)
+app.include_router(admin_infirmary_router)
+app.include_router(infirmary_router)
+app.include_router(remedy_lab_router)
 
 
 @app.get("/api/")

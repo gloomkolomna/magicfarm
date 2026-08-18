@@ -32,6 +32,9 @@ const FieldsPage = lazyPage(() => import('./pages/Fields'));
 const FieldPage = lazyPage(() => import('./pages/Field'));
 const MeadowPage = lazyPage(() => import('./pages/Meadow'));
 const ShopPage = lazyPage(() => import('./pages/Shop'));
+const InfirmaryPage = lazyPage(() => import('./pages/Infirmary'));
+const RemedyLabPage = lazyPage(() => import('./pages/RemedyLab'));
+const CollectionPage = lazyPage(() => import('./pages/Collection'));
 const InventoryPage = lazyPage(() => import('./pages/Inventory'));
 const LibraryPage = lazyPage(() => import('./pages/Library'));
 const PotionsPage = lazyPage(() => import('./pages/PotionsPage'));
@@ -106,6 +109,9 @@ function App() {
           <Route path="/field/:id" element={<FieldPage />} />
           <Route path="/meadow/:id" element={<MeadowPage />} />
           <Route path="/shop/:id" element={<ShopPage />} />
+          <Route path="/infirmary/:id" element={<InfirmaryPage />} />
+          <Route path="/remedy-lab/:id" element={<RemedyLabPage />} />
+          <Route path="/collection" element={<MiniAppShell><CollectionPage /></MiniAppShell>} />
           <Route path="/inventory" element={<MiniAppShell><InventoryPage /></MiniAppShell>} />
           <Route path="/library" element={<MiniAppShell><LibraryPage /></MiniAppShell>} />
           <Route path="/potions" element={<MiniAppShell><PotionsPage /></MiniAppShell>} />
