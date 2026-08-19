@@ -803,7 +803,7 @@ export default function FieldPage() {
                           )}
                           {cell.plot && (
                             <div style={{ flexShrink: 0, fontSize: 11, color: '#fff', pointerEvents: 'none', fontWeight: 600, background: 'rgba(10,16,8,0.6)', borderRadius: 6, padding: '3px 6px', maxWidth: '94%', textAlign: 'center', lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'anywhere', marginBottom: 1 }}>
-                              {cell.plot.norm_revealed && cell.plot.required > 0 ? `❎ ${cell.plot.norm_per_unit ?? cell.plot.required}/шт` : cell.plot.plant_name}
+                              {cell.plot.required > 0 && (cell.plot.norm_revealed || !cell.plot.drawn_cards_json) ? `❎ ${cell.plot.required}` : cell.plot.plant_name}
                             </div>
                           )}
                           {cell.plot && (
@@ -1041,7 +1041,7 @@ export default function FieldPage() {
                     )}
                     {occupied && pb.plot && (
                       <div style={{ position: 'absolute', left: 2, right: 2, bottom: 2, textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#fff', background: 'rgba(10,16,8,0.6)', borderRadius: 4, padding: '3px 4px', pointerEvents: 'none', lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
-                        {pb.plot.norm_revealed && pb.plot.required > 0 ? `❎ ${pb.plot.norm_per_unit ?? pb.plot.required}/шт` : pb.plot.plant_name}
+                        {pb.plot.required > 0 && (pb.plot.norm_revealed || !pb.plot.drawn_cards_json) ? `❎ ${pb.plot.required}` : pb.plot.plant_name}
                       </div>
                     )}
                     {occupied && pb.plot && pb.plot.status === 'grown' && (
