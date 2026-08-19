@@ -449,8 +449,19 @@ export function InfirmaryScenePage() {
             <button className="fm-btn fm-btn-outline" onClick={() => setPreviewScale(1)}>⤢</button>
             <button className="fm-btn fm-btn-outline" onClick={() => setPreviewScale((s) => Math.max(0.5, s - 0.5))}>−</button>
           </div>
-          <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
-            <img src={previewImage} alt="" style={{ width: `${previewScale * 100}%`, borderRadius: 10, display: 'block', margin: '0 auto' }} />
+          <div style={{ overflow: 'hidden', height: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10 }}>
+            <img
+              src={previewImage}
+              alt=""
+              style={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain',
+                transform: `scale(${previewScale})`,
+                transition: 'transform 0.15s ease',
+                borderRadius: 10,
+              }}
+            />
           </div>
         </Modal>
       )}
