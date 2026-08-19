@@ -6,6 +6,7 @@ import { mediaUrl } from '../api/media';
 import StitchReportForm from '../components/StitchReportForm';
 import Toast from '../components/Toast';
 import { confirmDialog } from '../components/Confirm';
+import LocationMap from '../components/LocationMap';
 import plotUrl from '../assets/plot.png';
 
 const COLOR_LABEL: Record<string, string> = { green: '🟢', blue: '🔵', violet: '🟣' };
@@ -20,10 +21,6 @@ const HOUSE_MATERIALS: { code: string; name: string; emoji: string }[] = [
   { code: 'paint', name: 'Краска', emoji: '🎨' },
 ];
 const DICE_FACE_EMOJI = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-
-const MIN_SCALE = 0.1;
-const MAX_SCALE = 4;
-const ZOOM_STEP = 1.25;
 
 export default function FieldPage() {
   const { id } = useParams<{ id: string }>();
@@ -122,23 +119,8 @@ export default function FieldPage() {
   const [crystalCards, setCrystalCards] = useState<CrystalCard[]>([]);
   const [zoomedImg, setZoomedImg] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-
-  const [imgNaturalW, setImgNaturalW] = useState<number | null>(null);
-  const [imgNaturalH, setImgNaturalH] = useState<number | null>(null);
-  const [scale, setScale] = useState(1);
 
   const fieldId = Number(id);
-
-  function zoomIn() { setScale((s) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, s * ZOOM_STEP))); }
-  function zoomOut() { setScale((s) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, s / ZOOM_STEP))); }
-  function resetScale() { setScale(1); }
-  function fitToScreen() {
-    const vp = scrollRef.current;
-    if (!vp || !imgNaturalW || !imgNaturalH) return;
-    const s = Math.min(vp.clientWidth / imgNaturalW, vp.clientHeight / imgNaturalH);
-    setScale(Math.max(MIN_SCALE, Math.min(1, s)));
-  }
 
   const load = useCallback(async () => {
     if (!Number.isFinite(fieldId)) return;
@@ -737,21 +719,7 @@ export default function FieldPage() {
 
   return (
     <>
-      <div
-        ref={scrollRef}
-        style={{
-            position: 'fixed', inset: 0, top: '38px', zIndex: 0, overflow: 'auto',
-            overscrollBehavior: 'contain', backgroundColor: '#1a2414',
-        }}
-      >
-        {field.map_url ? (
-          <div style={{ position: 'relative', display: 'inline-block', lineHeight: 0, width: imgNaturalW ? `${Math.round(imgNaturalW * scale)}px` : '100%' }}>
-            <img
-              src={mediaUrl(field.map_url)}
-              alt=""
-              style={{ display: 'block', width: '100%' }}
-              onLoad={(e) => { setImgNaturalW((e.target as HTMLImageElement).naturalWidth); setImgNaturalH((e.target as HTMLImageElement).naturalHeight); }}
-            />
+      <LocationMap mapUrl={field.map_url} name={field.name} emoji="🗺️" onBack={() => nav('/fields')}>
             <div
               style={{
                 position: 'absolute', inset: 0, display: 'grid',
@@ -1290,40 +1258,7 @@ export default function FieldPage() {
                 </div>
               );
             })}
-          </div>
-        ) : (
-          <div style={{ color: 'var(--text-muted)', fontSize: 16 }}>Карта не загружена</div>
-        )}
-      </div>
-
-      {/* Кнопки масштаба поля */}
-      {field.map_url && (
-        <div style={{ position: 'fixed', right: 12, bottom: 'calc(16px + var(--vk-inset-bottom, 0px))', zIndex: 25, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-          <button onClick={zoomIn} aria-label="Увеличить" style={zoomBtn}>＋</button>
-          <button onClick={resetScale} aria-label="Реальный масштаб" title="Реальный масштаб (100%)" style={{ ...zoomBtn, fontSize: 13, fontWeight: 700 }}>{Math.round(scale * 100)}%</button>
-          <button onClick={zoomOut} aria-label="Уменьшить" style={zoomBtn}>−</button>
-          <button onClick={fitToScreen} aria-label="Вместить в экран" title="Вместить поле в экран" style={zoomBtn}>⤢</button>
-        </div>
-      )}
-
-      {/* Плавающая шапка поверх поля-фона */}
-      <div
-        style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20,
-          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
-          paddingTop: '6px',
-          background: 'linear-gradient(180deg, rgba(10,16,8,0.92) 0%, rgba(10,16,8,0.78) 100%)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-        }}
-      >
-        <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => nav('/fields')} style={{ background: 'rgba(255,255,255,0.14)', color: '#ffffff', borderColor: 'rgba(255,255,255,0.25)' }}>
-          ← Поля
-        </button>
-        <h1 style={{ margin: 0, flex: 1, fontSize: 18, color: '#ffffff', textShadow: '0 1px 3px rgba(0,0,0,0.7)' }}>
-          🗺️ {field.name}
-        </h1>
-      </div>
+      </LocationMap>
 
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
@@ -2419,12 +2354,3 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
   );
 }
 
-const zoomBtn: React.CSSProperties = {
-  width: 44, height: 44, borderRadius: 22,
-  border: '1px solid rgba(255,255,255,0.25)',
-  background: 'rgba(20,25,20,0.78)', color: '#f3ead0',
-  fontSize: 20, lineHeight: 1, cursor: 'pointer',
-  backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  padding: 0,
-};

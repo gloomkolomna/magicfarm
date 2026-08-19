@@ -127,17 +127,13 @@ export default function OrdersPage() {
                     </div>
                     <div
                       style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 8,
                         fontSize: 13,
                         borderTop: '1px solid var(--border)',
                         paddingTop: 8,
                         marginTop: 10,
                       }}
                     >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flexWrap: 'wrap', marginBottom: 6 }}>
                         {orderImg ? (
                           <img
                             src={mediaUrl(orderImg)}
@@ -148,13 +144,15 @@ export default function OrdersPage() {
                         ) : (
                           <span style={{ fontSize: 17 }}>{o.product_emoji || '📦'}</span>
                         )}
-                        <strong style={{ whiteSpace: 'nowrap' }}>{o.product_name}</strong>
-                        <span className="fm-chip" style={{ fontSize: 12 }}>×{need}</span>
-                      </span>
-                      <span style={{ color: ok ? 'var(--success)' : 'var(--danger)', whiteSpace: 'nowrap' }}>
-                        {have}/{need} {o.potion_recipe_id != null ? 'зелье' : 'на складе'}
-                      </span>
-                      <span style={{ color: 'var(--accent-warm)', fontWeight: 600, whiteSpace: 'nowrap' }}>🪙 {o.reward_coins}</span>
+                        <strong style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{o.product_name}</strong>
+                        <span className="fm-chip" style={{ fontSize: 12, flexShrink: 0 }}>×{need}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ color: ok ? 'var(--success)' : 'var(--danger)' }}>
+                          {have}/{need} {o.potion_recipe_id != null ? 'зелье' : 'на складе'}
+                        </span>
+                        <span style={{ color: 'var(--accent-warm)', fontWeight: 600 }}>🪙 {o.reward_coins}</span>
+                      </div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                       <button
@@ -184,9 +182,9 @@ export default function OrdersPage() {
       {detailOrder && (
         <Modal title="Детали заказа" onClose={() => setDetailOrder(null)}>
           <SpritePedestal url={(detailOrder.image_url || detailOrder.product_image_url || detailOrder.potion_image_url) ? mediaUrl(detailOrder.image_url || detailOrder.product_image_url || detailOrder.potion_image_url) : null} emoji={detailOrder.product_emoji} height={160} onZoom={setZoomImg} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <strong style={{ fontSize: 18 }}>{detailOrder.potion_recipe_id != null ? `🧪 ${detailOrder.potion_name}` : detailOrder.product_name}</strong>
-            <span className="fm-chip" style={{ fontSize: 16 }}>×{detailOrder.qty}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <strong style={{ fontSize: 18, minWidth: 0, overflowWrap: 'anywhere' }}>{detailOrder.potion_recipe_id != null ? `🧪 ${detailOrder.potion_name}` : detailOrder.product_name}</strong>
+            <span className="fm-chip" style={{ fontSize: 16, flexShrink: 0 }}>×{detailOrder.qty}</span>
           </div>
           <div style={{ fontSize: 14, marginBottom: 4 }}>
             {(() => {

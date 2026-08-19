@@ -8,12 +8,11 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user
 from models import (
-    Field, PatientAnimal, Remedy, User, UserCard, UserIngredient, UserPatientState,
-    UserRemedyCard,
+    Field, Inventory, PatientAnimal, Remedy, User, UserCard, UserIngredient,
+    UserPatientState, UserRemedyCard,
 )
 from routes.admin_fields import _get_field_or_404
 from routes.ingredients import ApothecaryItemOut, _apothecary_item_out
-from services.achievements import check_and_award
 
 router = APIRouter(prefix="/api", tags=["remedy-lab"])
 
@@ -24,8 +23,10 @@ def _check_field_gate(f: Field, user: User) -> None:
 
 
 class RecipeItemOut(BaseModel):
-    ingredient_id: int
+    ingredient_id: int | None
     ingredient_name: str | None
+    plant_id: int | None
+    plant_name: str | None
     qty: int
 
 
@@ -65,6 +66,8 @@ def _remedy_card_out(card: UserRemedyCard) -> RemedyCardOut:
             RecipeItemOut(
                 ingredient_id=item.ingredient_id,
                 ingredient_name=item.ingredient.name if item.ingredient else None,
+                plant_id=item.plant_id,
+                plant_name=item.plant.name if item.plant else None,
                 qty=item.qty,
             )
             for item in (remedy.recipe_items if remedy else [])
@@ -101,7 +104,7 @@ class BrewResult(BaseModel):
     patient_id: int
     patient_name: str
     remedy_name: str
-    collection_card_earned: bool
+    status: str
 
 
 @router.post("/remedy-cards/{card_id}/brew", response_model=BrewResult)
@@ -123,60 +126,62 @@ def brew_remedy(
     state = db.query(UserPatientState).filter(
         UserPatientState.user_id == user.vk_id, UserPatientState.patient_id == patient.id
     ).first()
-    if state is not None and state.status == "healed":
+    if state is not None and state.status in ("treated", "released"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пациент уже вылечен")
 
     remedy = card.remedy
     if remedy is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Мазь не найдена")
 
-    for item in remedy.recipe_items:
-        row = db.query(UserIngredient).filter(
-            UserIngredient.user_id == user.vk_id,
-            UserIngredient.ingredient_id == item.ingredient_id,
+    def _source(item) -> tuple[int, str]:
+        if item.ingredient_id is not None:
+            row = db.query(UserIngredient).filter(
+                UserIngredient.user_id == user.vk_id,
+                UserIngredient.ingredient_id == item.ingredient_id,
+            ).first()
+            return (row.qty if row else 0), (item.ingredient.name if item.ingredient else "ингредиент")
+        row = db.query(Inventory).filter(
+            Inventory.user_id == user.vk_id, Inventory.plant_id == item.plant_id
         ).first()
-        have = row.qty if row else 0
+        return (row.qty if row else 0), (item.plant.name if item.plant else "растение")
+
+    for item in remedy.recipe_items:
+        have, name = _source(item)
         if have < item.qty:
-            name = item.ingredient.name if item.ingredient else "ингредиент"
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Недостаточно ингредиента «{name}» (нужно {item.qty}, есть {have})",
+                detail=f"Недостаточно «{name}» (нужно {item.qty}, есть {have})",
             )
 
     for item in remedy.recipe_items:
-        row = db.query(UserIngredient).filter(
-            UserIngredient.user_id == user.vk_id,
-            UserIngredient.ingredient_id == item.ingredient_id,
-        ).first()
-        row.qty = (row.qty or 0) - item.qty
+        if item.ingredient_id is not None:
+            row = db.query(UserIngredient).filter(
+                UserIngredient.user_id == user.vk_id,
+                UserIngredient.ingredient_id == item.ingredient_id,
+            ).first()
+            row.qty = (row.qty or 0) - item.qty
+        else:
+            row = db.query(Inventory).filter(
+                Inventory.user_id == user.vk_id, Inventory.plant_id == item.plant_id
+            ).first()
+            row.qty = (row.qty or 0) - item.qty
 
     if state is None:
-        state = UserPatientState(user_id=user.vk_id, patient_id=patient.id, status="healed", healed_at=datetime.datetime.utcnow())
+        state = UserPatientState(user_id=user.vk_id, patient_id=patient.id, status="treated", healed_at=datetime.datetime.utcnow())
         db.add(state)
     else:
-        state.status = "healed"
+        state.status = "treated"
         state.healed_at = datetime.datetime.utcnow()
-
-    existing_card = db.query(UserCard).filter(
-        UserCard.user_id == user.vk_id, UserCard.patient_id == patient.id
-    ).first()
-    collection_earned = existing_card is None
-    if existing_card is None:
-        db.add(UserCard(user_id=user.vk_id, patient_id=patient.id))
 
     db.commit()
     db.refresh(state)
-
-    check_and_award(user.vk_id, "healed_count", db)
-    check_and_award(user.vk_id, "infirmary_level_complete", db)
-    check_and_award(user.vk_id, "full_collection", db)
 
     return BrewResult(
         card_id=card.id,
         patient_id=patient.id,
         patient_name=patient.name,
         remedy_name=remedy.name,
-        collection_card_earned=collection_earned,
+        status="treated",
     )
 
 

@@ -9,11 +9,11 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import require_role
 from models import (
-    BREWERY_MAX_INGREDIENT_CELLS, BREWERY_ZONE_KINDS, Animal, BreweryZone, ClinicPartCell,
-    Field, FieldAnimal, FieldCell, FieldPet, FieldPlant, FieldPotionRecipe, GATHER_WINDOW_KINDS,
-    GatherCell, GatherCellIngredient, Ingredient, KASSA_KIND, PatientAnimal, Pet, PetZone, Plant,
-    PlantBed, PotionRecipe, ProductionTemplate, Tent, TradeCell, TradeCellIngredient, User,
-    WITCH_HOUSE_KIND,
+    BREWERY_MAX_INGREDIENT_CELLS, BREWERY_ZONE_KINDS, INFIRMARY_ZONE_KINDS, Animal, BreweryZone,
+    ClinicPartCell, Field, FieldAnimal, FieldCell, FieldPet, FieldPlant, FieldPotionRecipe,
+    GATHER_WINDOW_KINDS, GatherCell, GatherCellIngredient, Ingredient, InfirmaryZone, KASSA_KIND,
+    PatientAnimal, Pet, PetZone, Plant, PlantBed, PotionRecipe, ProductionTemplate, Tent, TradeCell,
+    TradeCellIngredient, User, WITCH_HOUSE_KIND,
 )
 from services.uploads import remove_upload, save_upload
 from routes.potions import _recipe_out
@@ -51,20 +51,69 @@ def _normalize_rect(col1: int, row1: int, col2: int, row2: int):
     )
 
 
+def _reset_cell_to_empty(field_id: int, col: int, row: int, db: Session) -> None:
+    cell = db.query(FieldCell).filter(
+        FieldCell.field_id == field_id, FieldCell.col == col, FieldCell.row == row
+    ).first()
+    if cell is not None:
+        cell.kind = "empty"
+        cell.plant_id = None
+        cell.occupant_user_id = None
+        cell.tent_id = None
+
+
+def _trim_out_of_bounds(f: Field, db: Session) -> None:
+    """Удаляет зоны/прямоугольники, вышедшие за новые границы сетки, и освобождает их клетки."""
+    cols, rows = f.cols, f.rows
+    for t in list(f.tents):
+        if t.col2 >= cols or t.row2 >= rows:
+            for cell in db.query(FieldCell).filter(FieldCell.tent_id == t.id).all():
+                cell.kind = "empty"
+                cell.tent_id = None
+            remove_upload(t.image_url)
+            db.delete(t)
+    for pb in list(f.plant_beds):
+        if pb.col2 >= cols or pb.row2 >= rows:
+            for r in range(pb.row1, pb.row2 + 1):
+                for c in range(pb.col1, pb.col2 + 1):
+                    _reset_cell_to_empty(f.id, c, r, db)
+            db.delete(pb)
+    for pz in list(f.pet_zones):
+        if pz.col2 >= cols or pz.row2 >= rows:
+            for r in range(pz.row1, pz.row2 + 1):
+                for c in range(pz.col1, pz.col2 + 1):
+                    _reset_cell_to_empty(f.id, c, r, db)
+            db.delete(pz)
+    for z in list(f.brewery_zones):
+        if z.col2 >= cols or z.row2 >= rows:
+            remove_upload(z.image_url)
+            db.delete(z)
+    for gc in db.query(GatherCell).filter(GatherCell.field_id == f.id).all():
+        if gc.col >= cols or gc.row >= rows:
+            _reset_cell_to_empty(f.id, gc.col, gc.row, db)
+            db.delete(gc)
+    for tc in db.query(TradeCell).filter(TradeCell.field_id == f.id).all():
+        if tc.col >= cols or tc.row >= rows:
+            _reset_cell_to_empty(f.id, tc.col, tc.row, db)
+            db.delete(tc)
+    for pc in db.query(ClinicPartCell).filter(ClinicPartCell.field_id == f.id).all():
+        if pc.col >= cols or pc.row >= rows:
+            _reset_cell_to_empty(f.id, pc.col, pc.row, db)
+            db.delete(pc)
+
+
 def _ensure_grid(f: Field, db: Session) -> None:
     """Гарантирует, что для поля есть все клетки cols×rows (kind=empty по умолчанию).
-    Лишние клетки (вышедшие за пределы при уменьшении размеров) удаляются.
-    """
+    Лишние клетки (вышедшие за пределы при уменьшении размеров) удаляются."""
     existing = {(c.col, c.row): c for c in db.query(FieldCell).filter(FieldCell.field_id == f.id).all()}
     for r in range(f.rows):
         for c in range(f.cols):
             if (c, r) not in existing:
                 db.add(FieldCell(field_id=f.id, col=c, row=r, kind="empty"))
-    # Удалить клетки за пределами сетки (кроме занятых шатрами — они внутри).
-    for (c, r), cell in existing.items():
-        if c >= f.cols or r >= f.rows:
-            if cell.kind in ("tent", "pet", "barnyard"):
-                continue
+    _trim_out_of_bounds(f, db)
+    db.flush()
+    for cell in db.query(FieldCell).filter(FieldCell.field_id == f.id).all():
+        if cell.col >= f.cols or cell.row >= f.rows:
             db.delete(cell)
 
 
@@ -166,6 +215,16 @@ class BreweryZoneOut(BaseModel):
     recipe_id: int | None
 
 
+class InfirmaryZoneOut(BaseModel):
+    id: int
+    field_id: int
+    zone_kind: str
+    col1: int
+    row1: int
+    col2: int
+    row2: int
+
+
 class GatherCellOut(BaseModel):
     id: int
     field_id: int
@@ -227,6 +286,7 @@ class FieldDetailOut(FieldOut):
     gather_cells: list[GatherCellOut] = []
     trade_cells: list[TradeCellOut] = []
     part_cells: list[ClinicPartCellOut] = []
+    infirmary_zones: list[InfirmaryZoneOut] = []
     potion_recipes: list = []
     potion_recipe_ids: list[int] = []
 
@@ -705,6 +765,7 @@ def _detail(f: Field) -> FieldDetailOut:
         gather_cells=[_gather_cell_out(gc) for gc in f.gather_cells] if f.field_kind == "meadow" else [],
         trade_cells=[_trade_cell_out(tc) for tc in f.trade_cells] if f.field_kind == "shop" else [],
         part_cells=[_part_cell_out(pc) for pc in f.part_cells] if f.field_kind == "infirmary" else [],
+        infirmary_zones=[_infirmary_zone_out(z) for z in f.infirmary_zones] if f.field_kind == "infirmary" else [],
         potion_recipes=[_recipe_out(fpr.recipe) for fpr in f.potion_recipes],
         potion_recipe_ids=[fpr.recipe_id for fpr in f.potion_recipes],
     )
@@ -928,6 +989,13 @@ def _part_cell_out(pc: ClinicPartCell) -> ClinicPartCellOut:
     return ClinicPartCellOut(
         id=pc.id, field_id=pc.field_id, animal_id=pc.animal_id,
         col=pc.col, row=pc.row, part_code=pc.part_code,
+    )
+
+
+def _infirmary_zone_out(z: InfirmaryZone) -> InfirmaryZoneOut:
+    return InfirmaryZoneOut(
+        id=z.id, field_id=z.field_id, zone_kind=z.zone_kind,
+        col1=z.col1, row1=z.row1, col2=z.col2, row2=z.row2,
     )
 
 
@@ -1370,5 +1438,64 @@ def delete_part_cell(
     if cell is not None and cell.kind == "body_part":
         cell.kind = "empty"
     db.delete(pc)
+    db.commit()
+    return None
+
+
+# ── Зоны лечебницы (животное / книга) ──
+
+def _check_infirmary_rect(f: Field, c1: int, r1: int, c2: int, r2: int) -> None:
+    if c1 < 0 or r1 < 0 or c2 >= f.cols or r2 >= f.rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Прямоугольник выходит за пределы поля")
+    for z in f.infirmary_zones:
+        if not (c2 < z.col1 or c1 > z.col2 or r2 < z.row1 or r1 > z.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пересекается с другой зоной лечебницы")
+
+
+class InfirmaryZoneCreate(BaseModel):
+    zone_kind: str
+    col1: int
+    row1: int
+    col2: int
+    row2: int
+
+
+@router.post("/{field_id}/infirmary-zones", response_model=InfirmaryZoneOut, status_code=status.HTTP_201_CREATED)
+def create_infirmary_zone(
+    field_id: int,
+    req: InfirmaryZoneCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    if f.field_kind != "infirmary":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Зоны лечебницы размещаются только на локациях типа «Лесная лечебница»")
+    if req.zone_kind not in INFIRMARY_ZONE_KINDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Тип зоны должен быть одним из: {', '.join(INFIRMARY_ZONE_KINDS)}",
+        )
+    c1, r1, c2, r2 = _normalize_rect(req.col1, req.row1, req.col2, req.row2)
+    _check_infirmary_rect(f, c1, r1, c2, r2)
+
+    z = InfirmaryZone(field_id=f.id, zone_kind=req.zone_kind, col1=c1, row1=r1, col2=c2, row2=r2)
+    db.add(z)
+    db.commit()
+    db.refresh(z)
+    return _infirmary_zone_out(z)
+
+
+@router.delete("/{field_id}/infirmary-zones/{zone_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_infirmary_zone(
+    field_id: int,
+    zone_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    z = db.query(InfirmaryZone).filter(InfirmaryZone.id == zone_id, InfirmaryZone.field_id == f.id).first()
+    if z is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Зона лечебницы не найдена")
+    db.delete(z)
     db.commit()
     return None

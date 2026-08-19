@@ -664,8 +664,10 @@ export interface BarterResult {
 
 // ── Лесная лечебница ──
 export interface RemedyRecipeItem {
-  ingredient_id: number;
+  ingredient_id: number | null;
   ingredient_name: string | null;
+  plant_id: number | null;
+  plant_name: string | null;
   qty: number;
 }
 
@@ -682,6 +684,21 @@ export interface Symptom {
   part_code: string;
   text: string;
 }
+
+export const BODY_PARTS: { code: string; label: string }[] = [
+  { code: 'nose', label: 'Нос' },
+  { code: 'ear', label: 'Ухо' },
+  { code: 'eye', label: 'Глаз' },
+  { code: 'tail', label: 'Хвост' },
+  { code: 'paw', label: 'Лапа' },
+  { code: 'belly', label: 'Живот' },
+  { code: 'back', label: 'Спина' },
+  { code: 'wing', label: 'Крыло' },
+  { code: 'head', label: 'Голова' },
+  { code: 'throat', label: 'Горло' },
+];
+
+export const BODY_PART_LABELS: Record<string, string> = Object.fromEntries(BODY_PARTS.map((p) => [p.code, p.label]));
 
 export interface Disease {
   id: number;
@@ -700,6 +717,8 @@ export interface Patient {
   level: number;
   image_url: string | null;
   card_image_url: string | null;
+  hospital_image_url: string | null;
+  healthy_image_url: string | null;
   disease_id: number | null;
   disease_name: string | null;
   field_id: number | null;
@@ -741,6 +760,15 @@ export interface InfirmaryPartCell {
   part_code: string;
 }
 
+export interface InfirmaryZone {
+  id: number;
+  zone_kind: 'animal' | 'book';
+  col1: number;
+  row1: number;
+  col2: number;
+  row2: number;
+}
+
 export interface InfirmaryDetail {
   field_id: number;
   name: string;
@@ -751,9 +779,15 @@ export interface InfirmaryDetail {
   patient_name: string | null;
   patient_level: number | null;
   patient_image_url: string | null;
+  hospital_image_url: string | null;
+  healthy_image_url: string | null;
+  status: 'sick' | 'diagnosed' | 'treated' | 'released' | null;
+  disease_name: string | null;
+  remedy_name: string | null;
   healed: boolean;
   card_earned: boolean;
   part_cells: InfirmaryPartCell[];
+  infirmary_zones: InfirmaryZone[];
 }
 
 export interface HandbookDisease {
@@ -809,7 +843,13 @@ export interface BrewResult {
   patient_id: number;
   patient_name: string;
   remedy_name: string;
-  collection_card_earned: boolean;
+  status: string;
+}
+
+export interface ReleaseResult {
+  patient_id: number;
+  patient_name: string;
+  card_earned: boolean;
 }
 
 export interface CollectionCard {
@@ -843,6 +883,7 @@ export interface FieldDetail extends FieldInfo {
   gather_cells?: GatherCell[];
   trade_cells?: TradeCell[];
   part_cells?: ClinicPartCell[];
+  infirmary_zones?: InfirmaryZone[];
   potion_recipes?: PotionRecipe[];
   active_cauldron?: Cauldron | null;
 }
@@ -1560,6 +1601,8 @@ export const api = {
     client.post<ExamineResult>(`/infirmary/patients/${patientId}/examine`, { part_code: partCode }).then((r) => r.data),
   diagnosePatient: (patientId: number, diseaseId: number) =>
     client.post<DiagnoseResult>(`/infirmary/patients/${patientId}/diagnose`, { disease_id: diseaseId }).then((r) => r.data),
+  releasePatient: (patientId: number) =>
+    client.post<ReleaseResult>(`/infirmary/patients/${patientId}/release`).then((r) => r.data),
   remedyLab: (fieldId: number) =>
     client.get<RemedyLab>(`/remedy-lab/${fieldId}`).then((r) => r.data),
   brewRemedy: (cardId: number) =>
@@ -1569,9 +1612,9 @@ export const api = {
 
   // ── Админ: лечебница ──
   adminRemedies: () => client.get<Remedy[]>('/admin/remedies').then((r) => r.data),
-  adminCreateRemedy: (data: { name: string; description?: string | null; recipe_items: { ingredient_id: number; qty: number }[] }) =>
+  adminCreateRemedy: (data: { name: string; description?: string | null; recipe_items: { ingredient_id: number | null; plant_id: number | null; qty: number }[] }) =>
     client.post<Remedy>('/admin/remedies', data).then((r) => r.data),
-  adminUpdateRemedy: (id: number, data: { name?: string; description?: string | null; recipe_items?: { ingredient_id: number; qty: number }[] }) =>
+  adminUpdateRemedy: (id: number, data: { name?: string; description?: string | null; recipe_items?: { ingredient_id: number | null; plant_id: number | null; qty: number }[] }) =>
     client.put<Remedy>(`/admin/remedies/${id}`, data).then((r) => r.data),
   adminDeleteRemedy: (id: number) =>
     client.delete(`/admin/remedies/${id}`).then((r) => r.data),
@@ -1604,10 +1647,24 @@ export const api = {
     form.append('image', file);
     return client.put<Patient>(`/admin/patients/${id}/card-image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
+  adminUploadPatientHospitalImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Patient>(`/admin/patients/${id}/hospital-image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadPatientHealthyImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Patient>(`/admin/patients/${id}/healthy-image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
   adminCreatePartCell: (fieldId: number, data: { col: number; row: number; part_code: string }) =>
     client.post<ClinicPartCell>(`/admin/fields/${fieldId}/part-cells`, data).then((r) => r.data),
   adminUpdatePartCell: (fieldId: number, id: number, data: { part_code?: string }) =>
     client.put<ClinicPartCell>(`/admin/fields/${fieldId}/part-cells/${id}`, data).then((r) => r.data),
   adminDeletePartCell: (fieldId: number, id: number) =>
     client.delete(`/admin/fields/${fieldId}/part-cells/${id}`).then((r) => r.data),
+  adminCreateInfirmaryZone: (fieldId: number, data: { zone_kind: 'animal' | 'book'; col1: number; row1: number; col2: number; row2: number }) =>
+    client.post<InfirmaryZone>(`/admin/fields/${fieldId}/infirmary-zones`, data).then((r) => r.data),
+  adminDeleteInfirmaryZone: (fieldId: number, id: number) =>
+    client.delete(`/admin/fields/${fieldId}/infirmary-zones/${id}`).then((r) => r.data),
 };

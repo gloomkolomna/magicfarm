@@ -1,6 +1,6 @@
 from __future__ import annotations
 from sqlalchemy import (
-    Column, Integer, String, Boolean, Text, DateTime, ForeignKey, UniqueConstraint,
+    CheckConstraint, Column, Integer, String, Boolean, Text, DateTime, ForeignKey, UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -336,6 +336,7 @@ class Field(Base):
     gather_cells = relationship("GatherCell", back_populates="field", cascade="all, delete-orphan")
     trade_cells = relationship("TradeCell", back_populates="field", cascade="all, delete-orphan")
     part_cells = relationship("ClinicPartCell", back_populates="field", cascade="all, delete-orphan")
+    infirmary_zones = relationship("InfirmaryZone", back_populates="field", cascade="all, delete-orphan")
 
 
 class FieldPlant(Base):
@@ -398,6 +399,24 @@ class BreweryZone(Base):
 
     field = relationship("Field", back_populates="brewery_zones")
     recipe = relationship("PotionRecipe")
+
+
+INFIRMARY_ZONE_KINDS = ("animal", "book")
+
+
+class InfirmaryZone(Base):
+    __tablename__ = "infirmary_zones"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False)
+    zone_kind = Column(String, nullable=False)
+    col1 = Column(Integer, nullable=False)
+    row1 = Column(Integer, nullable=False)
+    col2 = Column(Integer, nullable=False)
+    row2 = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    field = relationship("Field", back_populates="infirmary_zones")
 
 
 class FieldCell(Base):
@@ -899,6 +918,7 @@ class TradeCellIngredient(Base):
 
 
 PATIENT_LEVELS = (1, 2, 3)
+PATIENT_STATE_STATUSES = ("sick", "diagnosed", "treated", "released")
 
 
 class Remedy(Base):
@@ -918,14 +938,21 @@ class RemedyRecipeItem(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     remedy_id = Column(Integer, ForeignKey("remedies.id", ondelete="CASCADE"), nullable=False)
-    ingredient_id = Column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False)
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=True)
+    plant_id = Column(Integer, ForeignKey("plants.id", ondelete="CASCADE"), nullable=True)
     qty = Column(Integer, nullable=False, default=1, server_default="1")
 
     remedy = relationship("Remedy", back_populates="recipe_items")
     ingredient = relationship("Ingredient")
+    plant = relationship("Plant")
 
     __table_args__ = (
         UniqueConstraint("remedy_id", "ingredient_id", name="uq_remedyrecipe_remedy_ingredient"),
+        UniqueConstraint("remedy_id", "plant_id", name="uq_remedyrecipe_remedy_plant"),
+        CheckConstraint(
+            "(ingredient_id IS NOT NULL AND plant_id IS NULL) OR (ingredient_id IS NULL AND plant_id IS NOT NULL)",
+            name="ck_remedyrecipe_single_source",
+        ),
     )
 
 
@@ -962,6 +989,8 @@ class PatientAnimal(Base):
     level = Column(Integer, nullable=False, default=1, server_default="1")
     image_url = Column(String, nullable=True)
     card_image_url = Column(String, nullable=True)
+    hospital_image_url = Column(String, nullable=True)
+    healthy_image_url = Column(String, nullable=True)
     disease_id = Column(Integer, ForeignKey("diseases.id", ondelete="SET NULL"), nullable=True)
     field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=True)
 

@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user
 from models import (
-    ClinicPartCell, Disease, DiseaseSymptom, Field, PatientAnimal, User,
-    UserPatientState, UserRemedyCard,
+    ClinicPartCell, Disease, DiseaseSymptom, Field, InfirmaryZone, PatientAnimal, User,
+    UserCard, UserPatientState, UserRemedyCard,
 )
 from routes.admin_fields import _get_field_or_404
+from services.achievements import check_and_award
 
 router = APIRouter(prefix="/api/infirmary", tags=["infirmary"])
 
@@ -26,7 +27,8 @@ def _healed_patient_ids(user_id: int, db: Session) -> set[int]:
     return {
         s.patient_id
         for s in db.query(UserPatientState).filter(
-            UserPatientState.user_id == user_id, UserPatientState.status == "healed"
+            UserPatientState.user_id == user_id,
+            UserPatientState.status.in_(["treated", "released"]),
         ).all()
     }
 
@@ -60,6 +62,15 @@ class PartCellOut(BaseModel):
     part_code: str
 
 
+class InfirmaryZoneOut(BaseModel):
+    id: int
+    zone_kind: str
+    col1: int
+    row1: int
+    col2: int
+    row2: int
+
+
 class InfirmaryDetailOut(BaseModel):
     field_id: int
     name: str
@@ -70,9 +81,15 @@ class InfirmaryDetailOut(BaseModel):
     patient_name: str | None
     patient_level: int | None
     patient_image_url: str | None
+    hospital_image_url: str | None
+    healthy_image_url: str | None
+    status: str | None
+    disease_name: str | None
+    remedy_name: str | None
     healed: bool
     card_earned: bool
     part_cells: list[PartCellOut]
+    infirmary_zones: list[InfirmaryZoneOut]
 
 
 class SymptomOut(BaseModel):
@@ -105,8 +122,10 @@ class ExamineOut(BaseModel):
 
 
 class RecipeItemOut(BaseModel):
-    ingredient_id: int
+    ingredient_id: int | None
     ingredient_name: str | None
+    plant_id: int | None
+    plant_name: str | None
     qty: int
 
 
@@ -199,29 +218,42 @@ def get_infirmary_detail(
     _check_field_gate(f, user)
 
     patient = db.query(PatientAnimal).filter(PatientAnimal.field_id == f.id).first()
-    healed_ids = _healed_patient_ids(user.vk_id, db)
-    from models import UserCard
     collection = {
         c.patient_id for c in db.query(UserCard).filter(UserCard.user_id == user.vk_id).all()
     }
 
     part_cells = []
     patient_id = None
+    status_ = None
     if patient is not None:
         patient_id = patient.id
         part_cells = db.query(ClinicPartCell).filter(
             ClinicPartCell.animal_id == patient.id
         ).order_by(ClinicPartCell.row.asc(), ClinicPartCell.col.asc()).all()
+        state = db.query(UserPatientState).filter(
+            UserPatientState.user_id == user.vk_id, UserPatientState.patient_id == patient.id
+        ).first()
+        status_ = state.status if state is not None else "sick"
+
+    zones = db.query(InfirmaryZone).filter(
+        InfirmaryZone.field_id == f.id
+    ).order_by(InfirmaryZone.id.asc()).all()
 
     return InfirmaryDetailOut(
         field_id=f.id, name=f.name, map_url=f.map_url, cols=f.cols, rows=f.rows,
-        patient_id=patient.id if patient else None,
+        patient_id=patient_id,
         patient_name=patient.name if patient else None,
         patient_level=patient.level if patient else None,
         patient_image_url=patient.image_url if patient else None,
-        healed=(patient_id in healed_ids) if patient_id else False,
+        hospital_image_url=patient.hospital_image_url if patient else None,
+        healthy_image_url=patient.healthy_image_url if patient else None,
+        status=status_,
+        disease_name=patient.disease.name if patient and patient.disease else None,
+        remedy_name=(patient.disease.remedy.name if patient and patient.disease and patient.disease.remedy else None),
+        healed=(status_ in ("treated", "released")) if status_ else False,
         card_earned=(patient_id in collection) if patient_id else False,
         part_cells=[PartCellOut(id=pc.id, col=pc.col, row=pc.row, part_code=pc.part_code) for pc in part_cells],
+        infirmary_zones=[InfirmaryZoneOut(id=z.id, zone_kind=z.zone_kind, col1=z.col1, row1=z.row1, col2=z.col2, row2=z.row2) for z in zones],
     )
 
 
@@ -266,7 +298,7 @@ def diagnose_patient(
     state = db.query(UserPatientState).filter(
         UserPatientState.user_id == user.vk_id, UserPatientState.patient_id == patient.id
     ).first()
-    if state is not None and state.status == "healed":
+    if state is not None and state.status in ("treated", "released"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пациент уже вылечен")
 
     existing_card = db.query(UserRemedyCard).filter(
@@ -292,6 +324,11 @@ def diagnose_patient(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У болезни не назначена мазь")
     card = UserRemedyCard(user_id=user.vk_id, patient_id=patient.id, remedy_id=remedy.id)
     db.add(card)
+    if state is None:
+        state = UserPatientState(user_id=user.vk_id, patient_id=patient.id, status="diagnosed")
+        db.add(state)
+    else:
+        state.status = "diagnosed"
     db.commit()
     db.refresh(card)
 
@@ -299,6 +336,8 @@ def diagnose_patient(
         RecipeItemOut(
             ingredient_id=item.ingredient_id,
             ingredient_name=item.ingredient.name if item.ingredient else None,
+            plant_id=item.plant_id,
+            plant_name=item.plant.name if item.plant else None,
             qty=item.qty,
         )
         for item in remedy.recipe_items
@@ -313,3 +352,48 @@ def diagnose_patient(
         remedy_image_url=remedy.image_url,
         recipe_items=recipe_items,
     )
+
+
+# ── Выпустить на волю ──
+
+class ReleaseOut(BaseModel):
+    patient_id: int
+    patient_name: str
+    card_earned: bool
+
+
+@router.post("/patients/{patient_id}/release", response_model=ReleaseOut)
+def release_patient(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    patient = db.query(PatientAnimal).filter(PatientAnimal.id == patient_id).first()
+    if patient is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
+
+    state = db.query(UserPatientState).filter(
+        UserPatientState.user_id == user.vk_id, UserPatientState.patient_id == patient.id
+    ).first()
+    if state is None or state.status not in ("treated", "released"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Пациент ещё не вылечен — сначала приготовьте лекарство",
+        )
+    if state.status == "released":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пациент уже выпущен")
+
+    existing_card = db.query(UserCard).filter(
+        UserCard.user_id == user.vk_id, UserCard.patient_id == patient.id
+    ).first()
+    card_earned = existing_card is None
+    if existing_card is None:
+        db.add(UserCard(user_id=user.vk_id, patient_id=patient.id))
+    state.status = "released"
+    db.commit()
+
+    check_and_award(user.vk_id, "healed_count", db)
+    check_and_award(user.vk_id, "infirmary_level_complete", db)
+    check_and_award(user.vk_id, "full_collection", db)
+
+    return ReleaseOut(patient_id=patient.id, patient_name=patient.name, card_earned=card_earned)

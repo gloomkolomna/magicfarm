@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport } from '../api/endpoints';
+import { api, BODY_PARTS, BODY_PART_LABELS, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import Toast from '../components/Toast';
@@ -219,10 +219,15 @@ export default function AdminPage() {
 
   // ── Лечебница: мази, болезни, пациенты ──
   const [remedies, setRemedies] = useState<Remedy[]>([]);
-  const [remedyForm, setRemedyForm] = useState<{ name: string; description: string; itemsText: string }>({ name: '', description: '', itemsText: '' });
+  const [remedyForm, setRemedyForm] = useState<{ name: string; description: string; items: { ingredient_id: number | null; plant_id: number | null; qty: number }[] }>({ name: '', description: '', items: [] });
+  const [remedyPickKind, setRemedyPickKind] = useState<'ingredient' | 'plant'>('ingredient');
+  const [remedyPickId, setRemedyPickId] = useState<number | ''>('');
+  const [remedyPickQty, setRemedyPickQty] = useState('1');
   const [remedyEditingId, setRemedyEditingId] = useState<number | null>(null);
   const [diseases, setDiseases] = useState<Disease[]>([]);
-  const [diseaseForm, setDiseaseForm] = useState<{ name: string; description: string; remedyId: string; symptomsText: string }>({ name: '', description: '', remedyId: '', symptomsText: '' });
+  const [diseaseForm, setDiseaseForm] = useState<{ name: string; description: string; remedyId: string; symptoms: { part_code: string; text: string }[] }>({ name: '', description: '', remedyId: '', symptoms: [] });
+  const [diseaseSymPart, setDiseaseSymPart] = useState('');
+  const [diseaseSymText, setDiseaseSymText] = useState('');
   const [diseaseEditingId, setDiseaseEditingId] = useState<number | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientForm, setPatientForm] = useState<{ name: string; level: string; diseaseId: string; fieldId: string }>({ name: '', level: '1', diseaseId: '', fieldId: '' });
@@ -999,68 +1004,71 @@ export default function AdminPage() {
   }
 
   // ── Лечебница: мази, болезни, пациенты ──
-  function parseRecipeItems(text: string): { ingredient_id: number; qty: number }[] {
-    const items: { ingredient_id: number; qty: number }[] = [];
-    for (const line of text.split('\n')) {
-      const t = line.trim();
-      if (!t) continue;
-      const [idStr, qtyStr] = t.split(':');
-      const id = Number((idStr || '').trim());
-      const qty = Number((qtyStr || '1').trim()) || 1;
-      if (Number.isFinite(id)) items.push({ ingredient_id: id, qty });
-    }
-    return items;
+  async function saveDisease() {
+    if (!diseaseForm.name.trim()) { setMsg('✗ Введите название'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const data = { name: diseaseForm.name.trim(), description: diseaseForm.description || null, remedy_id: diseaseForm.remedyId ? Number(diseaseForm.remedyId) : null, symptoms: diseaseForm.symptoms };
+      if (diseaseEditingId) await api.adminUpdateDisease(diseaseEditingId, data);
+      else await api.adminCreateDisease(data);
+      await loadInfirmary();
+      setDiseaseForm({ name: '', description: '', remedyId: '', symptoms: [] });
+      setDiseaseEditingId(null);
+      setMsg('✓ Сохранено');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
   }
-  function parseSymptoms(text: string): { part_code: string; text: string }[] {
-    const items: { part_code: string; text: string }[] = [];
-    for (const line of text.split('\n')) {
-      const t = line.trim();
-      if (!t) continue;
-      const idx = t.indexOf(':');
-      if (idx <= 0) continue;
-      items.push({ part_code: t.slice(0, idx).trim(), text: t.slice(idx + 1).trim() });
-    }
-    return items;
+  function addDiseaseSymptom() {
+    if (!diseaseSymPart || !diseaseSymText.trim()) { setMsg('✗ Выберите часть тела и впишите симптом'); return; }
+    if (diseaseForm.symptoms.some((s) => s.part_code === diseaseSymPart)) { setMsg('✗ Эта часть тела уже добавлена'); return; }
+    setDiseaseForm({ ...diseaseForm, symptoms: [...diseaseForm.symptoms, { part_code: diseaseSymPart, text: diseaseSymText.trim() }] });
+    setDiseaseSymPart('');
+    setDiseaseSymText('');
   }
   async function loadInfirmary() {
     try {
-      const [r, d, p] = await Promise.all([api.adminRemedies(), api.adminDiseases(), api.adminPatients()]);
-      setRemedies(r); setDiseases(d); setPatients(p);
+      const [r, d, p, ing] = await Promise.all([
+        api.adminRemedies(), api.adminDiseases(), api.adminPatients(),
+        api.ingredients().catch(() => [] as Ingredient[]),
+      ]);
+      setRemedies(r); setDiseases(d); setPatients(p); setIngredients(ing);
     } catch { /* ignore */ }
   }
   async function saveRemedy() {
     if (!remedyForm.name.trim()) { setMsg('✗ Введите название'); return; }
+    if (remedyForm.items.length === 0) { setMsg('✗ Добавьте хотя бы один ингредиент'); return; }
     setBusy(true); setMsg(null);
     try {
-      const data = { name: remedyForm.name.trim(), description: remedyForm.description || null, recipe_items: parseRecipeItems(remedyForm.itemsText) };
+      const data = { name: remedyForm.name.trim(), description: remedyForm.description || null, recipe_items: remedyForm.items };
       if (remedyEditingId) await api.adminUpdateRemedy(remedyEditingId, data);
       else await api.adminCreateRemedy(data);
       await loadInfirmary();
-      setRemedyForm({ name: '', description: '', itemsText: '' });
+      setRemedyForm({ name: '', description: '', items: [] });
       setRemedyEditingId(null);
       setMsg('✓ Сохранено');
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
+  }
+  function addRemedyItem() {
+    if (remedyPickId === '') { setMsg('✗ Выберите источник'); return; }
+    const qty = Number(remedyPickQty);
+    if (!qty || qty < 1) { setMsg('✗ Укажите количество'); return; }
+    const item = remedyPickKind === 'ingredient'
+      ? { ingredient_id: Number(remedyPickId), plant_id: null, qty }
+      : { ingredient_id: null, plant_id: Number(remedyPickId), qty };
+    if (remedyForm.items.some((i) => i.ingredient_id === item.ingredient_id && i.plant_id === item.plant_id)) {
+      setMsg('✗ Этот источник уже добавлен');
+      return;
+    }
+    setRemedyForm({ ...remedyForm, items: [...remedyForm.items, item] });
+    setRemedyPickId('');
+    setRemedyPickQty('1');
   }
   async function deleteRemedy(id: number) {
     if (!(await confirmDialog('Удалить мазь?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeleteRemedy(id); await loadInfirmary(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
-    finally { setBusy(false); }
-  }
-  async function saveDisease() {
-    if (!diseaseForm.name.trim()) { setMsg('✗ Введите название'); return; }
-    setBusy(true); setMsg(null);
-    try {
-      const data = { name: diseaseForm.name.trim(), description: diseaseForm.description || null, remedy_id: diseaseForm.remedyId ? Number(diseaseForm.remedyId) : null, symptoms: parseSymptoms(diseaseForm.symptomsText) };
-      if (diseaseEditingId) await api.adminUpdateDisease(diseaseEditingId, data);
-      else await api.adminCreateDisease(data);
-      await loadInfirmary();
-      setDiseaseForm({ name: '', description: '', remedyId: '', symptomsText: '' });
-      setDiseaseEditingId(null);
-      setMsg('✓ Сохранено');
-    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
   async function deleteDisease(id: number) {
@@ -1091,6 +1099,18 @@ export default function AdminPage() {
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
+  async function uploadPatientImage(id: number, file: File, kind: 'image' | 'card' | 'hospital' | 'healthy') {
+    setBusy(true); setMsg(null);
+    try {
+      if (kind === 'card') await api.adminUploadPatientCardImage(id, file);
+      else if (kind === 'hospital') await api.adminUploadPatientHospitalImage(id, file);
+      else if (kind === 'healthy') await api.adminUploadPatientHealthyImage(id, file);
+      else await api.adminUploadPatientImage(id, file);
+      await loadInfirmary();
+      setMsg('✓ Картинка загружена');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
 
   function renderInfirmary() {
     return (
@@ -1101,9 +1121,36 @@ export default function AdminPage() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
             <input className="fm-input" placeholder="Название" value={remedyForm.name} onChange={(e) => setRemedyForm({ ...remedyForm, name: e.target.value })} />
           </div>
-          <textarea className="fm-input" placeholder="Состав: ingredient_id:qty (по строке)" value={remedyForm.itemsText} onChange={(e) => setRemedyForm({ ...remedyForm, itemsText: e.target.value })} rows={2} style={{ width: '100%', marginBottom: 8 }} />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+            <select className="fm-input" value={remedyPickKind} onChange={(e) => { setRemedyPickKind(e.target.value as 'ingredient' | 'plant'); setRemedyPickId(''); }} style={{ width: 150 }}>
+              <option value="ingredient">⚗️ Аптекарский</option>
+              <option value="plant">🌱 Растение</option>
+            </select>
+            <select className="fm-input" value={remedyPickId} onChange={(e) => setRemedyPickId(e.target.value ? Number(e.target.value) : '')} style={{ minWidth: 160 }}>
+              <option value="">— выберите —</option>
+              {remedyPickKind === 'ingredient'
+                ? ingredients.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)
+                : plants.map((p) => <option key={p.id} value={p.id}>{p.emoji || '🌱'} {p.name}</option>)}
+            </select>
+            <input className="fm-input" type="number" min={1} value={remedyPickQty} onChange={(e) => setRemedyPickQty(e.target.value)} style={{ width: 70 }} />
+            <button className="fm-btn fm-btn-sm" onClick={addRemedyItem}>+</button>
+          </div>
+          {remedyForm.items.length > 0 && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+              {remedyForm.items.map((it, idx) => {
+                const label = it.ingredient_id != null
+                  ? ingredients.find((x) => x.id === it.ingredient_id)?.name || `#${it.ingredient_id}`
+                  : plants.find((x) => x.id === it.plant_id)?.name || `#${it.plant_id}`;
+                return (
+                  <span key={idx} className="fm-card" style={{ padding: '2px 8px', fontSize: 13, cursor: 'pointer' }} onClick={() => setRemedyForm({ ...remedyForm, items: remedyForm.items.filter((_, j) => j !== idx) })}>
+                    {label} ×{it.qty} ✕
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <button className="fm-btn" disabled={busy} onClick={saveRemedy}>{remedyEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
-          {remedyEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setRemedyEditingId(null); setRemedyForm({ name: '', description: '', itemsText: '' }); }}>Отмена</button>}
+          {remedyEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setRemedyEditingId(null); setRemedyForm({ name: '', description: '', items: [] }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%', marginBottom: 16 }}>
           <thead><tr><th>ID</th><th>Название</th><th>Состав</th><th></th></tr></thead>
@@ -1112,9 +1159,9 @@ export default function AdminPage() {
               <tr key={r.id}>
                 <td>{r.id}</td>
                 <td><strong>{r.name}</strong></td>
-                <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{r.recipe_items.map((i) => `${i.ingredient_name || i.ingredient_id} ×${i.qty}`).join(', ') || '—'}</td>
+                <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{r.recipe_items.map((i) => `${i.ingredient_name || i.plant_name || i.ingredient_id} ×${i.qty}`).join(', ') || '—'}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button className="fm-btn fm-btn-xs" onClick={() => { setRemedyEditingId(r.id); setRemedyForm({ name: r.name, description: r.description || '', itemsText: r.recipe_items.map((i) => `${i.ingredient_id}:${i.qty}`).join('\n') }); }}>✎</button>{' '}
+                  <button className="fm-btn fm-btn-xs" onClick={() => { setRemedyEditingId(r.id); setRemedyForm({ name: r.name, description: r.description || '', items: r.recipe_items.map((i) => ({ ingredient_id: i.ingredient_id, plant_id: i.plant_id, qty: i.qty })) }); }}>✎</button>{' '}
                   <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteRemedy(r.id)}>✕</button>
                 </td>
               </tr>
@@ -1131,9 +1178,25 @@ export default function AdminPage() {
               {remedies.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </div>
-          <textarea className="fm-input" placeholder="Симптомы: part_code:текст (по строке)" value={diseaseForm.symptomsText} onChange={(e) => setDiseaseForm({ ...diseaseForm, symptomsText: e.target.value })} rows={2} style={{ width: '100%', marginBottom: 8 }} />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+            <select className="fm-input" value={diseaseSymPart} onChange={(e) => setDiseaseSymPart(e.target.value)} style={{ width: 140 }}>
+              <option value="">— часть тела —</option>
+              {BODY_PARTS.map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
+            </select>
+            <input className="fm-input" placeholder="Симптом (например: горячий нос)" value={diseaseSymText} onChange={(e) => setDiseaseSymText(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+            <button className="fm-btn fm-btn-sm" onClick={addDiseaseSymptom}>+</button>
+          </div>
+          {diseaseForm.symptoms.length > 0 && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+              {diseaseForm.symptoms.map((s, idx) => (
+                <span key={idx} className="fm-card" style={{ padding: '2px 8px', fontSize: 13, cursor: 'pointer' }} onClick={() => setDiseaseForm({ ...diseaseForm, symptoms: diseaseForm.symptoms.filter((_, j) => j !== idx) })}>
+                  {BODY_PART_LABELS[s.part_code] || s.part_code}: {s.text} ✕
+                </span>
+              ))}
+            </div>
+          )}
           <button className="fm-btn" disabled={busy} onClick={saveDisease}>{diseaseEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
-          {diseaseEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setDiseaseEditingId(null); setDiseaseForm({ name: '', description: '', remedyId: '', symptomsText: '' }); }}>Отмена</button>}
+          {diseaseEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setDiseaseEditingId(null); setDiseaseForm({ name: '', description: '', remedyId: '', symptoms: [] }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%', marginBottom: 16 }}>
           <thead><tr><th>ID</th><th>Название</th><th>Мазь</th><th>Симптомы</th><th></th></tr></thead>
@@ -1143,9 +1206,9 @@ export default function AdminPage() {
                 <td>{d.id}</td>
                 <td><strong>{d.name}</strong></td>
                 <td style={{ fontSize: 12 }}>{d.remedy_name || '—'}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.symptoms.map((s) => `${s.part_code}: ${s.text}`).join('; ') || '—'}</td>
+                <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.symptoms.map((s) => `${BODY_PART_LABELS[s.part_code] || s.part_code}: ${s.text}`).join('; ') || '—'}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button className="fm-btn fm-btn-xs" onClick={() => { setDiseaseEditingId(d.id); setDiseaseForm({ name: d.name, description: d.description || '', remedyId: d.remedy_id ? String(d.remedy_id) : '', symptomsText: d.symptoms.map((s) => `${s.part_code}:${s.text}`).join('\n') }); }}>✎</button>{' '}
+                  <button className="fm-btn fm-btn-xs" onClick={() => { setDiseaseEditingId(d.id); setDiseaseForm({ name: d.name, description: d.description || '', remedyId: d.remedy_id ? String(d.remedy_id) : '', symptoms: d.symptoms.map((s) => ({ part_code: s.part_code, text: s.text })) }); }}>✎</button>{' '}
                   <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteDisease(d.id)}>✕</button>
                 </td>
               </tr>
@@ -1166,13 +1229,18 @@ export default function AdminPage() {
               <option value="">— болезнь —</option>
               {diseases.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
-            <input className="fm-input" type="number" placeholder="Локация (field id)" value={patientForm.fieldId} onChange={(e) => setPatientForm({ ...patientForm, fieldId: e.target.value })} style={{ width: 120 }} />
+            <select className="fm-input" value={patientForm.fieldId} onChange={(e) => setPatientForm({ ...patientForm, fieldId: e.target.value })}>
+              <option value="">— локация —</option>
+              {fields.filter((f) => f.field_kind === 'infirmary').map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
           </div>
           <button className="fm-btn" disabled={busy} onClick={savePatient}>{patientEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
           {patientEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setPatientEditingId(null); setPatientForm({ name: '', level: '1', diseaseId: '', fieldId: '' }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
-          <thead><tr><th>ID</th><th>Название</th><th>Ур.</th><th>Болезнь</th><th>Локация</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Название</th><th>Ур.</th><th>Болезнь</th><th>Локация</th><th>Картинки</th><th></th></tr></thead>
           <tbody>
             {patients.map((p) => (
               <tr key={p.id}>
@@ -1181,6 +1249,12 @@ export default function AdminPage() {
                 <td>{p.level}</td>
                 <td style={{ fontSize: 12 }}>{p.disease_name || '—'}</td>
                 <td style={{ fontSize: 12 }}>{p.field_id ?? '—'}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <label className="fm-btn fm-btn-xs fm-btn-outline" title="Больной" style={{ cursor: 'pointer', marginRight: 2 }}>🖼<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPatientImage(p.id, f, 'image'); }} /></label>
+                  <label className="fm-btn fm-btn-xs fm-btn-outline" title="Стационар" style={{ cursor: 'pointer', marginRight: 2 }}>🏥<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPatientImage(p.id, f, 'hospital'); }} /></label>
+                  <label className="fm-btn fm-btn-xs fm-btn-outline" title="Здоров" style={{ cursor: 'pointer', marginRight: 2 }}>✅<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPatientImage(p.id, f, 'healthy'); }} /></label>
+                  <label className="fm-btn fm-btn-xs fm-btn-outline" title="Карточка" style={{ cursor: 'pointer' }}>🃏<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPatientImage(p.id, f, 'card'); }} /></label>
+                </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button className="fm-btn fm-btn-xs" onClick={() => { setPatientEditingId(p.id); setPatientForm({ name: p.name, level: String(p.level), diseaseId: p.disease_id ? String(p.disease_id) : '', fieldId: p.field_id ? String(p.field_id) : '' }); }}>✎</button>{' '}
                   <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deletePatient(p.id)}>✕</button>

@@ -96,7 +96,7 @@ def _meets_condition(user_id: int, a: Achievement, db: Session) -> bool:
     if a.condition_kind == "healed_count":
         from models import UserPatientState
         count = db.query(UserPatientState).filter(
-            UserPatientState.user_id == user_id, UserPatientState.status == "healed"
+            UserPatientState.user_id == user_id, UserPatientState.status.in_(["treated", "released"])
         ).count()
         return count >= a.condition_value
     if a.condition_kind == "infirmary_level_complete":
@@ -109,7 +109,7 @@ def _meets_condition(user_id: int, a: Achievement, db: Session) -> bool:
         if not patients:
             return False
         healed = db.query(UserPatientState).filter(
-            UserPatientState.user_id == user_id, UserPatientState.status == "healed",
+            UserPatientState.user_id == user_id, UserPatientState.status.in_(["treated", "released"]),
             UserPatientState.patient_id.in_(patients),
         ).count()
         return healed >= len(patients)
@@ -119,7 +119,7 @@ def _meets_condition(user_id: int, a: Achievement, db: Session) -> bool:
         if total == 0:
             return False
         healed = db.query(UserPatientState).filter(
-            UserPatientState.user_id == user_id, UserPatientState.status == "healed"
+            UserPatientState.user_id == user_id, UserPatientState.status.in_(["treated", "released"])
         ).count()
         return healed >= total
     return False

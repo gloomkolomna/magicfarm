@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import require_role
 from models import (
-    PATIENT_LEVELS, Disease, DiseaseSymptom, Ingredient, PatientAnimal, Remedy,
+    PATIENT_LEVELS, Disease, DiseaseSymptom, Ingredient, PatientAnimal, Plant, Remedy,
     RemedyRecipeItem, User,
 )
 from routes.admin_catalog import _auto_code, _unique_code
@@ -19,8 +19,10 @@ router = APIRouter(prefix="/api/admin", tags=["admin-infirmary"])
 # ── Схемы вывода ──
 
 class RemedyItemOut(BaseModel):
-    ingredient_id: int
+    ingredient_id: int | None
     ingredient_name: str | None
+    plant_id: int | None
+    plant_name: str | None
     qty: int
 
 
@@ -55,6 +57,8 @@ class PatientOut(BaseModel):
     level: int
     image_url: str | None
     card_image_url: str | None
+    hospital_image_url: str | None
+    healthy_image_url: str | None
     disease_id: int | None
     disease_name: str | None
     field_id: int | None
@@ -64,6 +68,8 @@ def _remedy_item_out(item: RemedyRecipeItem) -> RemedyItemOut:
     return RemedyItemOut(
         ingredient_id=item.ingredient_id,
         ingredient_name=item.ingredient.name if item.ingredient else None,
+        plant_id=item.plant_id,
+        plant_name=item.plant.name if item.plant else None,
         qty=item.qty,
     )
 
@@ -93,6 +99,7 @@ def _patient_out(p: PatientAnimal) -> PatientOut:
     return PatientOut(
         id=p.id, code=p.code, name=p.name, level=p.level,
         image_url=p.image_url, card_image_url=p.card_image_url,
+        hospital_image_url=p.hospital_image_url, healthy_image_url=p.healthy_image_url,
         disease_id=p.disease_id,
         disease_name=p.disease.name if p.disease else None,
         field_id=p.field_id,
@@ -102,7 +109,8 @@ def _patient_out(p: PatientAnimal) -> PatientOut:
 # ── Мази ──
 
 class RecipeItemIn(BaseModel):
-    ingredient_id: int
+    ingredient_id: int | None = None
+    plant_id: int | None = None
     qty: int = 1
 
 
@@ -120,16 +128,21 @@ class RemedyUpdate(BaseModel):
 
 def _set_recipe_items(remedy_id: int, items: list[RecipeItemIn], db: Session) -> None:
     db.query(RemedyRecipeItem).filter(RemedyRecipeItem.remedy_id == remedy_id).delete()
-    seen: set[int] = set()
     for item in items:
         if item.qty < 1:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Количество ингредиента должно быть не меньше 1")
-        if db.query(Ingredient).filter(Ingredient.id == item.ingredient_id).first() is None:
+        if (item.ingredient_id is None) == (item.plant_id is None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Укажите ровно один источник: ингредиент ИЛИ растение",
+            )
+        if item.ingredient_id is not None and db.query(Ingredient).filter(Ingredient.id == item.ingredient_id).first() is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ингредиент не найден")
-        if item.ingredient_id in seen:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Дубликат ингредиента в рецепте")
-        seen.add(item.ingredient_id)
-        db.add(RemedyRecipeItem(remedy_id=remedy_id, ingredient_id=item.ingredient_id, qty=item.qty))
+        if item.plant_id is not None and db.query(Plant).filter(Plant.id == item.plant_id).first() is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Растение не найдено")
+        db.add(RemedyRecipeItem(
+            remedy_id=remedy_id, ingredient_id=item.ingredient_id, plant_id=item.plant_id, qty=item.qty,
+        ))
 
 
 @router.get("/remedies", response_model=list[RemedyOut])
@@ -406,6 +419,8 @@ def delete_patient(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
     remove_upload(p.image_url)
     remove_upload(p.card_image_url)
+    remove_upload(p.hospital_image_url)
+    remove_upload(p.healthy_image_url)
     db.delete(p)
     db.commit()
     return None
@@ -440,6 +455,40 @@ def upload_patient_card_image(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
     remove_upload(p.card_image_url)
     p.card_image_url = save_upload(image, f"patient_card_{patient_id}", max_size=400)
+    db.commit()
+    db.refresh(p)
+    return _patient_out(p)
+
+
+@router.put("/patients/{patient_id}/hospital-image", response_model=PatientOut)
+def upload_patient_hospital_image(
+    patient_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    p = db.query(PatientAnimal).filter(PatientAnimal.id == patient_id).first()
+    if p is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
+    remove_upload(p.hospital_image_url)
+    p.hospital_image_url = save_upload(image, f"patient_hospital_{patient_id}", max_size=400)
+    db.commit()
+    db.refresh(p)
+    return _patient_out(p)
+
+
+@router.put("/patients/{patient_id}/healthy-image", response_model=PatientOut)
+def upload_patient_healthy_image(
+    patient_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    p = db.query(PatientAnimal).filter(PatientAnimal.id == patient_id).first()
+    if p is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
+    remove_upload(p.healthy_image_url)
+    p.healthy_image_url = save_upload(image, f"patient_healthy_{patient_id}", max_size=400)
     db.commit()
     db.refresh(p)
     return _patient_out(p)

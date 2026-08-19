@@ -96,6 +96,48 @@ def test_update_field_shrink_removes_cells(admin_client):
     assert len(cells) == 6  # 3×2
 
 
+def test_shrink_field_trims_pet_zone(admin_client):
+    fid = admin_client.post(
+        "/api/admin/fields", json={"name": "Лужайка", "cols": 4, "rows": 4, "field_kind": "lawn"}
+    ).json()["id"]
+    r = admin_client.post(f"/api/admin/fields/{fid}/pet-zones", data={"col1": 2, "row1": 2, "col2": 3, "row2": 3})
+    assert r.status_code == 201
+
+    admin_client.put(f"/api/admin/fields/{fid}", json={"cols": 2, "rows": 2})
+    d = admin_client.get(f"/api/admin/fields/{fid}").json()
+    assert d["pet_zones"] == []
+    assert len(d["cells"]) == 4
+    assert all(c["kind"] == "empty" for c in d["cells"])
+
+
+def test_shrink_field_keeps_inner_pet_zone(admin_client):
+    fid = admin_client.post(
+        "/api/admin/fields", json={"name": "Лужайка", "cols": 4, "rows": 4, "field_kind": "lawn"}
+    ).json()["id"]
+    assert admin_client.post(
+        f"/api/admin/fields/{fid}/pet-zones", data={"col1": 0, "row1": 0, "col2": 1, "row2": 1}
+    ).status_code == 201
+
+    admin_client.put(f"/api/admin/fields/{fid}", json={"cols": 2, "rows": 2})
+    d = admin_client.get(f"/api/admin/fields/{fid}").json()
+    assert len(d["pet_zones"]) == 1
+    assert d["pet_zones"][0]["col2"] == 1 and d["pet_zones"][0]["row2"] == 1
+
+
+def test_shrink_field_trims_tent(admin_client, uploads_tmp):
+    fid = admin_client.post("/api/admin/fields", json={"name": "О", "cols": 4, "rows": 4}).json()["id"]
+    assert admin_client.post(
+        f"/api/admin/fields/{fid}/tents",
+        data={"name": "T", "col1": "2", "row1": "2", "col2": "3", "row2": "3"},
+    ).status_code == 201
+
+    admin_client.put(f"/api/admin/fields/{fid}", json={"cols": 2, "rows": 2})
+    d = admin_client.get(f"/api/admin/fields/{fid}").json()
+    assert d["tents"] == []
+    assert len(d["cells"]) == 4
+    assert all(c["kind"] == "empty" for c in d["cells"])
+
+
 def test_update_field_grid_color(admin_client):
     fid = admin_client.post("/api/admin/fields", json={"name": "О"}).json()["id"]
     res = admin_client.put(f"/api/admin/fields/{fid}", json={"grid_color": "#aabbcc"})
