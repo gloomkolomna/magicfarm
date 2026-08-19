@@ -970,6 +970,7 @@ class Disease(Base):
     code = Column(String, nullable=False, unique=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    image_url = Column(String, nullable=True)
     remedy_id = Column(Integer, ForeignKey("remedies.id", ondelete="SET NULL"), nullable=True)
 
     remedy = relationship("Remedy")

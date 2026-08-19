@@ -1082,6 +1082,15 @@ export default function AdminPage() {
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
+  async function uploadDiseaseImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminUploadDiseaseImage(id, file);
+      await loadInfirmary();
+      setMsg('✓ Изображение болезни загружено');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
   async function deleteDisease(id: number) {
     if (!(await confirmDialog('Удалить болезнь?'))) return;
     setBusy(true); setMsg(null);
@@ -1256,7 +1265,7 @@ export default function AdminPage() {
           {diseaseEditingId && <button type="button" className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setDiseaseEditingId(null); setDiseaseForm({ name: '', description: '', remedyId: '', symptoms: [] }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%', marginBottom: 16 }}>
-          <thead><tr><th>ID</th><th>Название</th><th>Мазь</th><th>Симптомы</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Название</th><th>Мазь</th><th>Симптомы</th><th>Изображение</th><th></th></tr></thead>
           <tbody>
             {diseases.map((d) => (
               <tr key={d.id}>
@@ -1264,6 +1273,10 @@ export default function AdminPage() {
                 <td><strong>{d.name}</strong></td>
                 <td style={{ fontSize: 12 }}>{d.remedy_name || '—'}</td>
                 <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.symptoms.map((s) => `${BODY_PART_LABELS[s.part_code] || s.part_code}: ${s.text}`).join('; ') || '—'}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <span title="Изображение болезни">{d.image_url ? '🖼️✓' : '🖼️✗'}</span>{' '}
+                  <label className="fm-btn fm-btn-xs fm-btn-outline" title="Загрузить изображение болезни" style={{ cursor: 'pointer' }}>⬆<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadDiseaseImage(d.id, f); }} /></label>
+                </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button type="button" className="fm-btn fm-btn-xs" onClick={() => { setDiseaseEditingId(d.id); setDiseaseForm({ name: d.name, description: d.description || '', remedyId: d.remedy_id ? String(d.remedy_id) : '', symptoms: d.symptoms.map((s) => ({ part_code: s.part_code, text: s.text })) }); }}>✎</button>{' '}
                   <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteDisease(d.id)}>✕</button>

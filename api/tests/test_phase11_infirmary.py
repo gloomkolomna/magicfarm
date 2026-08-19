@@ -617,6 +617,27 @@ def test_admin_upload_patient_animal_image(admin_client, uploads_tmp):
         assert hub["current"]["animal_image_url"].startswith("/api/uploads/patient_animal_")
 
 
+def test_admin_upload_disease_image(admin_client, uploads_tmp):
+    rid = _seed_remedy("Мазь", [])
+    did = _seed_disease("Кашель", rid, {"nose": "Горячий нос"})
+
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (80, 60), (60, 60, 120)).save(buf, format="PNG")
+
+    r = admin_client.put(
+        f"/api/admin/diseases/{did}/image",
+        files={"image": ("d.png", io.BytesIO(buf.getvalue()), "image/png")},
+    )
+    assert r.status_code == 200
+    assert r.json()["image_url"].startswith("/api/uploads/disease_")
+
+    with make_user_client(123, "player") as c:
+        hb = c.get("/api/infirmary/handbook").json()
+        d = next(x for x in hb["diseases"] if x["id"] == did)
+        assert d["image_url"].startswith("/api/uploads/disease_")
+
+
 # ── Стадии пациента: sick → diagnosed → treated → released ──
 
 def test_infirmary_status_progression_scenes(admin_client):

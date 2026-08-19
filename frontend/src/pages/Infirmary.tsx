@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Navigation } from 'swiper/modules';
+import 'swiper/css';
+import 'swiper/css/navigation';
 import { api, BODY_PART_LABELS, type DiagnoseResult, type HandbookDisease, type Infirmary, type InfirmaryDetail, type InfirmaryZone } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import LocationMap from '../components/LocationMap';
@@ -148,9 +152,7 @@ export function InfirmaryScenePage() {
 
   const [symptoms, setSymptoms] = useState<{ part_code: string; symptoms: string[] } | null>(null);
   const [showHandbook, setShowHandbook] = useState(false);
-  const [diagId, setDiagId] = useState<number | ''>('');
   const [result, setResult] = useState<DiagnoseResult | null>(null);
-  const [showDiagnose, setShowDiagnose] = useState(false);
   const [showWellbeing, setShowWellbeing] = useState(false);
 
   const fieldId = Number(id);
@@ -192,14 +194,13 @@ export function InfirmaryScenePage() {
     }
   }
 
-  async function doDiagnose() {
-    if (!detail?.patient_id || diagId === '') return;
+  async function doDiagnose(diseaseId: number) {
+    if (!detail?.patient_id) return;
     setBusy(true);
     setMsg(null);
     try {
-      const res = await api.diagnosePatient(detail.patient_id, Number(diagId));
+      const res = await api.diagnosePatient(detail.patient_id, diseaseId);
       setResult(res);
-      setShowDiagnose(false);
       await load();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -305,7 +306,7 @@ export function InfirmaryScenePage() {
                 🔍 Приступить к осмотру
               </button>
             ) : (
-              <button className="fm-btn" onClick={() => { setDiagId(''); setResult(null); setShowDiagnose(true); }}>🩺 Поставить диагноз</button>
+              <button className="fm-btn" onClick={() => { setResult(null); setShowHandbook(true); }}>🩺 Поставить диагноз</button>
             )
           )}
           {detail.status === 'diagnosed' && (
@@ -320,7 +321,7 @@ export function InfirmaryScenePage() {
               <button className="fm-btn" disabled={busy} onClick={doRelease}>🕊 Выпустить на волю</button>
             </>
           )}
-          <button className="fm-btn fm-btn-outline" onClick={() => setShowHandbook(true)}>📖 Справочник</button>
+          <button className="fm-btn fm-btn-outline" onClick={() => { setResult(null); setShowHandbook(true); }}>📖 Книга болезней</button>
         </div>
       )}
 
@@ -346,8 +347,8 @@ export function InfirmaryScenePage() {
         </Modal>
       )}
 
-      {showDiagnose && detail?.patient_id && (
-        <Modal title="🩺 Поставить диагноз" onClose={() => setShowDiagnose(false)}>
+      {showHandbook && (
+        <Modal title="📖 Книга болезней" onClose={() => setShowHandbook(false)}>
           {result ? (
             <div className="fm-card" style={{ background: result.correct ? 'rgba(127,255,127,0.12)' : 'rgba(255,150,150,0.12)', fontSize: 14 }}>
               {result.correct ? (
@@ -363,20 +364,51 @@ export function InfirmaryScenePage() {
               ) : (
                 <>✗ Неверно. Штраф 200 крестиков. Баланс: {result.crosses_balance}.</>
               )}
-            </div>
-          ) : (
-            <>
-              <select className="fm-input" value={diagId} onChange={(e) => setDiagId(Number(e.target.value))}>
-                <option value="">— выберите болезнь —</option>
-                {handbook.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-              <button className="fm-btn" style={{ width: '100%', marginTop: 10 }} disabled={busy || diagId === ''} onClick={doDiagnose}>
-                Диагностировать
+              <button className="fm-btn fm-btn-outline" style={{ width: '100%', marginTop: 12 }} onClick={() => setResult(null)}>
+                📖 Продолжить листать
               </button>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-                Неверный диагноз — минус 200 крестиков.
-              </div>
-            </>
+            </div>
+          ) : handbook.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)' }}>Болезней пока нет.</div>
+          ) : (
+            <Swiper
+              modules={[Navigation]}
+              slidesPerView={1}
+              spaceBetween={0}
+              navigation
+              initialSlide={0}
+              style={{ paddingBottom: 4 }}
+            >
+              {handbook.map((d) => (
+                <SwiperSlide key={d.id}>
+                  <div style={{ textAlign: 'center' }}>
+                    {d.image_url ? (
+                      <img src={mediaUrl(d.image_url)} alt={d.name} style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 10, objectFit: 'contain' }} />
+                    ) : (
+                      <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 64, background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>🦠</div>
+                    )}
+                    <div style={{ marginTop: 10 }}>
+                      <strong style={{ fontSize: 17 }}>{d.name}</strong>
+                    </div>
+                    {d.remedy_name && (
+                      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        Мазь: {d.remedy_name}
+                      </div>
+                    )}
+                    {d.symptoms.length > 0 && (
+                      <ul style={{ margin: '8px 0 0', paddingLeft: 18, textAlign: 'left', fontSize: 13 }}>
+                        {d.symptoms.map((s, i) => <li key={i}>{BODY_PART_LABELS[s.part_code] || s.part_code}: {s.text}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                  {detail?.status === 'sick' && detail?.patient_id && (
+                    <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={() => doDiagnose(d.id)}>
+                      🩺 Выбрать это заболевание
+                    </button>
+                  )}
+                </SwiperSlide>
+              ))}
+            </Swiper>
           )}
         </Modal>
       )}
@@ -390,20 +422,6 @@ export function InfirmaryScenePage() {
           ) : (
             <div style={{ fontSize: 14 }}>Животное здорово! Можно выпустить его на волю.</div>
           )}
-        </Modal>
-      )}
-
-      {showHandbook && (
-        <Modal title="📖 Справочник болезней" onClose={() => setShowHandbook(false)}>
-          {handbook.map((d) => (
-            <div key={d.id} className="fm-card" style={{ marginBottom: 8 }}>
-              <strong>{d.name}</strong>
-              {d.remedy_name && <span style={{ color: 'var(--text-secondary)' }}> — мазь: {d.remedy_name}</span>}
-              <ul style={{ margin: '6px 0 0 18px', fontSize: 13 }}>
-                {d.symptoms.map((s, i) => <li key={i}>{BODY_PART_LABELS[s.part_code] || s.part_code}: {s.text}</li>)}
-              </ul>
-            </div>
-          ))}
         </Modal>
       )}
     </>

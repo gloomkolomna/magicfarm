@@ -706,6 +706,7 @@ export interface Disease {
   code: string;
   name: string;
   description: string | null;
+  image_url: string | null;
   remedy_id: number | null;
   remedy_name: string | null;
   symptoms: Symptom[];
@@ -846,6 +847,7 @@ export interface HandbookDisease {
   code: string;
   name: string;
   description: string | null;
+  image_url: string | null;
   remedy_id: number | null;
   remedy_name: string | null;
   remedy_image_url: string | null;
@@ -1683,6 +1685,11 @@ export const api = {
     client.put<Disease>(`/admin/diseases/${id}`, data).then((r) => r.data),
   adminDeleteDisease: (id: number) =>
     client.delete(`/admin/diseases/${id}`).then((r) => r.data),
+  adminUploadDiseaseImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Disease>(`/admin/diseases/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
   adminPatients: () => client.get<Patient[]>('/admin/patients').then((r) => r.data),
   adminCreatePatient: (data: { name: string; level: number; disease_id?: number | null; animal_type_id?: number | null }) =>
     client.post<Patient>('/admin/patients', data).then((r) => r.data),

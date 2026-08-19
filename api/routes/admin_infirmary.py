@@ -57,6 +57,7 @@ class DiseaseOut(BaseModel):
     code: str
     name: str
     description: str | None
+    image_url: str | None
     remedy_id: int | None
     remedy_name: str | None
     symptoms: list[SymptomOut]
@@ -117,6 +118,7 @@ def _symptom_out(s: DiseaseSymptom) -> SymptomOut:
 def _disease_out(d: Disease) -> DiseaseOut:
     return DiseaseOut(
         id=d.id, code=d.code, name=d.name, description=d.description,
+        image_url=d.image_url,
         remedy_id=d.remedy_id,
         remedy_name=d.remedy.name if d.remedy else None,
         symptoms=[_symptom_out(s) for s in d.symptoms],
@@ -354,6 +356,23 @@ def update_disease(
     return _disease_out(d)
 
 
+@router.put("/diseases/{disease_id}/image", response_model=DiseaseOut)
+def upload_disease_image(
+    disease_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    d = db.query(Disease).filter(Disease.id == disease_id).first()
+    if d is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Болезнь не найдена")
+    remove_upload(d.image_url)
+    d.image_url = save_upload(image, f"disease_{disease_id}", max_size=600)
+    db.commit()
+    db.refresh(d)
+    return _disease_out(d)
+
+
 @router.delete("/diseases/{disease_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_disease(
     disease_id: int,
@@ -363,6 +382,7 @@ def delete_disease(
     d = db.query(Disease).filter(Disease.id == disease_id).first()
     if d is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Болезнь не найдена")
+    remove_upload(d.image_url)
     db.delete(d)
     db.commit()
     return None

@@ -132,6 +132,7 @@ class HandbookDiseaseOut(BaseModel):
     code: str
     name: str
     description: str | None
+    image_url: str | None
     remedy_id: int | None
     remedy_name: str | None
     remedy_image_url: str | None
@@ -289,6 +290,7 @@ def get_handbook(
     return HandbookOut(diseases=[
         HandbookDiseaseOut(
             id=d.id, code=d.code, name=d.name, description=d.description,
+            image_url=d.image_url,
             remedy_id=d.remedy_id,
             remedy_name=d.remedy.name if d.remedy else None,
             remedy_image_url=d.remedy.image_url if d.remedy else None,
