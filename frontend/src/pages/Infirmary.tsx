@@ -426,7 +426,7 @@ export function InfirmaryScenePage() {
                 <button className="fm-btn fm-btn-outline" style={{ minWidth: 60 }} disabled={!swiper || swiper.isEnd} onClick={() => swiper?.slideNext()}>▶</button>
               </div>
               {detail?.status === 'sick' && detail?.patient_id && handbook[bookPage] && (
-                <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={() => doDiagnose(handbook[bookPage].id)}>
+                <button className="fm-btn" style={{ width: '100%', marginTop: 12, whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.3 }} disabled={busy} onClick={() => doDiagnose(handbook[bookPage].id)}>
                   🩺 Выбрать «{handbook[bookPage].name}»
                 </button>
               )}
