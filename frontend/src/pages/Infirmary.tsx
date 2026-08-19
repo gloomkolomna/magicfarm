@@ -265,11 +265,12 @@ export function InfirmaryScenePage() {
                       borderRight: c < detail.cols - 1 ? '1px solid #2a1a0e' : 'none',
                       borderBottom: r < detail.rows - 1 ? '1px solid #2a1a0e' : 'none',
                       boxShadow: 'inset 0 0 0 0.5px rgba(255,255,255,0.05)',
-                      background: canExamine ? 'rgba(220,150,120,0.30)' : 'rgba(220,150,120,0.12)',
+                      background: canExamine ? 'rgba(220,150,120,0.18)' : 'transparent',
                       cursor: canExamine ? 'pointer' : 'default',
                       touchAction: canExamine ? 'manipulation' : 'auto',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 'clamp(16px, 5vw, 38px)', lineHeight: 1,
+                      opacity: canExamine ? 0.55 : 0.9,
                     }}
                   >
                     🔍
