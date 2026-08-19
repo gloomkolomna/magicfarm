@@ -94,7 +94,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [fd, pl, pts, an, pt, pr, ing] = await Promise.all([api.adminGetField(fieldId), api.plants(), api.adminProductionTemplates(), api.adminAnimals(), api.adminPets(), api.adminPotionRecipes(), api.adminIngredients()]);
+      const [fd, pl, pts, an, pt, pr, ing] = await Promise.all([api.adminCleanupField(fieldId), api.plants(), api.adminProductionTemplates(), api.adminAnimals(), api.adminPets(), api.adminPotionRecipes(), api.adminIngredients()]);
       setField(fd);
       setAllPlants(pl);
       setProdTemplates(pts);

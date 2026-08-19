@@ -593,6 +593,7 @@ def create_tent(
     user: User = Depends(require_role("admin")),
 ):
     f = _get_field_or_404(field_id, db)
+    _ensure_grid(f, db)
     if kind == WITCH_HOUSE_KIND and f.field_kind != "house":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -780,6 +781,20 @@ def get_field_detail(
     return _detail(_get_field_or_404(field_id, db))
 
 
+@router.post("/{field_id}/cleanup", response_model=FieldDetailOut)
+def cleanup_field(
+    field_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    """Чистит зоны/клетки, вышедшие за границы сетки (мусор после изменения размеров)."""
+    f = _get_field_or_404(field_id, db)
+    _ensure_grid(f, db)
+    db.commit()
+    db.refresh(f)
+    return _detail(f)
+
+
 @router.post("/{field_id}/plant-beds", response_model=PlantBedOut, status_code=status.HTTP_201_CREATED)
 def create_plant_bed(
     field_id: int,
@@ -791,6 +806,7 @@ def create_plant_bed(
     user: User = Depends(require_role("admin")),
 ):
     f = _get_field_or_404(field_id, db)
+    _ensure_grid(f, db)
     c1, r1, c2, r2 = _normalize_rect(col1, row1, col2, row2)
     if c1 < 0 or r1 < 0 or c2 >= f.cols or r2 >= f.rows:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Прямоугольник выходит за пределы поля")
@@ -868,6 +884,7 @@ def create_pet_zone(
     user: User = Depends(require_role("admin")),
 ):
     f = _get_field_or_404(field_id, db)
+    _ensure_grid(f, db)
     c1, r1, c2, r2 = _normalize_rect(col1, row1, col2, row2)
     if c1 < 0 or r1 < 0 or c2 >= f.cols or r2 >= f.rows:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Прямоугольник выходит за пределы поля")
@@ -1062,6 +1079,7 @@ def create_brewery_zone(
     user: User = Depends(require_role("admin")),
 ):
     f = _get_field_or_404(field_id, db)
+    _ensure_grid(f, db)
     _check_brewery_field(f)
     if zone_kind not in BREWERY_ZONE_KINDS:
         raise HTTPException(
@@ -1468,6 +1486,7 @@ def create_infirmary_zone(
     user: User = Depends(require_role("admin")),
 ):
     f = _get_field_or_404(field_id, db)
+    _ensure_grid(f, db)
     if f.field_kind != "infirmary":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Зоны лечебницы размещаются только на локациях типа «Лесная лечебница»")
     if req.zone_kind not in INFIRMARY_ZONE_KINDS:

@@ -204,6 +204,85 @@ def test_admin_places_pet_cell_player_sees_it(admin_client):
         assert cells["1,1"]["kind"] == "pet"
 
 
+def test_single_cell_pet_zone_stays_1x1(admin_client):
+    """Зона из одной клетки не должна «расползаться» на 4 клетки."""
+    fid = admin_client.post("/api/admin/fields", json={"name": "Лужайка", "cols": 10, "rows": 10, "field_kind": "lawn"}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}", json={"cols": 4, "rows": 4})
+
+    r = admin_client.post(f"/api/admin/fields/{fid}/pet-zones", data={"col1": 1, "row1": 1, "col2": 1, "row2": 1})
+    assert r.status_code == 201, r.text
+    assert (r.json()["col1"], r.json()["row1"], r.json()["col2"], r.json()["row2"]) == (1, 1, 1, 1)
+
+    admin_detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    assert len(admin_detail["pet_zones"]) == 1
+    z = admin_detail["pet_zones"][0]
+    assert (z["col1"], z["row1"], z["col2"], z["row2"]) == (1, 1, 1, 1)
+
+    with make_user_client(3410, "player") as c:
+        detail = c.get(f"/api/fields/{fid}").json()
+        assert len(detail["pet_zones"]) == 1
+        z = detail["pet_zones"][0]
+        assert (z["col1"], z["row1"], z["col2"], z["row2"]) == (1, 1, 1, 1)
+        pet_cells = [x for x in detail["cells"] if x["kind"] == "pet"]
+        assert len(pet_cells) == 1
+
+
+def test_admin_cleanup_field_removes_stale_zones(admin_client):
+    """Эндпоинт очистки убирает зоны/клетки, вышедшие за границы сетки."""
+    from models import Field
+    from tests.conftest import TestingSessionLocal
+    fid = admin_client.post("/api/admin/fields", json={"name": "Лужайка", "cols": 10, "rows": 10, "field_kind": "lawn"}).json()["id"]
+    assert admin_client.post(f"/api/admin/fields/{fid}/pet-zones", data={"col1": 8, "row1": 8, "col2": 9, "row2": 9}).status_code == 201
+
+    s = TestingSessionLocal()
+    try:
+        f = s.query(Field).filter(Field.id == fid).first()
+        f.cols = 4
+        f.rows = 4
+        s.commit()
+    finally:
+        s.close()
+
+    r = admin_client.post(f"/api/admin/fields/{fid}/cleanup")
+    assert r.status_code == 200
+    detail = r.json()
+    assert detail["cols"] == 4 and detail["rows"] == 4
+    assert detail["pet_zones"] == []
+    assert len(detail["cells"]) == 16
+
+
+def test_create_pet_zone_cleans_stale_out_of_bounds_zones(admin_client):
+    """Старые зоны, чьи клетки вышли за новые границы сетки, чистятся при размещении новой зоны."""
+    from models import Field
+    from tests.conftest import TestingSessionLocal
+    fid = admin_client.post("/api/admin/fields", json={"name": "Лужайка", "cols": 10, "rows": 10, "field_kind": "lawn"}).json()["id"]
+    assert admin_client.post(f"/api/admin/fields/{fid}/pet-zones", data={"col1": 8, "row1": 8, "col2": 9, "row2": 9}).status_code == 201
+
+    # Симулируем старый resize: размеры меняем напрямую в БД, без очистки зон.
+    s = TestingSessionLocal()
+    try:
+        f = s.query(Field).filter(Field.id == fid).first()
+        f.cols = 4
+        f.rows = 4
+        s.commit()
+    finally:
+        s.close()
+
+    r = admin_client.post(f"/api/admin/fields/{fid}/pet-zones", data={"col1": 1, "row1": 1, "col2": 2, "row2": 2})
+    assert r.status_code == 201, r.text
+
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    assert len(detail["pet_zones"]) == 1
+    z = detail["pet_zones"][0]
+    assert (z["col1"], z["row1"], z["col2"], z["row2"]) == (1, 1, 2, 2)
+    pet_cells = [c for c in detail["cells"] if c["kind"] == "pet"]
+    assert len(pet_cells) == 4
+
+    with make_user_client(3510, "player") as c:
+        detail2 = c.get(f"/api/fields/{fid}").json()
+        assert len(detail2["pet_zones"]) == 1
+
+
 def test_pet_zone_settle_pet_after_shrink(admin_client):
     """Баг: после уменьшения карты новая зона питомца + заселение питомца должны работать в игре."""
     from models import Pet

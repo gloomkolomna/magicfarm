@@ -1135,6 +1135,8 @@ export const api = {
   },
   adminDeleteField: (id: number) =>
     client.delete(`/admin/fields/${id}`).then((r) => r.data),
+  adminCleanupField: (id: number) =>
+    client.post<FieldDetail>(`/admin/fields/${id}/cleanup`).then((r) => r.data),
   adminSetBlocked: (id: number, cells: { col: number; row: number }[], kind: string = 'bed') =>
     client.put<FieldDetail>(`/admin/fields/${id}/cells/blocked`, { cells, kind }).then((r) => r.data),
   adminSetCellKind: (fieldId: number, col: number, row: number, kind: string) =>
