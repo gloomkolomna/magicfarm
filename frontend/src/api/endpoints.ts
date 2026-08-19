@@ -647,6 +647,7 @@ export interface Shop {
   rows: number;
   cells: ShopCell[];
   apothecary: ApothecaryItem[];
+  inventory: InventoryItem[];
 }
 
 export interface GatherResult {
@@ -655,12 +656,20 @@ export interface GatherResult {
   apothecary_qty: number;
 }
 
+export interface BarterGive {
+  kind: string;
+  id: number;
+  name: string;
+  emoji: string | null;
+}
+
 export interface BarterResult {
   cell_id: number;
   want: Ingredient;
-  give: Ingredient;
+  give: BarterGive;
   qty: number;
   apothecary: ApothecaryItem[];
+  inventory: InventoryItem[];
 }
 
 // ── Лесная лечебница ──
@@ -1636,10 +1645,11 @@ export const api = {
     client.post<GatherResult>(`/meadow/cells/${cellId}/gather`).then((r) => r.data),
   shop: (fieldId: number) =>
     client.get<Shop>(`/shop/${fieldId}`).then((r) => r.data),
-  barterCell: (cellId: number, wantIngredientId: number, giveIngredientId: number, qty: number) =>
+  barterCell: (cellId: number, wantIngredientId: number, giveKind: string, giveItemId: number, qty: number) =>
     client.post<BarterResult>(`/shop/cells/${cellId}/barter`, {
       want_ingredient_id: wantIngredientId,
-      give_ingredient_id: giveIngredientId,
+      give_kind: giveKind,
+      give_item_id: giveItemId,
       qty,
     }).then((r) => r.data),
 

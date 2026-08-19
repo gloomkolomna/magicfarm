@@ -15,7 +15,7 @@ export default function ShopPage() {
 
   const [cell, setCell] = useState<ShopCell | null>(null);
   const [wantId, setWantId] = useState<number | ''>('');
-  const [giveId, setGiveId] = useState<number | ''>('');
+  const [giveSel, setGiveSel] = useState<string>('');
   const [qty, setQty] = useState('1');
   const [result, setResult] = useState<BarterResult | null>(null);
 
@@ -37,28 +37,31 @@ export default function ShopPage() {
     return () => clearTimeout(t);
   }, [msg]);
 
-  const giveQty = (ingId: number | ''): number => {
-    if (ingId === '') return 0;
-    return shop?.apothecary.find((a) => a.ingredient_id === ingId)?.qty ?? 0;
-  };
+  const giveOptions: { kind: string; id: number; label: string; qty: number }[] = [
+    ...(shop?.apothecary ?? []).map((a) => ({ kind: 'ingredient', id: a.ingredient_id, label: `⚗️ ${a.name} (×${a.qty})`, qty: a.qty })),
+    ...(shop?.inventory ?? []).map((i) => ({ kind: i.item_kind, id: i.item_id, label: `${i.item_emoji || '📦'} ${i.item_name} (×${i.qty})`, qty: i.qty })),
+  ];
+
+  const selectedGive = giveOptions.find((o) => `${o.kind}:${o.id}` === giveSel);
+  const giveQty = selectedGive?.qty ?? 0;
 
   function openCell(c: ShopCell) {
     setCell(c);
     setWantId(c.ingredients[0]?.id ?? '');
-    setGiveId('');
+    setGiveSel('');
     setQty('1');
     setResult(null);
   }
 
   async function doBarter() {
-    if (!cell || wantId === '' || giveId === '') return;
+    if (!cell || wantId === '' || !selectedGive) return;
     const q = Number(qty);
     if (!q || q < 1) { setMsg('✗ Укажите количество'); return; }
-    if (giveQty(giveId) < q) { setMsg('✗ Недостаточно на аптекарском складе'); return; }
+    if (selectedGive.qty < q) { setMsg('✗ Недостаточно предмета на складе'); return; }
     setBusy(true);
     setMsg(null);
     try {
-      const res = await api.barterCell(cell.id, wantId, giveId, q);
+      const res = await api.barterCell(cell.id, wantId, selectedGive.kind, selectedGive.id, q);
       setResult(res);
       const sh = await api.shop(fieldId);
       setShop(sh);
@@ -140,13 +143,11 @@ export default function ShopPage() {
                     <option key={i.id} value={i.id}>{i.name}</option>
                   ))}
                 </select>
-                <label style={{ display: 'block', margin: '12px 0 6px', fontSize: 14 }}>Что отдаём (из аптекарского склада)</label>
-                <select className="fm-input" value={giveId} onChange={(e) => setGiveId(Number(e.target.value))}>
+                <label style={{ display: 'block', margin: '12px 0 6px', fontSize: 14 }}>Что отдаём (со склада)</label>
+                <select className="fm-input" value={giveSel} onChange={(e) => setGiveSel(e.target.value)}>
                   <option value="">— выберите —</option>
-                  {(shop?.apothecary ?? []).map((a: ApothecaryItem) => (
-                    <option key={a.ingredient_id} value={a.ingredient_id}>
-                      {a.name} (×{a.qty})
-                    </option>
+                  {giveOptions.map((o) => (
+                    <option key={`${o.kind}:${o.id}`} value={`${o.kind}:${o.id}`}>{o.label}</option>
                   ))}
                 </select>
                 <label style={{ display: 'block', margin: '12px 0 6px', fontSize: 14 }}>Количество</label>
@@ -154,14 +155,14 @@ export default function ShopPage() {
                   className="fm-input"
                   type="number"
                   min={1}
-                  max={giveQty(giveId) || 1}
+                  max={giveQty || 1}
                   value={qty}
                   onChange={(e) => setQty(e.target.value)}
                 />
                 <button
                   className="fm-btn"
                   style={{ width: '100%', marginTop: 12 }}
-                  disabled={busy || wantId === '' || giveId === '' || Number(qty) < 1}
+                  disabled={busy || wantId === '' || giveSel === '' || Number(qty) < 1}
                   onClick={doBarter}
                 >
                   Обменять

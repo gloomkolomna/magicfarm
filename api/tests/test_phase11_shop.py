@@ -115,7 +115,8 @@ def test_barter_happy_path(admin_client):
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/shop/cells/{tc_id}/barter", json={
             "want_ingredient_id": want_iid,
-            "give_ingredient_id": give_iid,
+            "give_kind": "ingredient",
+            "give_item_id": give_iid,
             "qty": 2,
         })
         assert r.status_code == 200
@@ -138,7 +139,8 @@ def test_barter_want_not_in_cell(admin_client):
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/shop/cells/{tc_id}/barter", json={
             "want_ingredient_id": want_iid,
-            "give_ingredient_id": give_iid,
+            "give_kind": "ingredient",
+            "give_item_id": give_iid,
             "qty": 1,
         })
         assert r.status_code == 400
@@ -153,7 +155,8 @@ def test_barter_insufficient_give(admin_client):
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/shop/cells/{tc_id}/barter", json={
             "want_ingredient_id": want_iid,
-            "give_ingredient_id": give_iid,
+            "give_kind": "ingredient",
+            "give_item_id": give_iid,
             "qty": 2,
         })
         assert r.status_code == 400
@@ -167,7 +170,8 @@ def test_barter_no_give_in_storage(admin_client):
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/shop/cells/{tc_id}/barter", json={
             "want_ingredient_id": want_iid,
-            "give_ingredient_id": give_iid,
+            "give_kind": "ingredient",
+            "give_item_id": give_iid,
             "qty": 1,
         })
         assert r.status_code == 400
@@ -182,7 +186,8 @@ def test_barter_qty_lt_one(admin_client):
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/shop/cells/{tc_id}/barter", json={
             "want_ingredient_id": want_iid,
-            "give_ingredient_id": give_iid,
+            "give_kind": "ingredient",
+            "give_item_id": give_iid,
             "qty": 0,
         })
         assert r.status_code == 400
@@ -195,7 +200,8 @@ def test_barter_unknown_cell_404(admin_client):
     with make_user_client(123, "player") as c:
         r = c.post("/api/shop/cells/9999/barter", json={
             "want_ingredient_id": want_iid,
-            "give_ingredient_id": give_iid,
+            "give_kind": "ingredient",
+            "give_item_id": give_iid,
             "qty": 1,
         })
         assert r.status_code == 404
@@ -203,5 +209,41 @@ def test_barter_unknown_cell_404(admin_client):
 
 def test_barter_requires_auth(client):
     assert client.post("/api/shop/cells/1/barter", json={
-        "want_ingredient_id": 1, "give_ingredient_id": 2, "qty": 1,
+        "want_ingredient_id": 1, "give_kind": "ingredient", "give_item_id": 2, "qty": 1,
     }).status_code == 401
+
+
+def test_barter_from_inventory_plant(admin_client):
+    """Можно отдать растение со склада игрока (Inventory), а не только ингредиент."""
+    want_iid = _seed_ingredient("Роса")
+    fid = _seed_shop_field()
+    tc_id = _seed_trade_cell(fid, 0, 0, [want_iid])
+    plant = next(p for p in admin_client.get("/api/plants").json() if p["code"] == "jackobob")
+
+    from models import Inventory
+    s = TestingSessionLocal()
+    try:
+        s.add(Inventory(user_id=123, plant_id=plant["id"], qty=4))
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as c:
+        r = c.post(f"/api/shop/cells/{tc_id}/barter", json={
+            "want_ingredient_id": want_iid,
+            "give_kind": "plant",
+            "give_item_id": plant["id"],
+            "qty": 3,
+        })
+        assert r.status_code == 200
+        data = r.json()
+        assert data["give"]["kind"] == "plant"
+        assert data["give"]["id"] == plant["id"]
+        assert data["qty"] == 3
+
+    s = TestingSessionLocal()
+    try:
+        inv = s.query(Inventory).filter(Inventory.user_id == 123, Inventory.plant_id == plant["id"]).first()
+        assert inv.qty == 1
+    finally:
+        s.close()

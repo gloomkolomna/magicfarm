@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import type { Swiper as SwiperInstance } from 'swiper';
@@ -164,6 +164,10 @@ export function InfirmaryScenePage() {
   const [showWellbeing, setShowWellbeing] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewScale, setPreviewScale] = useState(1);
+  const [previewPan, setPreviewPan] = useState({ x: 0, y: 0 });
+  const previewDrag = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
+  const previewBoxRef = useRef<HTMLDivElement | null>(null);
+  const previewImgRef = useRef<HTMLImageElement | null>(null);
   const [swiper, setSwiper] = useState<SwiperInstance | null>(null);
   const [bookPage, setBookPage] = useState(0);
 
@@ -444,25 +448,63 @@ export function InfirmaryScenePage() {
       {previewImage && (
         <Modal title="🔍" onClose={() => setPreviewImage(null)}>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 10, alignItems: 'center' }}>
-            <button className="fm-btn fm-btn-outline" onClick={() => setPreviewScale((s) => Math.min(4, s + 0.5))}>＋</button>
+            <button className="fm-btn fm-btn-outline" onClick={() => { setPreviewScale((s) => Math.min(4, s + 0.5)); setPreviewPan({ x: 0, y: 0 }); }}>＋</button>
             <span style={{ fontSize: 13, color: 'var(--text-muted)', minWidth: 44, textAlign: 'center' }}>{Math.round(previewScale * 100)}%</span>
-            <button className="fm-btn fm-btn-outline" onClick={() => setPreviewScale(1)}>⤢</button>
-            <button className="fm-btn fm-btn-outline" onClick={() => setPreviewScale((s) => Math.max(0.5, s - 0.5))}>−</button>
+            <button className="fm-btn fm-btn-outline" onClick={() => { setPreviewScale(1); setPreviewPan({ x: 0, y: 0 }); }}>⤢</button>
+            <button className="fm-btn fm-btn-outline" onClick={() => { setPreviewScale((s) => Math.max(0.5, s - 0.5)); setPreviewPan({ x: 0, y: 0 }); }}>−</button>
           </div>
-          <div style={{ overflow: 'hidden', height: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10 }}>
+          <div
+            ref={previewBoxRef}
+            style={{ overflow: 'hidden', height: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, touchAction: 'none', cursor: previewScale > 1 ? 'grab' : 'default' }}
+            onPointerDown={(e) => {
+              if (previewScale <= 1) return;
+              previewDrag.current = { startX: e.clientX, startY: e.clientY, baseX: previewPan.x, baseY: previewPan.y };
+              (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+            }}
+            onPointerMove={(e) => {
+              const d = previewDrag.current;
+              if (!d) return;
+              const dx = e.clientX - d.startX;
+              const dy = e.clientY - d.startY;
+              const box = previewBoxRef.current;
+              const img = previewImgRef.current;
+              let maxX = 0;
+              let maxY = 0;
+              if (box && img) {
+                maxX = Math.max(0, (img.clientWidth * previewScale - box.clientWidth) / 2);
+                maxY = Math.max(0, (img.clientHeight * previewScale - box.clientHeight) / 2);
+              }
+              setPreviewPan({
+                x: Math.max(-maxX, Math.min(maxX, d.baseX + dx)),
+                y: Math.max(-maxY, Math.min(maxY, d.baseY + dy)),
+              });
+            }}
+            onPointerUp={() => { previewDrag.current = null; }}
+            onPointerCancel={() => { previewDrag.current = null; }}
+          >
             <img
+              ref={previewImgRef}
               src={previewImage}
               alt=""
+              draggable={false}
               style={{
                 maxWidth: '100%',
                 maxHeight: '100%',
                 objectFit: 'contain',
-                transform: `scale(${previewScale})`,
-                transition: 'transform 0.15s ease',
+                transform: `translate(${previewPan.x}px, ${previewPan.y}px) scale(${previewScale})`,
+                transition: previewDrag.current ? 'none' : 'transform 0.15s ease',
                 borderRadius: 10,
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                pointerEvents: 'none',
               }}
             />
           </div>
+          {previewScale > 1 && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: 8 }}>
+              Тяните изображение, чтобы рассмотреть детали
+            </div>
+          )}
         </Modal>
       )}
 
