@@ -38,3 +38,22 @@ def next_open_at(kind: str, now: datetime | None = None) -> datetime | None:
     while candidate <= current:
         candidate += timedelta(days=1)
     return candidate
+
+
+def window_end_at(kind: str, now: datetime | None = None) -> datetime | None:
+    if kind == "always" or kind not in WINDOW_RANGES:
+        return None
+    current = now_msk() if now is None else now.astimezone(MSK)
+    start, end = WINDOW_RANGES[kind]
+    candidate = datetime.combine(current.date(), end, tzinfo=MSK)
+    if start > end:
+        if current.time() >= start:
+            candidate += timedelta(days=1)
+    elif candidate <= current:
+        candidate += timedelta(days=1)
+    return candidate
+
+
+def next_midnight_msk(now: datetime | None = None) -> datetime:
+    current = now_msk() if now is None else now.astimezone(MSK)
+    return datetime.combine(current.date() + timedelta(days=1), time(0, 0), tzinfo=MSK)

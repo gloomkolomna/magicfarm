@@ -4,6 +4,20 @@ import { api, type Meadow, type MeadowCell } from '../api/endpoints';
 import LocationMap from '../components/LocationMap';
 import Toast from '../components/Toast';
 
+function fmtCountdown(targetIso: string | null, now: number): string {
+  if (!targetIso) return '';
+  const target = new Date(targetIso).getTime();
+  const diff = target - now;
+  if (diff <= 0) return '';
+  const sec = Math.floor(diff / 1000);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h}ч ${m}м`;
+  if (m > 0) return `${m}м ${s}с`;
+  return `${s}с`;
+}
+
 export default function MeadowPage() {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
@@ -11,6 +25,7 @@ export default function MeadowPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [nowTs, setNowTs] = useState(() => Date.now());
 
   const fieldId = Number(id);
 
@@ -24,6 +39,10 @@ export default function MeadowPage() {
   }, [fieldId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const t = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
   useEffect(() => {
     if (!msg) return;
     const t = setTimeout(() => setMsg(null), 4000);
@@ -77,6 +96,11 @@ export default function MeadowPage() {
                   : cell.collected_today
                     ? 'rgba(120,140,110,0.28)'
                     : 'rgba(110,120,140,0.30)';
+                const emoji = cell.collected_today ? '🌱' : cell.available ? '🌿' : '💤';
+                const left = fmtCountdown(cell.countdown_to, nowTs);
+                const countdown = left
+                  ? (cell.available ? `⏳ ${left}` : cell.collected_today ? `🔁 ${left}` : `⏰ ${left}`)
+                  : '';
                 return (
                   <div
                     key={`cell-${c}-${r}`}
@@ -88,11 +112,16 @@ export default function MeadowPage() {
                       background: bg,
                       cursor: clickable ? 'pointer' : 'default',
                       touchAction: clickable ? 'manipulation' : 'auto',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 'clamp(18px, 6vw, 46px)', lineHeight: 1,
+                      display: 'flex', flexDirection: 'column', gap: 1,
+                      alignItems: 'center', justifyContent: 'center',
                     }}
                   >
-                    {cell.collected_today ? '🌱' : cell.available ? '🌿' : '💤'}
+                    <span style={{ fontSize: 'clamp(16px, 5vw, 38px)', lineHeight: 1 }}>{emoji}</span>
+                    {countdown && (
+                      <span style={{ fontSize: 'clamp(9px, 2.2vw, 12px)', fontWeight: 600, color: '#fff', textShadow: '0 1px 2px #000', lineHeight: 1.1 }}>
+                        {countdown}
+                      </span>
+                    )}
                   </div>
                 );
               }),

@@ -28,6 +28,7 @@ class MeadowCellOut(BaseModel):
     available: bool
     collected_today: bool
     next_open_at: str | None
+    countdown_to: str | None
     ingredients: list[IngredientOut]
 
 
@@ -66,16 +67,29 @@ def get_meadow(
     result = []
     for gc in cells:
         active = msk_time.window_active(gc.window, now)
+        collected_here = gc.id in collected
+        available = active and not collected_here
+
         next_open = None
-        if not active and gc.window != "always":
+        countdown_to = None
+        if available:
+            end = msk_time.window_end_at(gc.window, now)
+            if end is not None:
+                countdown_to = end.isoformat()
+        elif collected_here:
+            countdown_to = msk_time.next_midnight_msk(now).isoformat()
+        else:
             nxt = msk_time.next_open_at(gc.window, now)
             if nxt is not None:
                 next_open = nxt.isoformat()
+                countdown_to = nxt.isoformat()
+
         result.append(MeadowCellOut(
             id=gc.id, col=gc.col, row=gc.row, window=gc.window,
-            available=active and gc.id not in collected,
-            collected_today=gc.id in collected,
+            available=available,
+            collected_today=collected_here,
             next_open_at=next_open,
+            countdown_to=countdown_to,
             ingredients=[_ingredient_out(gci.ingredient) for gci in gc.ingredients],
         ))
     return MeadowOut(

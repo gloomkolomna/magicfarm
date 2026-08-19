@@ -169,3 +169,64 @@ def test_field_detail_pet_zone_with_settled_pet(admin_client):
         assert zones[0]["pet_id"] == 1
         assert zones[0]["pet_name"] == "Дракон Эфир"
         assert zones[0]["pet_image_url"] == "/uploads/pet_dragon.png"
+
+
+def test_pet_zone_survives_shrink_then_new_zone(admin_client):
+    """Баг: большая карта → уменьшили → новая зона питомца должна отдаваться в игре."""
+    fid = admin_client.post("/api/admin/fields", json={"name": "Лужайка", "cols": 10, "rows": 10, "field_kind": "lawn"}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}", json={"cols": 4, "rows": 4})
+
+    r = admin_client.post(f"/api/admin/fields/{fid}/pet-zones", data={"col1": 1, "row1": 1, "col2": 2, "row2": 2})
+    assert r.status_code == 201, r.text
+
+    with make_user_client(3100, "player") as c:
+        detail = c.get(f"/api/fields/{fid}").json()
+        assert detail["cols"] == 4 and detail["rows"] == 4
+        assert len(detail["pet_zones"]) == 1
+        z = detail["pet_zones"][0]
+        assert (z["col1"], z["row1"], z["col2"], z["row2"]) == (1, 1, 2, 2)
+        pet_cells = [c for c in detail["cells"] if c["kind"] == "pet"]
+        assert len(pet_cells) == 4
+
+
+def test_admin_places_pet_cell_player_sees_it(admin_client):
+    """Точечное размещение питомца на клетке: игрок должен видеть клетку питомца."""
+    fid = admin_client.post("/api/admin/fields", json={"name": "Лужайка", "cols": 10, "rows": 10, "field_kind": "lawn"}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}", json={"cols": 4, "rows": 4})
+
+    r = admin_client.put(f"/api/admin/fields/{fid}/cell/1/1", json={"kind": "pet"})
+    assert r.status_code == 200, r.text
+    assert r.json()["kind"] == "pet"
+
+    with make_user_client(3400, "player") as c:
+        detail = c.get(f"/api/fields/{fid}").json()
+        cells = {f"{x['col']},{x['row']}": x for x in detail["cells"]}
+        assert cells["1,1"]["kind"] == "pet"
+
+
+def test_pet_zone_settle_pet_after_shrink(admin_client):
+    """Баг: после уменьшения карты новая зона питомца + заселение питомца должны работать в игре."""
+    from models import Pet
+    from tests.conftest import TestingSessionLocal
+    fid = admin_client.post("/api/admin/fields", json={"name": "Лужайка", "cols": 10, "rows": 10, "field_kind": "lawn"}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}", json={"cols": 4, "rows": 4})
+    r = admin_client.post(f"/api/admin/fields/{fid}/pet-zones", data={"col1": 1, "row1": 1, "col2": 2, "row2": 2})
+    assert r.status_code == 201, r.text
+
+    s = TestingSessionLocal()
+    try:
+        pet = s.query(Pet).filter(Pet.id == 1).first()
+        pet.image_url = "/uploads/pet_dragon.png"
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(3200, "player") as c:
+        detail = c.get(f"/api/fields/{fid}").json()
+        assert detail["pet_zones"][0]["pet_id"] is None
+        cell = [x for x in detail["cells"] if x["kind"] == "pet"][0]
+        assert c.post(f"/api/pets/cells/{cell['id']}/settle", json={"pet_id": 1}).status_code == 201
+        _report_settle(c, 1, cell_id=cell["id"])
+        detail = c.get(f"/api/fields/{fid}").json()
+        assert detail["pet_zones"][0]["pet_id"] == 1
+        assert detail["pet_zones"][0]["pet_name"] == "Дракон Эфир"

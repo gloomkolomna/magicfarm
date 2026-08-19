@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import require_role
 from models import (
-    PATIENT_LEVELS, Disease, DiseaseSymptom, Ingredient, PatientAnimal, Plant, Remedy,
-    RemedyRecipeItem, User,
+    PATIENT_LEVELS, Disease, DiseaseSymptom, Field, Ingredient, PatientAnimal, Plant,
+    Remedy, RemedyRecipeItem, User,
 )
 from routes.admin_catalog import _auto_code, _unique_code
 from services.uploads import remove_upload, save_upload
@@ -263,6 +263,19 @@ def _validate_remedy(remedy_id: int | None, db: Session) -> None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Мазь не найдена")
 
 
+def _validate_patient_field(field_id: int | None, db: Session) -> None:
+    if field_id is None:
+        return
+    f = db.query(Field).filter(Field.id == field_id).first()
+    if f is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Локация не найдена")
+    if f.field_kind != "infirmary":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Пациента можно привязать только к локации типа «Лесная лечебница»",
+        )
+
+
 @router.get("/diseases", response_model=list[DiseaseOut])
 def list_diseases(
     db: Session = Depends(get_db),
@@ -368,6 +381,7 @@ def create_patient(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Уровень должен быть одним из: {', '.join(map(str, PATIENT_LEVELS))}")
     if req.disease_id is not None and db.query(Disease).filter(Disease.id == req.disease_id).first() is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Болезнь не найдена")
+    _validate_patient_field(req.field_id, db)
     code = _unique_code(_auto_code(req.name, "patient"), PatientAnimal, db)
     p = PatientAnimal(
         code=code, name=req.name.strip(), level=req.level,
@@ -402,6 +416,7 @@ def update_patient(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Болезнь не найдена")
         p.disease_id = req.disease_id
     if req.field_id is not None:
+        _validate_patient_field(req.field_id, db)
         p.field_id = req.field_id
     db.commit()
     db.refresh(p)

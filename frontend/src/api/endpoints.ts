@@ -618,6 +618,7 @@ export interface MeadowCell {
   available: boolean;
   collected_today: boolean;
   next_open_at: string | null;
+  countdown_to: string | null;
   ingredients: Ingredient[];
 }
 

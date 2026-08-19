@@ -101,6 +101,42 @@ def test_meadow_cell_collected_today(monkeypatch, admin_client):
         assert cell["available"] is False
 
 
+def test_meadow_cell_countdown_when_available(monkeypatch, admin_client):
+    iid = _seed_ingredient("Роса")
+    fid = _seed_meadow_field()
+    _seed_gather_cell(fid, 0, 0, "morning", [iid])
+    monkeypatch.setattr("services.msk_time.now_msk", lambda: _msk_dt(6))
+    with make_user_client(123, "player") as c:
+        cell = c.get(f"/api/meadow/{fid}").json()["cells"][0]
+        assert cell["available"] is True
+        assert cell["countdown_to"] == _msk_dt(10).isoformat()
+
+
+def test_meadow_cell_countdown_when_sleeping(monkeypatch, admin_client):
+    iid = _seed_ingredient("Роса")
+    fid = _seed_meadow_field()
+    _seed_gather_cell(fid, 0, 0, "morning", [iid])
+    monkeypatch.setattr("services.msk_time.now_msk", lambda: _msk_dt(12))
+    with make_user_client(123, "player") as c:
+        cell = c.get(f"/api/meadow/{fid}").json()["cells"][0]
+        assert cell["available"] is False
+        assert cell["next_open_at"]
+        assert cell["countdown_to"] == cell["next_open_at"]
+
+
+def test_meadow_cell_countdown_when_collected(monkeypatch, admin_client):
+    from services.msk_time import MSK
+    iid = _seed_ingredient("Роса")
+    fid = _seed_meadow_field()
+    gc_id = _seed_gather_cell(fid, 0, 0, "always", [iid])
+    monkeypatch.setattr("services.msk_time.now_msk", lambda: _msk_dt(12))
+    with make_user_client(123, "player") as c:
+        c.post(f"/api/meadow/cells/{gc_id}/gather")
+        cell = c.get(f"/api/meadow/{fid}").json()["cells"][0]
+        assert cell["collected_today"] is True
+        assert cell["countdown_to"] == datetime(2026, 8, 19, tzinfo=MSK).isoformat()
+
+
 def test_meadow_wrong_field_kind(admin_client):
     from models import Field
     s = TestingSessionLocal()

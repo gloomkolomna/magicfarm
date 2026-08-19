@@ -191,6 +191,31 @@ def test_admin_create_patient_level_validation(admin_client):
     assert r.status_code == 400
 
 
+def test_admin_create_patient_unknown_field_400(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    r = admin_client.post("/api/admin/patients", json={"name": "Лис", "level": 1, "disease_id": did, "field_id": 9999})
+    assert r.status_code == 400
+
+
+def test_admin_create_patient_non_infirmary_field_400(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    fid = admin_client.post(
+        "/api/admin/fields", json={"name": "Грядки", "cols": 3, "rows": 2, "field_kind": "garden_beds"}
+    ).json()["id"]
+    r = admin_client.post("/api/admin/patients", json={"name": "Лис", "level": 1, "disease_id": did, "field_id": fid})
+    assert r.status_code == 400
+
+
+def test_admin_create_patient_ok_infirmary_field(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    fid = admin_client.post(
+        "/api/admin/fields", json={"name": "Лечебница", "cols": 3, "rows": 2, "field_kind": "infirmary"}
+    ).json()["id"]
+    r = admin_client.post("/api/admin/patients", json={"name": "Лис", "level": 1, "disease_id": did, "field_id": fid})
+    assert r.status_code == 201
+    assert r.json()["field_id"] == fid
+
+
 def test_part_cell_requires_patient(admin_client):
     fid = _seed_infirmary_field()
     r = admin_client.post(f"/api/admin/fields/{fid}/part-cells", json={"col": 0, "row": 0, "part_code": "nose"})

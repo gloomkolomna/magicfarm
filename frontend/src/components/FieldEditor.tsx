@@ -441,6 +441,20 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     }
   }
 
+  async function deletePetZone(zoneId: number) {
+    if (!(await confirmDialog('Удалить зону питомца?'))) return;
+    setBusy(true);
+    try {
+      await api.adminDeletePetZone(fieldId, zoneId);
+      await load();
+      setMsg('✓ Зона удалена');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function togglePotionRecipe(rid: number) {
     if (!field) return;
     const next = new Set(allowedPotionRecipeIds);
@@ -966,6 +980,32 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 </button>
               </div>
             ))}
+          </div>
+        </>
+      )}
+
+      {/* Зоны питомцев */}
+      {field?.field_kind === 'lawn' && (
+        <>
+          <h3>🐾 Зоны питомцев</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Кистью «Питомец» выделите прямоугольник и нажмите «Разместить зону».
+          </p>
+          <div className="fm-grid" style={{ marginBottom: 14 }}>
+            {(field.pet_zones ?? []).map((z: PetZone) => (
+              <div key={z.id} className="fm-card">
+                <strong>🐾 Зона питомца</strong>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {z.col2 - z.col1 + 1}×{z.row2 - z.row1 + 1} · [{z.col1},{z.row1}]
+                </div>
+                <button className="fm-btn fm-btn-sm fm-btn-danger" style={{ marginTop: 8, width: '100%' }} disabled={busy} onClick={() => deletePetZone(z.id)}>
+                  Удалить
+                </button>
+              </div>
+            ))}
+            {(field.pet_zones ?? []).length === 0 && (
+              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Зон пока нет — разместите кистью выше.</div>
+            )}
           </div>
         </>
       )}
