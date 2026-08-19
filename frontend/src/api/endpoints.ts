@@ -1502,6 +1502,12 @@ export const api = {
   // ── Настройки: фон ──
   getBackground: () => client.get<{ url: string }>('/settings/background').then((r) => r.data),
   setBackground: (url: string) => client.put<{ url: string }>('/settings/background', { url }).then((r) => r.data),
+  getInfirmaryBackground: () => client.get<{ url: string }>('/settings/infirmary-background').then((r) => r.data),
+  adminUploadInfirmaryBackground: (file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<{ url: string }>('/admin/infirmary-background', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
 
   // ── Скотный двор ──
   animalsAvailable: () => client.get<Animal[]>('/animals').then((r) => r.data),

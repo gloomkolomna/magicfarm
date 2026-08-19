@@ -231,6 +231,7 @@ export default function AdminPage() {
   const [diseaseEditingId, setDiseaseEditingId] = useState<number | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [animalTypes, setAnimalTypes] = useState<ClinicAnimalType[]>([]);
+  const [infirmaryBg, setInfirmaryBg] = useState<string>('');
   const [animalTypeForm, setAnimalTypeForm] = useState<{ name: string; emoji: string }>({ name: '', emoji: '' });
   const [animalTypeEditingId, setAnimalTypeEditingId] = useState<number | null>(null);
   const [patientForm, setPatientForm] = useState<{ name: string; level: string; diseaseId: string; animalTypeId: string }>({ name: '', level: '1', diseaseId: '', animalTypeId: '' });
@@ -1037,12 +1038,14 @@ export default function AdminPage() {
   }
   async function loadInfirmary() {
     try {
-      const [r, d, p, at, ing] = await Promise.all([
+      const [r, d, p, at, ing, bg] = await Promise.all([
         api.adminRemedies(), api.adminDiseases(), api.adminPatients(),
         api.adminAnimalTypes().catch(() => [] as ClinicAnimalType[]),
         api.ingredients().catch(() => [] as Ingredient[]),
+        api.getInfirmaryBackground().catch(() => ({ url: '' })),
       ]);
       setRemedies(r); setDiseases(d); setPatients(p); setAnimalTypes(at); setIngredients(ing);
+      setInfirmaryBg(bg.url || '');
     } catch { /* ignore */ }
   }
   async function saveRemedy() {
@@ -1164,6 +1167,15 @@ export default function AdminPage() {
       await api.adminUploadFieldMap(fieldId, file);
       await loadInfirmary();
       setMsg('✓ Картинка сцены загружена');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function uploadInfirmaryBg(file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      const res = await api.adminUploadInfirmaryBackground(file);
+      setInfirmaryBg(res.url);
+      setMsg('✓ Фон лечебницы загружен');
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
@@ -1310,6 +1322,17 @@ export default function AdminPage() {
         </>)}
 
         {infirmaryTab === 'locations' && (<>
+        <div className="fm-card" style={{ marginBottom: 10 }}>
+          <h3 style={{ marginTop: 0 }}>🖼️ Фон лечебницы</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Изображение будет задним фоном для лечебницы и её подстраниц: сцен, лаборатории снадобий, поляны и лавки.
+          </p>
+          {infirmaryBg && (
+            <img src={infirmaryBg} alt="Фон лечебницы" style={{ maxWidth: 200, maxHeight: 120, objectFit: 'cover', borderRadius: 8, marginBottom: 8, display: 'block' }} />
+          )}
+          <label className="fm-btn" style={{ cursor: 'pointer', display: 'inline-block' }}>⬆ Загрузить фон<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadInfirmaryBg(f); }} /></label>
+        </div>
+
         <div className="fm-card" style={{ marginBottom: 10 }}>
           <h3 style={{ marginTop: 0 }}>🌲 Локации Лечебницы</h3>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>

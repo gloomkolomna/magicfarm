@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, type ApothecaryItem, type BarterResult, type Shop, type ShopCell } from '../api/endpoints';
+import InfirmaryBackground from '../components/InfirmaryBackground';
 import LocationMap from '../components/LocationMap';
 import Toast from '../components/Toast';
 
@@ -81,6 +82,7 @@ export default function ShopPage() {
 
   return (
     <>
+      <InfirmaryBackground />
       <LocationMap mapUrl={shop?.map_url ?? null} name={shop?.name ?? ''} emoji="🛒" onBack={() => nav('/infirmary')}>
         {shop && (
           <div

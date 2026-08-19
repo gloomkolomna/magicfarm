@@ -8,12 +8,14 @@ from db import get_db
 from deps import require_role
 from models import (
     PATIENT_LEVELS, ClinicAnimalType, Disease, DiseaseSymptom, Field, Ingredient, PatientAnimal,
-    Plant, Remedy, RemedyRecipeItem, User,
+    Plant, Remedy, RemedyRecipeItem, Setting, User,
 )
 from routes.admin_catalog import _auto_code, _unique_code
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/admin", tags=["admin-infirmary"])
+
+INFIRMARY_BG_KEY = "infirmary_background_url"
 
 INFIRMARY_STAGE_LABELS = {
     "sick": "Больное",
@@ -611,3 +613,21 @@ def upload_patient_animal_image(
     db.commit()
     db.refresh(p)
     return _patient_out(p)
+
+
+@router.put("/infirmary-background")
+def upload_infirmary_background(
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    url = save_upload(image, "infirmary_bg", max_size=1400)
+    s = db.query(Setting).filter(Setting.key == INFIRMARY_BG_KEY).first()
+    if s is None:
+        s = Setting(key=INFIRMARY_BG_KEY, value=url)
+        db.add(s)
+    else:
+        remove_upload(s.value)
+        s.value = url
+    db.commit()
+    return {"url": url}

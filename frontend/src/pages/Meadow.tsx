@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, type Meadow, type MeadowCell } from '../api/endpoints';
+import InfirmaryBackground from '../components/InfirmaryBackground';
 import LocationMap from '../components/LocationMap';
 import Toast from '../components/Toast';
 
@@ -77,6 +78,7 @@ export default function MeadowPage() {
 
   return (
     <>
+      <InfirmaryBackground />
       <LocationMap mapUrl={meadow?.map_url ?? null} name={meadow?.name ?? ''} emoji="🌿" onBack={() => nav('/infirmary')}>
         {meadow && (
           <div

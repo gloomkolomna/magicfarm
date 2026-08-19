@@ -651,6 +651,23 @@ def test_admin_upload_disease_image(admin_client, uploads_tmp):
         assert d["image_url"].startswith("/api/uploads/disease_")
 
 
+def test_admin_upload_infirmary_background(admin_client, uploads_tmp):
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (100, 60), (90, 60, 120)).save(buf, format="PNG")
+
+    r = admin_client.put(
+        "/api/admin/infirmary-background",
+        files={"image": ("bg.png", io.BytesIO(buf.getvalue()), "image/png")},
+    )
+    assert r.status_code == 200
+    url = r.json()["url"]
+    assert url.startswith("/api/uploads/")
+
+    with make_user_client(123, "player") as c:
+        assert c.get("/api/settings/infirmary-background").json()["url"] == url
+
+
 # ── Стадии пациента: sick → diagnosed → treated → released ──
 
 def test_infirmary_status_progression_scenes(admin_client):

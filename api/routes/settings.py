@@ -43,6 +43,7 @@ SALE_PRICE_RATIO_KEY = "sale_price_ratio"
 DEFAULT_SALE_RATIO = 0.5
 
 DEFAULT_BG_KEY = "default_background_url"
+INFIRMARY_BG_KEY = "infirmary_background_url"
 
 
 CRYSTAL_COLORS = ("green", "blue", "violet")
@@ -236,6 +237,12 @@ class BackgroundUpdate(BaseModel):
 @router.get("/settings/background")
 def get_background(db: Session = Depends(get_db)):
     s = db.query(Setting).filter(Setting.key == DEFAULT_BG_KEY).first()
+    return {"url": s.value if s else ""}
+
+
+@router.get("/settings/infirmary-background")
+def get_infirmary_background(db: Session = Depends(get_db)):
+    s = db.query(Setting).filter(Setting.key == INFIRMARY_BG_KEY).first()
     return {"url": s.value if s else ""}
 
 

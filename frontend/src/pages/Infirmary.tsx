@@ -5,6 +5,7 @@ import type { Swiper as SwiperInstance } from 'swiper';
 import 'swiper/css';
 import { api, BODY_PART_LABELS, type DiagnoseResult, type HandbookDisease, type Infirmary, type InfirmaryDetail, type InfirmaryZone } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import InfirmaryBackground from '../components/InfirmaryBackground';
 import LocationMap from '../components/LocationMap';
 import Toast from '../components/Toast';
 
@@ -50,7 +51,9 @@ export default function InfirmaryHubPage() {
     : (current?.scenes[0] ?? null);
 
   return (
-    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
+    <>
+      <InfirmaryBackground />
+      <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>🌲 Лесная лечебница</h1>
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
@@ -141,7 +144,8 @@ export default function InfirmaryHubPage() {
           </div>
         </div>
       ))}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -253,6 +257,7 @@ export function InfirmaryScenePage() {
 
   return (
     <>
+      <InfirmaryBackground />
       <LocationMap mapUrl={detail?.map_url ?? null} name={detail?.name ?? ''} emoji="🌲" onBack={() => nav('/infirmary')}>
         {detail && (
           <div

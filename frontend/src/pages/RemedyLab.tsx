@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, type RemedyLab } from '../api/endpoints';
+import InfirmaryBackground from '../components/InfirmaryBackground';
 import Toast from '../components/Toast';
 
 export default function RemedyLabPage() {
@@ -47,7 +48,9 @@ export default function RemedyLabPage() {
   }
 
   return (
-    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
+    <>
+      <InfirmaryBackground />
+      <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
         <button className="fm-btn fm-btn-outline fm-btn-xs" onClick={() => nav('/infirmary')}>← Назад</button>
         <h1 style={{ margin: 0, fontSize: 20, flex: 1 }}>⚗️ {lab?.name}</h1>
@@ -106,6 +109,7 @@ export default function RemedyLabPage() {
           <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Склад пуст.</div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
