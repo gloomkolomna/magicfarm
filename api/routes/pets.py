@@ -46,11 +46,49 @@ def _up_out(up: UserPet) -> UserPetOut:
     )
 
 
+def _repair_pet_cells(user: User, db: Session) -> None:
+    """Чинит битые привязки user_pets.cell_id после переразметки pet-клеток.
+
+    Клетка, которая не является pet-клеткой (или не существует), сбрасывается;
+    питомцы без клетки автоматически заселяются в первую свободную pet-клетку Лужаек.
+    """
+    from models import Field, FieldCell
+
+    ups = db.query(UserPet).filter(UserPet.user_id == user.vk_id).all()
+    if not ups:
+        return
+
+    changed = False
+    for up in ups:
+        if up.cell_id is not None:
+            cell = db.query(FieldCell).filter(FieldCell.id == up.cell_id).first()
+            if cell is None or cell.kind != "pet":
+                up.cell_id = None
+                changed = True
+
+    occupied = {up.cell_id for up in ups if up.cell_id is not None}
+    free_cells = [
+        c.id for c in db.query(FieldCell).join(Field, Field.id == FieldCell.field_id)
+        .filter(Field.field_kind == "lawn", FieldCell.kind == "pet")
+        .order_by(FieldCell.id.asc()).all()
+        if c.id not in occupied
+    ]
+
+    for up in ups:
+        if up.cell_id is None and free_cells:
+            up.cell_id = free_cells.pop(0)
+            changed = True
+
+    if changed:
+        db.commit()
+
+
 @router.get("", response_model=list[UserPetOut])
 def list_pets(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    _repair_pet_cells(user, db)
     rows = db.query(UserPet).filter(UserPet.user_id == user.vk_id).all()
     return [_up_out(up) for up in rows]
 

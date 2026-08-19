@@ -309,3 +309,30 @@ def test_pet_zone_settle_pet_after_shrink(admin_client):
         detail = c.get(f"/api/fields/{fid}").json()
         assert detail["pet_zones"][0]["pet_id"] == 1
         assert detail["pet_zones"][0]["pet_name"] == "Дракон Эфир"
+
+
+def test_pet_repair_broken_cell(admin_client):
+    """Питомец с битой привязкой (клетки нет) при загрузке заселяется в свободную pet-клетку."""
+    from models import UserPet
+    from tests.conftest import TestingSessionLocal
+    fid, cell_id = _make_pet_cell(admin_client)
+
+    s = TestingSessionLocal()
+    try:
+        s.add(UserPet(user_id=123, pet_id=1, cell_id=99999))
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as c:
+        pets = c.get("/api/pets").json()
+        assert len(pets) == 1
+        assert pets[0]["pet_id"] == 1
+        assert pets[0]["cell_id"] == cell_id
+
+    s = TestingSessionLocal()
+    try:
+        up = s.query(UserPet).filter(UserPet.user_id == 123, UserPet.pet_id == 1).first()
+        assert up.cell_id == cell_id
+    finally:
+        s.close()

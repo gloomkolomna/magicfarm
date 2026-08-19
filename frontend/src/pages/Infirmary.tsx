@@ -165,7 +165,6 @@ export function InfirmaryScenePage() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewScale, setPreviewScale] = useState(1);
   const [previewPan, setPreviewPan] = useState({ x: 0, y: 0 });
-  const previewDrag = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
   const previewBoxRef = useRef<HTMLDivElement | null>(null);
   const previewImgRef = useRef<HTMLImageElement | null>(null);
   const [swiper, setSwiper] = useState<SwiperInstance | null>(null);
@@ -458,29 +457,36 @@ export function InfirmaryScenePage() {
             style={{ overflow: 'hidden', height: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, touchAction: 'none', cursor: previewScale > 1 ? 'grab' : 'default' }}
             onPointerDown={(e) => {
               if (previewScale <= 1) return;
-              previewDrag.current = { startX: e.clientX, startY: e.clientY, baseX: previewPan.x, baseY: previewPan.y };
-              (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+              e.preventDefault();
+              const startX = e.clientX;
+              const startY = e.clientY;
+              const baseX = previewPan.x;
+              const baseY = previewPan.y;
+              const onMove = (ev: PointerEvent) => {
+                const dx = ev.clientX - startX;
+                const dy = ev.clientY - startY;
+                const box = previewBoxRef.current;
+                const img = previewImgRef.current;
+                let maxX = 0;
+                let maxY = 0;
+                if (box && img) {
+                  maxX = Math.max(0, (img.clientWidth * previewScale - box.clientWidth) / 2);
+                  maxY = Math.max(0, (img.clientHeight * previewScale - box.clientHeight) / 2);
+                }
+                setPreviewPan({
+                  x: Math.max(-maxX, Math.min(maxX, baseX + dx)),
+                  y: Math.max(-maxY, Math.min(maxY, baseY + dy)),
+                });
+              };
+              const onUp = () => {
+                window.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+                window.removeEventListener('pointercancel', onUp);
+              };
+              window.addEventListener('pointermove', onMove);
+              window.addEventListener('pointerup', onUp);
+              window.addEventListener('pointercancel', onUp);
             }}
-            onPointerMove={(e) => {
-              const d = previewDrag.current;
-              if (!d) return;
-              const dx = e.clientX - d.startX;
-              const dy = e.clientY - d.startY;
-              const box = previewBoxRef.current;
-              const img = previewImgRef.current;
-              let maxX = 0;
-              let maxY = 0;
-              if (box && img) {
-                maxX = Math.max(0, (img.clientWidth * previewScale - box.clientWidth) / 2);
-                maxY = Math.max(0, (img.clientHeight * previewScale - box.clientHeight) / 2);
-              }
-              setPreviewPan({
-                x: Math.max(-maxX, Math.min(maxX, d.baseX + dx)),
-                y: Math.max(-maxY, Math.min(maxY, d.baseY + dy)),
-              });
-            }}
-            onPointerUp={() => { previewDrag.current = null; }}
-            onPointerCancel={() => { previewDrag.current = null; }}
           >
             <img
               ref={previewImgRef}
@@ -492,7 +498,7 @@ export function InfirmaryScenePage() {
                 maxHeight: '100%',
                 objectFit: 'contain',
                 transform: `translate(${previewPan.x}px, ${previewPan.y}px) scale(${previewScale})`,
-                transition: previewDrag.current ? 'none' : 'transform 0.15s ease',
+                transition: 'transform 0.15s ease',
                 borderRadius: 10,
                 userSelect: 'none',
                 WebkitUserSelect: 'none',
