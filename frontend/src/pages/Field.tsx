@@ -802,7 +802,7 @@ export default function FieldPage() {
                             <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.plant_emoji}</div>
                           )}
                           {cell.plot && (
-                            <div style={{ fontSize: 11, color: '#fff', pointerEvents: 'none', fontWeight: 600, background: 'rgba(10,16,8,0.6)', borderRadius: 6, padding: '1px 5px', whiteSpace: 'nowrap', maxWidth: '94%', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 1 }}>
+                            <div style={{ flexShrink: 0, fontSize: 11, color: '#fff', pointerEvents: 'none', fontWeight: 600, background: 'rgba(10,16,8,0.6)', borderRadius: 6, padding: '3px 6px', maxWidth: '94%', textAlign: 'center', lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'anywhere', marginBottom: 1 }}>
                               {cell.plot.required > 0 ? `❎ ${cell.plot.norm_per_unit ?? cell.plot.required}/шт` : cell.plot.plant_name}
                             </div>
                           )}
@@ -1040,7 +1040,7 @@ export default function FieldPage() {
                       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9vw', lineHeight: 1, pointerEvents: 'none' }}>{pb.plant_emoji}</div>
                     )}
                     {occupied && pb.plot && (
-                      <div style={{ position: 'absolute', left: 2, right: 2, bottom: 2, textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#fff', background: 'rgba(10,16,8,0.6)', borderRadius: 4, padding: '1px 4px', pointerEvents: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ position: 'absolute', left: 2, right: 2, bottom: 2, textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#fff', background: 'rgba(10,16,8,0.6)', borderRadius: 4, padding: '3px 4px', pointerEvents: 'none', lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
                         {pb.plot.required > 0 ? `❎ ${pb.plot.norm_per_unit ?? pb.plot.required}/шт` : pb.plot.plant_name}
                       </div>
                     )}
