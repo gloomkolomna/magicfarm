@@ -3,7 +3,7 @@ import { api, BODY_PARTS, type Animal, type BreweryZone, type FieldCell, type Fi
 import { mediaUrl } from '../api/media';
 import { confirmDialog } from './Confirm';
 
-type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house' | 'brew_cauldron' | 'brew_jar' | 'brew_ingredient' | 'brew_card' | 'gather' | 'trade' | 'body_part' | 'inf_animal' | 'inf_book';
+type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house' | 'brew_cauldron' | 'brew_jar' | 'brew_ingredient' | 'brew_card' | 'gather' | 'trade' | 'body_part' | 'inf_book';
 
 function isTentBrush(b: Brush) {
   return b === 'tent' || b === 'house';
@@ -14,7 +14,7 @@ function isBrewMultiBrush(b: Brush) {
 }
 
 function isInfirmaryZoneBrush(b: Brush) {
-  return b === 'inf_animal' || b === 'inf_book';
+  return b === 'inf_book';
 }
 
 const BREW_ZONE_LABEL: Record<string, string> = {
@@ -313,10 +313,10 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         setMsg('✓ Зона зельеварни размещена');
       } else if (isInfirmaryZoneBrush(brush)) {
         await api.adminCreateInfirmaryZone(fieldId, {
-          zone_kind: brush === 'inf_animal' ? 'animal' : 'book',
+          zone_kind: 'book',
           col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2,
         });
-        setMsg(brush === 'inf_animal' ? '✓ Зона животного размещена' : '✓ Зона книги размещена');
+        setMsg('✓ Зона книги размещена');
       } else {
         await api.adminCreateTent(
           fieldId,
@@ -724,7 +724,6 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           return (
             <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
               <BrushBtn active={brush === 'body_part'} onClick={() => setBrush('body_part')}>🔍 Часть тела</BrushBtn>
-              <BrushBtn active={brush === 'inf_animal'} onClick={() => setBrush('inf_animal')}>🐾 Животное</BrushBtn>
               <BrushBtn active={brush === 'inf_book'} onClick={() => setBrush('inf_book')}>📖 Книга</BrushBtn>
             </div>
           );
@@ -748,9 +747,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           : brush === 'trade'
           ? 'Тап по клетке открывает настройку бартера: список ингредиентов, доступных к обмену.'
           : brush === 'body_part'
-          ? 'Тап по клетке открывает настройку части тела: код части (например, nose, ear, tail).'
-          : brush === 'inf_animal'
-          ? 'Выделите клетки под зону больного животного — на ней игрок увидит картинку пациента.'
+          ? 'Тап по клетке открывает настройку части тела: выберите часть из списка и сохраните.'
           : brush === 'inf_book'
           ? 'Выделите клетки под книгу — при тапе игрок увидит таблицу симптомов и болезней.'
           : brush === 'bed' && field?.plant_category === 'orchard'
@@ -878,7 +875,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           {field.infirmary_zones?.map((z) => {
             const zw = (z.col2 - z.col1 + 1) * sz;
             const zh = (z.row2 - z.row1 + 1) * sz;
-            const label = z.zone_kind === 'animal' ? '🐾 Животное' : '📖 Книга';
+            const label = '📖 Книга';
             return (
               <g key={`iz-${z.id}`} style={{ pointerEvents: 'none' }}>
                 <rect
@@ -950,7 +947,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
 
       {(isTentBrush(brush) || isBrewMultiBrush(brush) || isInfirmaryZoneBrush(brush) || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && (
         <button className="fm-btn fm-btn-sm" style={{ marginBottom: 10 }} disabled={busy || multiDraft.size === 0} onClick={openMultiModal}>
-          {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону' : brush === 'brew_cauldron' ? '🍲 Разместить место котла' : brush === 'brew_jar' ? '🧪 Разместить банку' : brush === 'brew_card' ? '🃏 Разместить карточку' : brush === 'inf_animal' ? '🐾 Разместить зону животного' : '📖 Разместить книгу'} ({multiDraft.size})
+          {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону' : brush === 'brew_cauldron' ? '🍲 Разместить место котла' : brush === 'brew_jar' ? '🧪 Разместить банку' : brush === 'brew_card' ? '🃏 Разместить карточку' : '📖 Разместить книгу'} ({multiDraft.size})
         </button>
       )}
 
@@ -1196,17 +1193,17 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         </>
       )}
 
-      {/* Зоны лечебницы (животное / книга) */}
+      {/* Зона книги (лесная лечебница) */}
       {field?.field_kind === 'infirmary' && (
         <>
-          <h3>🏥 Зоны лечебницы</h3>
+          <h3>📖 Зона книги</h3>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
-            Кистями «Животное» и «Книга» выделите прямоугольники на карте.
+            Кистью «Книга» выделите прямоугольник на карте — при тапе игрок увидит справочник болезней.
           </p>
           <div className="fm-grid" style={{ marginBottom: 14 }}>
             {(field.infirmary_zones ?? []).map((z) => (
               <div key={z.id} className="fm-card">
-                <strong>{z.zone_kind === 'animal' ? '🐾 Животное' : '📖 Книга'}</strong>
+                <strong>📖 Книга</strong>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                   {z.col2 - z.col1 + 1}×{z.row2 - z.row1 + 1} · [{z.col1},{z.row1}]
                 </div>
@@ -1216,7 +1213,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
               </div>
             ))}
             {(field.infirmary_zones ?? []).length === 0 && (
-              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Зон пока нет — разместите кистями выше.</div>
+              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Зон книги пока нет — разместите кистью выше.</div>
             )}
           </div>
         </>
@@ -1401,7 +1398,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'calc(var(--shell-max-width) * 0.7)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <h3 style={{ margin: 0 }}>
-                {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом ведьмы' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону питомца' : brush === 'brew_cauldron' ? '🍲 Место котла' : brush === 'brew_jar' ? '🧪 Банка зелья' : brush === 'brew_card' ? '🃏 Карточка рецепта' : brush === 'inf_animal' ? '🐾 Зона животного' : '📖 Зона книги'}
+                {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом ведьмы' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону питомца' : brush === 'brew_cauldron' ? '🍲 Место котла' : brush === 'brew_jar' ? '🧪 Банка зелья' : brush === 'brew_card' ? '🃏 Карточка рецепта' : '📖 Зона книги'}
               </h3>
               <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setMultiModal(null)}>✕</button>
             </div>
@@ -1449,7 +1446,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
               </>
             ) : isInfirmaryZoneBrush(brush) ? (
               <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                {brush === 'inf_animal' ? 'На этих клетках игрок увидит картинку больного животного (стадии меняются по ходу лечения).' : 'Тап по этим клеткам откроет таблицу симптомов и болезней.'}
+                Тап по этим клеткам откроет таблицу симптомов и болезней.
               </p>
             ) : (
               <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>

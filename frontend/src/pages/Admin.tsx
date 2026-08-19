@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, BODY_PARTS, BODY_PART_LABELS, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport } from '../api/endpoints';
+import { api, BODY_PARTS, BODY_PART_LABELS, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import Toast from '../components/Toast';
@@ -230,7 +230,10 @@ export default function AdminPage() {
   const [diseaseSymText, setDiseaseSymText] = useState('');
   const [diseaseEditingId, setDiseaseEditingId] = useState<number | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [patientForm, setPatientForm] = useState<{ name: string; level: string; diseaseId: string; fieldId: string }>({ name: '', level: '1', diseaseId: '', fieldId: '' });
+  const [animalTypes, setAnimalTypes] = useState<ClinicAnimalType[]>([]);
+  const [animalTypeForm, setAnimalTypeForm] = useState<{ name: string; emoji: string }>({ name: '', emoji: '' });
+  const [animalTypeEditingId, setAnimalTypeEditingId] = useState<number | null>(null);
+  const [patientForm, setPatientForm] = useState<{ name: string; level: string; diseaseId: string; animalTypeId: string }>({ name: '', level: '1', diseaseId: '', animalTypeId: '' });
   const [patientEditingId, setPatientEditingId] = useState<number | null>(null);
 
   // ── Рецепты библиотеки ──
@@ -1027,11 +1030,12 @@ export default function AdminPage() {
   }
   async function loadInfirmary() {
     try {
-      const [r, d, p, ing] = await Promise.all([
+      const [r, d, p, at, ing] = await Promise.all([
         api.adminRemedies(), api.adminDiseases(), api.adminPatients(),
+        api.adminAnimalTypes().catch(() => [] as ClinicAnimalType[]),
         api.ingredients().catch(() => [] as Ingredient[]),
       ]);
-      setRemedies(r); setDiseases(d); setPatients(p); setIngredients(ing);
+      setRemedies(r); setDiseases(d); setPatients(p); setAnimalTypes(at); setIngredients(ing);
     } catch { /* ignore */ }
   }
   async function saveRemedy() {
@@ -1082,32 +1086,59 @@ export default function AdminPage() {
     if (!patientForm.name.trim()) { setMsg('✗ Введите название'); return; }
     setBusy(true); setMsg(null);
     try {
-      const data = { name: patientForm.name.trim(), level: Number(patientForm.level) || 1, disease_id: patientForm.diseaseId ? Number(patientForm.diseaseId) : null, field_id: patientForm.fieldId ? Number(patientForm.fieldId) : null };
+      const data = { name: patientForm.name.trim(), level: Number(patientForm.level) || 1, disease_id: patientForm.diseaseId ? Number(patientForm.diseaseId) : null, animal_type_id: patientForm.animalTypeId ? Number(patientForm.animalTypeId) : null };
       if (patientEditingId) await api.adminUpdatePatient(patientEditingId, data);
       else await api.adminCreatePatient(data);
       await loadInfirmary();
-      setPatientForm({ name: '', level: '1', diseaseId: '', fieldId: '' });
+      setPatientForm({ name: '', level: '1', diseaseId: '', animalTypeId: '' });
       setPatientEditingId(null);
-      setMsg('✓ Сохранено');
+      setMsg('✓ Сохранено (созданы 3 сцены: больное / на лечении / здоровое)');
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
   async function deletePatient(id: number) {
-    if (!(await confirmDialog('Удалить пациента?'))) return;
+    if (!(await confirmDialog('Удалить пациента и его сцены?'))) return;
     setBusy(true); setMsg(null);
     try { await api.adminDeletePatient(id); await loadInfirmary(); setMsg('✓ Удалено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
-  async function uploadPatientImage(id: number, file: File, kind: 'image' | 'card' | 'hospital' | 'healthy') {
+  async function saveAnimalType() {
+    if (!animalTypeForm.name.trim()) { setMsg('✗ Введите название'); return; }
     setBusy(true); setMsg(null);
     try {
-      if (kind === 'card') await api.adminUploadPatientCardImage(id, file);
-      else if (kind === 'hospital') await api.adminUploadPatientHospitalImage(id, file);
-      else if (kind === 'healthy') await api.adminUploadPatientHealthyImage(id, file);
-      else await api.adminUploadPatientImage(id, file);
+      const data = { name: animalTypeForm.name.trim(), emoji: animalTypeForm.emoji || null };
+      if (animalTypeEditingId) await api.adminUpdateAnimalType(animalTypeEditingId, data);
+      else await api.adminCreateAnimalType(data);
+      await loadInfirmary();
+      setAnimalTypeForm({ name: '', emoji: '' });
+      setAnimalTypeEditingId(null);
+      setMsg('✓ Тип сохранён');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function deleteAnimalType(id: number) {
+    if (!(await confirmDialog('Удалить тип животного?'))) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeleteAnimalType(id); await loadInfirmary(); setMsg('✓ Удалено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function uploadPatientCardImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminUploadPatientCardImage(id, file);
       await loadInfirmary();
       setMsg('✓ Картинка загружена');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function uploadSceneImage(fieldId: number, file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminUploadFieldMap(fieldId, file);
+      await loadInfirmary();
+      setMsg('✓ Картинка сцены загружена');
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
@@ -1217,9 +1248,36 @@ export default function AdminPage() {
         </table>
 
         <div className="fm-card" style={{ marginBottom: 10 }}>
-          <h3 style={{ marginTop: 0 }}>Пациенты (животные)</h3>
+          <h3 style={{ marginTop: 0 }}>🐾 Типы животных лечебницы</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <input className="fm-input" placeholder="Название (например, Лис)" value={animalTypeForm.name} onChange={(e) => setAnimalTypeForm({ ...animalTypeForm, name: e.target.value })} />
+            <input className="fm-input" placeholder="Эмодзи" value={animalTypeForm.emoji} onChange={(e) => setAnimalTypeForm({ ...animalTypeForm, emoji: e.target.value })} style={{ width: 80 }} />
+          </div>
+          <button className="fm-btn" disabled={busy} onClick={saveAnimalType}>{animalTypeEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
+          {animalTypeEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setAnimalTypeEditingId(null); setAnimalTypeForm({ name: '', emoji: '' }); }}>Отмена</button>}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+            {animalTypes.map((t) => (
+              <span key={t.id} className="fm-card" style={{ padding: '4px 10px', fontSize: 13 }}>
+                {t.emoji || '🐾'} {t.name}{' '}
+                <button className="fm-btn fm-btn-xs" style={{ marginLeft: 6 }} onClick={() => { setAnimalTypeEditingId(t.id); setAnimalTypeForm({ name: t.name, emoji: t.emoji || '' }); }}>✎</button>
+                <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteAnimalType(t.id)}>✕</button>
+              </span>
+            ))}
+            {animalTypes.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Типов пока нет.</span>}
+          </div>
+        </div>
+
+        <div className="fm-card" style={{ marginBottom: 10 }}>
+          <h3 style={{ marginTop: 0 }}>🌲 Локации Лечебницы</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            При создании животного автоматически появятся три локации-сцены: больное, на лечении, здоровое. Для каждой сцены загрузите картинку и откройте редактор, чтобы разместить части тела и книгу.
+          </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
             <input className="fm-input" placeholder="Название" value={patientForm.name} onChange={(e) => setPatientForm({ ...patientForm, name: e.target.value })} />
+            <select className="fm-input" value={patientForm.animalTypeId} onChange={(e) => setPatientForm({ ...patientForm, animalTypeId: e.target.value })}>
+              <option value="">— тип животного —</option>
+              {animalTypes.map((t) => <option key={t.id} value={t.id}>{t.emoji || '🐾'} {t.name}</option>)}
+            </select>
             <select className="fm-input" value={patientForm.level} onChange={(e) => setPatientForm({ ...patientForm, level: e.target.value })}>
               <option value="1">Уровень 1</option>
               <option value="2">Уровень 2</option>
@@ -1229,38 +1287,44 @@ export default function AdminPage() {
               <option value="">— болезнь —</option>
               {diseases.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
-            <select className="fm-input" value={patientForm.fieldId} onChange={(e) => setPatientForm({ ...patientForm, fieldId: e.target.value })}>
-              <option value="">— локация —</option>
-              {fields.filter((f) => f.field_kind === 'infirmary').map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
           </div>
-          <button className="fm-btn" disabled={busy} onClick={savePatient}>{patientEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
-          {patientEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setPatientEditingId(null); setPatientForm({ name: '', level: '1', diseaseId: '', fieldId: '' }); }}>Отмена</button>}
+          <button className="fm-btn" disabled={busy} onClick={savePatient}>{patientEditingId ? '✎ Сохранить' : '➕ Создать животное'}</button>
+          {patientEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setPatientEditingId(null); setPatientForm({ name: '', level: '1', diseaseId: '', animalTypeId: '' }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
-          <thead><tr><th>ID</th><th>Название</th><th>Ур.</th><th>Болезнь</th><th>Локация</th><th>Картинки</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Название</th><th>Тип</th><th>Ур.</th><th>Болезнь</th><th>Сцены</th><th>Карточка</th><th></th></tr></thead>
           <tbody>
             {patients.map((p) => (
               <tr key={p.id}>
                 <td>{p.id}</td>
                 <td><strong>{p.name}</strong></td>
+                <td style={{ fontSize: 12 }}>{p.animal_type_emoji || ''} {p.animal_type_name || '—'}</td>
                 <td>{p.level}</td>
                 <td style={{ fontSize: 12 }}>{p.disease_name || '—'}</td>
-                <td style={{ fontSize: 12 }}>{p.field_id ?? '—'}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  <label className="fm-btn fm-btn-xs fm-btn-outline" title="Больной" style={{ cursor: 'pointer', marginRight: 2 }}>🖼<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPatientImage(p.id, f, 'image'); }} /></label>
-                  <label className="fm-btn fm-btn-xs fm-btn-outline" title="Стационар" style={{ cursor: 'pointer', marginRight: 2 }}>🏥<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPatientImage(p.id, f, 'hospital'); }} /></label>
-                  <label className="fm-btn fm-btn-xs fm-btn-outline" title="Здоров" style={{ cursor: 'pointer', marginRight: 2 }}>✅<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPatientImage(p.id, f, 'healthy'); }} /></label>
-                  <label className="fm-btn fm-btn-xs fm-btn-outline" title="Карточка" style={{ cursor: 'pointer' }}>🃏<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPatientImage(p.id, f, 'card'); }} /></label>
+                <td>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {p.scenes.map((sc) => (
+                      <div key={sc.field_id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                        <span>{sc.stage === 'sick' ? '🤒' : sc.stage === 'treating' ? '🏥' : '✅'}</span>
+                        <span style={{ minWidth: 90 }}>{sc.stage === 'sick' ? 'Больное' : sc.stage === 'treating' ? 'На лечении' : 'Здоровое'}</span>
+                        <label className="fm-btn fm-btn-xs fm-btn-outline" title="Картинка сцены" style={{ cursor: 'pointer', marginRight: 2 }}>🖼️<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadSceneImage(sc.field_id, f); }} /></label>
+                        <button className="fm-btn fm-btn-xs" onClick={() => { setEditorFieldId(sc.field_id); }}>✎ Разметить</button>
+                      </div>
+                    ))}
+                  </div>
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button className="fm-btn fm-btn-xs" onClick={() => { setPatientEditingId(p.id); setPatientForm({ name: p.name, level: String(p.level), diseaseId: p.disease_id ? String(p.disease_id) : '', fieldId: p.field_id ? String(p.field_id) : '' }); }}>✎</button>{' '}
+                  <label className="fm-btn fm-btn-xs fm-btn-outline" title="Карточка коллекции" style={{ cursor: 'pointer' }}>🃏<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPatientCardImage(p.id, f); }} /></label>
+                </td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button className="fm-btn fm-btn-xs" onClick={() => { setPatientEditingId(p.id); setPatientForm({ name: p.name, level: String(p.level), diseaseId: p.disease_id ? String(p.disease_id) : '', animalTypeId: p.animal_type_id ? String(p.animal_type_id) : '' }); }}>✎</button>{' '}
                   <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deletePatient(p.id)}>✕</button>
                 </td>
               </tr>
             ))}
+            {patients.length === 0 && (
+              <tr><td colSpan={8} style={{ color: 'var(--text-muted)' }}>Животных лечебницы пока нет.</td></tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -2137,7 +2201,9 @@ export default function AdminPage() {
           {tab === 'levels' && renderLevels()}
           {tab === 'potion-recipes' && renderPotionRecipes()}
           {tab === 'ingredients' && renderIngredients()}
-          {tab === 'infirmary' && renderInfirmary()}
+          {tab === 'infirmary' && (editorFieldId !== null ? (
+            <FieldEditor fieldId={editorFieldId} onClose={() => setEditorFieldId(null)} />
+          ) : renderInfirmary())}
 
           {tab === 'orders' && (
             <div>

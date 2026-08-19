@@ -1,11 +1,152 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, type DiagnoseResult, type HandbookDisease, type InfirmaryDetail, type InfirmaryZone } from '../api/endpoints';
+import { api, type DiagnoseResult, type HandbookDisease, type Infirmary, type InfirmaryDetail, type InfirmaryZone } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import LocationMap from '../components/LocationMap';
 import Toast from '../components/Toast';
 
-export default function InfirmaryPage() {
+const STAGE_EMOJI: Record<string, string> = { sick: '🤒', treating: '🏥', healthy: '✅' };
+const STAGE_LABEL: Record<string, string> = { sick: 'Больное', treating: 'На лечении', healthy: 'Здоровое' };
+
+const LOCATION_META: Record<string, { emoji: string; route: string }> = {
+  infirmary: { emoji: '🌲', route: '/infirmary/' },
+  meadow: { emoji: '🌿', route: '/meadow/' },
+  shop: { emoji: '🛒', route: '/shop/' },
+  remedy_lab: { emoji: '⚗️', route: '/remedy-lab/' },
+};
+
+export default function InfirmaryHubPage() {
+  const nav = useNavigate();
+  const [hub, setHub] = useState<Infirmary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.infirmary()
+      .then(setHub)
+      .catch((e) => setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!msg) return;
+    const t = setTimeout(() => setMsg(null), 4000);
+    return () => clearTimeout(t);
+  }, [msg]);
+
+  if (loading && !hub) {
+    return (
+      <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
+        <div className="fm-card">Загрузка лечебницы…</div>
+      </div>
+    );
+  }
+
+  const current = hub?.current ?? null;
+  const currentScene = current
+    ? (current.scenes.find((s) => s.stage === current.status) ?? current.scenes.find((s) => s.stage === 'sick') ?? current.scenes[0])
+    : null;
+
+  return (
+    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
+      <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>🌲 Лесная лечебница</h1>
+      {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
+
+      {current ? (
+        <div className="fm-card fm-rise" style={{ marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: 34, lineHeight: 1 }}>{current.animal_type_emoji || '🐾'}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <strong style={{ fontSize: 17 }}>{current.name}</strong>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {current.animal_type_name || 'Животное'} · уровень {current.level}
+              </div>
+              {current.disease_name && (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Болезнь: {current.disease_name}
+                </div>
+              )}
+              <div style={{ fontSize: 12, marginTop: 2 }}>
+                {current.status === 'sick' && <span>🤒 Осмотрите животное и поставьте диагноз</span>}
+                {current.status === 'diagnosed' && <span>🏥 Сварите лекарство в лаборатории снадобий</span>}
+                {current.status === 'treated' && <span>✅ Животное вылечено — выпустите на волю</span>}
+                {current.status === 'released' && <span>🕊 Животное выпущено</span>}
+              </div>
+            </div>
+            {currentScene && (
+              <button className="fm-btn" onClick={() => nav(`/infirmary/${currentScene.field_id}`)}>
+                Перейти в лечебницу
+              </button>
+            )}
+          </div>
+          {(current.scenes.length > 0) && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+              {current.scenes.map((s) => (
+                <button
+                  key={s.field_id}
+                  className="fm-btn fm-btn-outline fm-btn-xs"
+                  onClick={() => nav(`/infirmary/${s.field_id}`)}
+                >
+                  {STAGE_EMOJI[s.stage] || '🌲'} {STAGE_LABEL[s.stage] || s.stage}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="fm-card" style={{ marginBottom: 14, color: 'var(--text-muted)' }}>
+          Пока нет животных на лечении.
+        </div>
+      )}
+
+      <h3 style={{ margin: '0 0 8px' }}>Локации лечебницы</h3>
+      <div className="fm-grid" style={{ marginBottom: 14 }}>
+        {(hub?.locations ?? []).map((loc) => {
+          const meta = LOCATION_META[loc.field_kind] ?? { emoji: '🗺️', route: '/field/' };
+          return (
+            <button
+              key={loc.field_id}
+              className="fm-card fm-rise"
+              onClick={() => nav(meta.route + loc.field_id)}
+              style={{ cursor: 'pointer', textAlign: 'left', display: 'block' }}
+            >
+              <strong style={{ fontSize: 16 }}>{meta.emoji} {loc.name}</strong>
+              {loc.map_url && (
+                <img src={mediaUrl(loc.map_url)} alt="" style={{ width: '100%', marginTop: 8, borderRadius: 'var(--radius-sm)' }} />
+              )}
+            </button>
+          );
+        })}
+        {(hub?.locations.length ?? 0) === 0 && (
+          <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Локации лечебницы ещё не созданы.</div>
+        )}
+      </div>
+
+      <h3 style={{ margin: '0 0 8px' }}>Пациенты по уровням</h3>
+      {(hub?.levels ?? []).map((lv) => (
+        <div key={lv.level} className="fm-card" style={{ marginBottom: 8, padding: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <strong>Уровень {lv.level}</strong>
+            {!lv.unlocked && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>🔒 Вылечите всех животных прошлого уровня</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {lv.patients.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Животных нет</span>}
+            {lv.patients.map((p) => (
+              <span key={p.id} className="fm-card" style={{ padding: '4px 10px', fontSize: 13, opacity: lv.unlocked ? 1 : 0.55 }}>
+                {p.animal_type_emoji || '🐾'} {p.name}
+                {p.healed ? ' ✅' : ' ⏳'}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function InfirmaryScenePage() {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
   const [detail, setDetail] = useState<InfirmaryDetail | null>(null);
@@ -104,20 +245,13 @@ export default function InfirmaryPage() {
     );
   }
 
-  const stageImage = detail?.status === 'treated'
-    ? (detail.healthy_image_url || detail.patient_image_url)
-    : detail?.status === 'diagnosed'
-      ? (detail.hospital_image_url || detail.patient_image_url)
-      : detail?.patient_image_url;
-
-  const animalZone = (detail?.infirmary_zones ?? []).find((z) => z.zone_kind === 'animal') ?? null;
   const bookZone = (detail?.infirmary_zones ?? []).find((z) => z.zone_kind === 'book') ?? null;
   const canExamine = detail?.status === 'sick' && !!detail.patient_id;
   const active = !!detail?.patient_id && detail.status !== 'released';
 
   return (
     <>
-      <LocationMap mapUrl={detail?.map_url ?? null} name={detail?.name ?? ''} emoji="🌲" onBack={() => nav('/fields')}>
+      <LocationMap mapUrl={detail?.map_url ?? null} name={detail?.name ?? ''} emoji="🌲" onBack={() => nav('/infirmary')}>
         {detail && (
           <div
             style={{
@@ -151,18 +285,6 @@ export default function InfirmaryPage() {
               }),
             )}
           </div>
-        )}
-
-        {detail && animalZone && active && (
-          <ZoneRect cols={detail.cols} rows={detail.rows} zone={animalZone} border="rgba(220,150,120,0.6)">
-            <div onClick={doPet} style={{ position: 'absolute', inset: 0, cursor: 'grabbing', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {stageImage ? (
-                <img src={mediaUrl(stageImage)} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
-              ) : (
-                <div style={{ fontSize: '9vw', lineHeight: 1, pointerEvents: 'none' }}>🐾</div>
-              )}
-            </div>
-          </ZoneRect>
         )}
 
         {detail && bookZone && active && (
@@ -201,7 +323,7 @@ export default function InfirmaryPage() {
       {detail && !active && (
         <div style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(12px + var(--vk-inset-bottom, 0px))', zIndex: 30 }}>
           <div className="fm-card" style={{ textAlign: 'center', margin: 0 }}>
-            {detail.patient_id == null ? 'В этой лечебнице пока нет пациента.' : 'Животное выпущено на волю. Карточка в коллекции.'}
+            {detail.patient_id == null ? 'В этой локации пока нет пациента.' : 'Животное выпущено на волю. Карточка в коллекции.'}
           </div>
         </div>
       )}

@@ -711,24 +711,38 @@ export interface Disease {
   symptoms: Symptom[];
 }
 
+export interface ClinicAnimalType {
+  id: number;
+  code: string;
+  name: string;
+  emoji: string | null;
+  sort_order: number;
+}
+
+export interface PatientScene {
+  field_id: number;
+  stage: string;
+  name: string;
+  map_url: string | null;
+}
+
 export interface Patient {
   id: number;
   code: string;
   name: string;
   level: number;
-  image_url: string | null;
   card_image_url: string | null;
-  hospital_image_url: string | null;
-  healthy_image_url: string | null;
+  animal_type_id: number | null;
+  animal_type_name: string | null;
+  animal_type_emoji: string | null;
   disease_id: number | null;
   disease_name: string | null;
-  field_id: number | null;
+  scenes: PatientScene[];
 }
 
 export interface ClinicPartCell {
   id: number;
   field_id: number;
-  animal_id: number;
   col: number;
   row: number;
   part_code: string;
@@ -736,10 +750,10 @@ export interface ClinicPartCell {
 
 export interface InfirmaryPatient {
   id: number;
-  field_id: number | null;
   name: string;
   level: number;
-  image_url: string | null;
+  animal_type_name: string | null;
+  animal_type_emoji: string | null;
   healed: boolean;
   card_earned: boolean;
 }
@@ -750,8 +764,38 @@ export interface InfirmaryLevel {
   patients: InfirmaryPatient[];
 }
 
+export interface InfirmaryScene {
+  stage: string;
+  field_id: number;
+  name: string;
+  map_url: string | null;
+  cols: number;
+  rows: number;
+}
+
+export interface InfirmaryCurrent {
+  id: number;
+  name: string;
+  level: number;
+  animal_type_name: string | null;
+  animal_type_emoji: string | null;
+  disease_name: string | null;
+  status: string;
+  card_image_url: string | null;
+  scenes: InfirmaryScene[];
+}
+
+export interface InfirmaryLocation {
+  field_id: number;
+  name: string;
+  field_kind: string;
+  map_url: string | null;
+}
+
 export interface Infirmary {
   levels: InfirmaryLevel[];
+  current: InfirmaryCurrent | null;
+  locations: InfirmaryLocation[];
 }
 
 export interface InfirmaryPartCell {
@@ -763,7 +807,7 @@ export interface InfirmaryPartCell {
 
 export interface InfirmaryZone {
   id: number;
-  zone_kind: 'animal' | 'book';
+  zone_kind: 'book';
   col1: number;
   row1: number;
   col2: number;
@@ -776,12 +820,12 @@ export interface InfirmaryDetail {
   map_url: string | null;
   cols: number;
   rows: number;
+  stage: string | null;
   patient_id: number | null;
   patient_name: string | null;
   patient_level: number | null;
-  patient_image_url: string | null;
-  hospital_image_url: string | null;
-  healthy_image_url: string | null;
+  patient_type_name: string | null;
+  patient_type_emoji: string | null;
   status: 'sick' | 'diagnosed' | 'treated' | 'released' | null;
   disease_name: string | null;
   remedy_name: string | null;
@@ -1634,39 +1678,31 @@ export const api = {
   adminDeleteDisease: (id: number) =>
     client.delete(`/admin/diseases/${id}`).then((r) => r.data),
   adminPatients: () => client.get<Patient[]>('/admin/patients').then((r) => r.data),
-  adminCreatePatient: (data: { name: string; level: number; disease_id?: number | null; field_id?: number | null }) =>
+  adminCreatePatient: (data: { name: string; level: number; disease_id?: number | null; animal_type_id?: number | null }) =>
     client.post<Patient>('/admin/patients', data).then((r) => r.data),
-  adminUpdatePatient: (id: number, data: { name?: string; level?: number; disease_id?: number | null; field_id?: number | null }) =>
+  adminUpdatePatient: (id: number, data: { name?: string; level?: number; disease_id?: number | null; animal_type_id?: number | null }) =>
     client.put<Patient>(`/admin/patients/${id}`, data).then((r) => r.data),
   adminDeletePatient: (id: number) =>
     client.delete(`/admin/patients/${id}`).then((r) => r.data),
-  adminUploadPatientImage: (id: number, file: File) => {
-    const form = new FormData();
-    form.append('image', file);
-    return client.put<Patient>(`/admin/patients/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
-  },
   adminUploadPatientCardImage: (id: number, file: File) => {
     const form = new FormData();
     form.append('image', file);
     return client.put<Patient>(`/admin/patients/${id}/card-image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
-  adminUploadPatientHospitalImage: (id: number, file: File) => {
-    const form = new FormData();
-    form.append('image', file);
-    return client.put<Patient>(`/admin/patients/${id}/hospital-image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
-  },
-  adminUploadPatientHealthyImage: (id: number, file: File) => {
-    const form = new FormData();
-    form.append('image', file);
-    return client.put<Patient>(`/admin/patients/${id}/healthy-image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
-  },
+  adminAnimalTypes: () => client.get<ClinicAnimalType[]>('/admin/clinic-animal-types').then((r) => r.data),
+  adminCreateAnimalType: (data: { name: string; emoji?: string | null }) =>
+    client.post<ClinicAnimalType>('/admin/clinic-animal-types', data).then((r) => r.data),
+  adminUpdateAnimalType: (id: number, data: { name?: string; emoji?: string | null }) =>
+    client.put<ClinicAnimalType>(`/admin/clinic-animal-types/${id}`, data).then((r) => r.data),
+  adminDeleteAnimalType: (id: number) =>
+    client.delete(`/admin/clinic-animal-types/${id}`).then((r) => r.data),
   adminCreatePartCell: (fieldId: number, data: { col: number; row: number; part_code: string }) =>
     client.post<ClinicPartCell>(`/admin/fields/${fieldId}/part-cells`, data).then((r) => r.data),
   adminUpdatePartCell: (fieldId: number, id: number, data: { part_code?: string }) =>
     client.put<ClinicPartCell>(`/admin/fields/${fieldId}/part-cells/${id}`, data).then((r) => r.data),
   adminDeletePartCell: (fieldId: number, id: number) =>
     client.delete(`/admin/fields/${fieldId}/part-cells/${id}`).then((r) => r.data),
-  adminCreateInfirmaryZone: (fieldId: number, data: { zone_kind: 'animal' | 'book'; col1: number; row1: number; col2: number; row2: number }) =>
+  adminCreateInfirmaryZone: (fieldId: number, data: { zone_kind: 'book'; col1: number; row1: number; col2: number; row2: number }) =>
     client.post<InfirmaryZone>(`/admin/fields/${fieldId}/infirmary-zones`, data).then((r) => r.data),
   adminDeleteInfirmaryZone: (fieldId: number, id: number) =>
     client.delete(`/admin/fields/${fieldId}/infirmary-zones/${id}`).then((r) => r.data),

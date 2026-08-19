@@ -7,13 +7,25 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import require_role
 from models import (
-    PATIENT_LEVELS, Disease, DiseaseSymptom, Field, Ingredient, PatientAnimal, Plant,
-    Remedy, RemedyRecipeItem, User,
+    PATIENT_LEVELS, ClinicAnimalType, Disease, DiseaseSymptom, Field, Ingredient, PatientAnimal,
+    Plant, Remedy, RemedyRecipeItem, User,
 )
 from routes.admin_catalog import _auto_code, _unique_code
 from services.uploads import remove_upload, save_upload
 
 router = APIRouter(prefix="/api/admin", tags=["admin-infirmary"])
+
+INFIRMARY_STAGE_LABELS = {
+    "sick": "Больное",
+    "treating": "На лечении",
+    "healthy": "Здоровое",
+}
+
+INFIRMARY_STAGES = ("sick", "treating", "healthy")
+
+
+def _scene_name(animal_name: str, stage: str) -> str:
+    return f"{animal_name} — {INFIRMARY_STAGE_LABELS[stage].lower()}"
 
 
 # ── Схемы вывода ──
@@ -50,18 +62,33 @@ class DiseaseOut(BaseModel):
     symptoms: list[SymptomOut]
 
 
+class AnimalTypeOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    emoji: str | None
+    sort_order: int
+
+
+class PatientSceneOut(BaseModel):
+    field_id: int
+    stage: str
+    name: str
+    map_url: str | None
+
+
 class PatientOut(BaseModel):
     id: int
     code: str
     name: str
     level: int
-    image_url: str | None
     card_image_url: str | None
-    hospital_image_url: str | None
-    healthy_image_url: str | None
+    animal_type_id: int | None
+    animal_type_name: str | None
+    animal_type_emoji: str | None
     disease_id: int | None
     disease_name: str | None
-    field_id: int | None
+    scenes: list[PatientSceneOut]
 
 
 def _remedy_item_out(item: RemedyRecipeItem) -> RemedyItemOut:
@@ -95,14 +122,23 @@ def _disease_out(d: Disease) -> DiseaseOut:
     )
 
 
+def _patient_scenes(p: PatientAnimal) -> list[PatientSceneOut]:
+    return [
+        PatientSceneOut(field_id=s.id, stage=s.clinic_stage, name=s.name, map_url=s.map_url)
+        for s in sorted(p.scenes, key=lambda s: (INFIRMARY_STAGES.index(s.clinic_stage) if s.clinic_stage in INFIRMARY_STAGES else 99))
+    ]
+
+
 def _patient_out(p: PatientAnimal) -> PatientOut:
     return PatientOut(
         id=p.id, code=p.code, name=p.name, level=p.level,
-        image_url=p.image_url, card_image_url=p.card_image_url,
-        hospital_image_url=p.hospital_image_url, healthy_image_url=p.healthy_image_url,
+        card_image_url=p.card_image_url,
+        animal_type_id=p.animal_type_id,
+        animal_type_name=p.animal_type.name if p.animal_type else None,
+        animal_type_emoji=p.animal_type.emoji if p.animal_type else None,
         disease_id=p.disease_id,
         disease_name=p.disease.name if p.disease else None,
-        field_id=p.field_id,
+        scenes=_patient_scenes(p),
     )
 
 
@@ -263,19 +299,6 @@ def _validate_remedy(remedy_id: int | None, db: Session) -> None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Мазь не найдена")
 
 
-def _validate_patient_field(field_id: int | None, db: Session) -> None:
-    if field_id is None:
-        return
-    f = db.query(Field).filter(Field.id == field_id).first()
-    if f is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Локация не найдена")
-    if f.field_kind != "infirmary":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Пациента можно привязать только к локации типа «Лесная лечебница»",
-        )
-
-
 @router.get("/diseases", response_model=list[DiseaseOut])
 def list_diseases(
     db: Session = Depends(get_db),
@@ -344,20 +367,110 @@ def delete_disease(
     return None
 
 
-# ── Пациенты ──
+# ── Типы животных лечебницы ──
+
+class AnimalTypeCreate(BaseModel):
+    name: str
+    emoji: str | None = None
+
+
+class AnimalTypeUpdate(BaseModel):
+    name: str | None = None
+    emoji: str | None = None
+
+
+def _validate_animal_type(type_id: int | None, db: Session) -> None:
+    if type_id is not None and db.query(ClinicAnimalType).filter(ClinicAnimalType.id == type_id).first() is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Тип животного не найден")
+
+
+@router.get("/clinic-animal-types", response_model=list[AnimalTypeOut])
+def list_animal_types(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    rows = db.query(ClinicAnimalType).order_by(ClinicAnimalType.sort_order.asc(), ClinicAnimalType.id.asc()).all()
+    return [
+        AnimalTypeOut(id=t.id, code=t.code, name=t.name, emoji=t.emoji, sort_order=t.sort_order)
+        for t in rows
+    ]
+
+
+@router.post("/clinic-animal-types", response_model=AnimalTypeOut, status_code=status.HTTP_201_CREATED)
+def create_animal_type(
+    req: AnimalTypeCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    if not req.name.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название обязательно")
+    code = _unique_code(_auto_code(req.name, "animal_type"), ClinicAnimalType, db)
+    t = ClinicAnimalType(code=code, name=req.name.strip(), emoji=req.emoji)
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return AnimalTypeOut(id=t.id, code=t.code, name=t.name, emoji=t.emoji, sort_order=t.sort_order)
+
+
+@router.put("/clinic-animal-types/{type_id}", response_model=AnimalTypeOut)
+def update_animal_type(
+    type_id: int,
+    req: AnimalTypeUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    t = db.query(ClinicAnimalType).filter(ClinicAnimalType.id == type_id).first()
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тип животного не найден")
+    if req.name is not None:
+        if not req.name.strip():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название обязательно")
+        t.name = req.name.strip()
+    if req.emoji is not None:
+        t.emoji = req.emoji
+    db.commit()
+    db.refresh(t)
+    return AnimalTypeOut(id=t.id, code=t.code, name=t.name, emoji=t.emoji, sort_order=t.sort_order)
+
+
+@router.delete("/clinic-animal-types/{type_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_animal_type(
+    type_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    t = db.query(ClinicAnimalType).filter(ClinicAnimalType.id == type_id).first()
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тип животного не найден")
+    db.delete(t)
+    db.commit()
+    return None
+
+
+# ── Животные лечебницы ──
 
 class PatientCreate(BaseModel):
     name: str
     level: int = 1
     disease_id: int | None = None
-    field_id: int | None = None
+    animal_type_id: int | None = None
 
 
 class PatientUpdate(BaseModel):
     name: str | None = None
     level: int | None = None
     disease_id: int | None = None
-    field_id: int | None = None
+    animal_type_id: int | None = None
+
+
+def _create_patient_scenes(p: PatientAnimal, db: Session) -> None:
+    for stage in INFIRMARY_STAGES:
+        code = _unique_code(_auto_code(_scene_name(p.name, stage), "scene"), Field, db)
+        f = Field(
+            code=code, name=_scene_name(p.name, stage), cols=3, rows=2,
+            field_kind="infirmary", clinic_animal_id=p.id, clinic_stage=stage,
+        )
+        db.add(f)
 
 
 @router.get("/patients", response_model=list[PatientOut])
@@ -381,13 +494,15 @@ def create_patient(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Уровень должен быть одним из: {', '.join(map(str, PATIENT_LEVELS))}")
     if req.disease_id is not None and db.query(Disease).filter(Disease.id == req.disease_id).first() is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Болезнь не найдена")
-    _validate_patient_field(req.field_id, db)
+    _validate_animal_type(req.animal_type_id, db)
     code = _unique_code(_auto_code(req.name, "patient"), PatientAnimal, db)
     p = PatientAnimal(
         code=code, name=req.name.strip(), level=req.level,
-        disease_id=req.disease_id, field_id=req.field_id,
+        disease_id=req.disease_id, animal_type_id=req.animal_type_id,
     )
     db.add(p)
+    db.flush()
+    _create_patient_scenes(p, db)
     db.commit()
     db.refresh(p)
     return _patient_out(p)
@@ -415,9 +530,11 @@ def update_patient(
         if db.query(Disease).filter(Disease.id == req.disease_id).first() is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Болезнь не найдена")
         p.disease_id = req.disease_id
-    if req.field_id is not None:
-        _validate_patient_field(req.field_id, db)
-        p.field_id = req.field_id
+    if req.animal_type_id is not None:
+        _validate_animal_type(req.animal_type_id, db)
+        p.animal_type_id = req.animal_type_id
+    for s in p.scenes:
+        s.name = _scene_name(p.name, s.clinic_stage)
     db.commit()
     db.refresh(p)
     return _patient_out(p)
@@ -432,30 +549,12 @@ def delete_patient(
     p = db.query(PatientAnimal).filter(PatientAnimal.id == patient_id).first()
     if p is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
-    remove_upload(p.image_url)
     remove_upload(p.card_image_url)
-    remove_upload(p.hospital_image_url)
-    remove_upload(p.healthy_image_url)
+    for s in p.scenes:
+        remove_upload(s.map_url)
     db.delete(p)
     db.commit()
     return None
-
-
-@router.put("/patients/{patient_id}/image", response_model=PatientOut)
-def upload_patient_image(
-    patient_id: int,
-    image: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin")),
-):
-    p = db.query(PatientAnimal).filter(PatientAnimal.id == patient_id).first()
-    if p is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
-    remove_upload(p.image_url)
-    p.image_url = save_upload(image, f"patient_{patient_id}", max_size=400)
-    db.commit()
-    db.refresh(p)
-    return _patient_out(p)
 
 
 @router.put("/patients/{patient_id}/card-image", response_model=PatientOut)
@@ -470,40 +569,6 @@ def upload_patient_card_image(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
     remove_upload(p.card_image_url)
     p.card_image_url = save_upload(image, f"patient_card_{patient_id}", max_size=400)
-    db.commit()
-    db.refresh(p)
-    return _patient_out(p)
-
-
-@router.put("/patients/{patient_id}/hospital-image", response_model=PatientOut)
-def upload_patient_hospital_image(
-    patient_id: int,
-    image: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin")),
-):
-    p = db.query(PatientAnimal).filter(PatientAnimal.id == patient_id).first()
-    if p is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
-    remove_upload(p.hospital_image_url)
-    p.hospital_image_url = save_upload(image, f"patient_hospital_{patient_id}", max_size=400)
-    db.commit()
-    db.refresh(p)
-    return _patient_out(p)
-
-
-@router.put("/patients/{patient_id}/healthy-image", response_model=PatientOut)
-def upload_patient_healthy_image(
-    patient_id: int,
-    image: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin")),
-):
-    p = db.query(PatientAnimal).filter(PatientAnimal.id == patient_id).first()
-    if p is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
-    remove_upload(p.healthy_image_url)
-    p.healthy_image_url = save_upload(image, f"patient_healthy_{patient_id}", max_size=400)
     db.commit()
     db.refresh(p)
     return _patient_out(p)

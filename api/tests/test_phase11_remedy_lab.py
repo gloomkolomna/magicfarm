@@ -62,17 +62,25 @@ def _seed_field(kind: str, name: str) -> int:
         s.close()
 
 
-def _seed_patient(name: str, disease_id: int, level: int, field_id: int | None) -> int:
-    from models import PatientAnimal
+def _seed_patient(name: str, disease_id: int, level: int = 1) -> tuple[int, dict[str, int]]:
+    from models import Field, PatientAnimal
     from routes.admin_catalog import _auto_code, _unique_code
     s = TestingSessionLocal()
     try:
         code = _unique_code(_auto_code(name, "patient"), PatientAnimal, s)
-        p = PatientAnimal(code=code, name=name, level=level, disease_id=disease_id, field_id=field_id)
+        p = PatientAnimal(code=code, name=name, level=level, disease_id=disease_id)
         s.add(p)
+        s.flush()
+        scenes: dict[str, int] = {}
+        for stage, label in (("sick", "больное"), ("treating", "на лечении"), ("healthy", "здоровое")):
+            fcode = _unique_code(_auto_code(f"{name}_{stage}", "scene"), Field, s)
+            f = Field(code=fcode, name=f"{name} — {label}", cols=3, rows=2,
+                      field_kind="infirmary", clinic_animal_id=p.id, clinic_stage=stage)
+            s.add(f)
+            s.flush()
+            scenes[stage] = f.id
         s.commit()
-        s.refresh(p)
-        return p.id
+        return p.id, scenes
     finally:
         s.close()
 
@@ -113,7 +121,7 @@ def test_brew_consumes_and_treats(admin_client):
     rid = _seed_remedy("Мазь от кашля", [(ing1, 3), (ing2, 1)])
     did = _seed_disease("Кашель", rid)
     lab = _seed_field("remedy_lab", "Лаборатория")
-    pid = _seed_patient("Лис", did, 1, lab)
+    pid, _ = _seed_patient("Лис", did, 1)
     _seed_user_ingredient(123, ing1, 5)
     _seed_user_ingredient(123, ing2, 1)
 
@@ -149,7 +157,7 @@ def test_release_grants_card(admin_client):
     rid = _seed_remedy("Мазь", [(ing1, 1)])
     did = _seed_disease("Кашель", rid)
     lab = _seed_field("remedy_lab", "Лаборатория")
-    pid = _seed_patient("Лис", did, 1, lab)
+    pid, _ = _seed_patient("Лис", did, 1)
     _seed_user_ingredient(123, ing1, 5)
 
     with make_user_client(123, "player") as c:
@@ -174,7 +182,7 @@ def test_release_requires_treated(admin_client):
     rid = _seed_remedy("Мазь", [(ing1, 1)])
     did = _seed_disease("Кашель", rid)
     lab = _seed_field("remedy_lab", "Лаборатория")
-    pid = _seed_patient("Лис", did, 1, lab)
+    pid, _ = _seed_patient("Лис", did, 1)
 
     with make_user_client(123, "player") as c:
         assert c.post(f"/api/infirmary/patients/{pid}/release").status_code == 400
@@ -185,7 +193,7 @@ def test_brew_insufficient_ingredients_400(admin_client):
     rid = _seed_remedy("Мазь", [(ing1, 3)])
     did = _seed_disease("Кашель", rid)
     lab = _seed_field("remedy_lab", "Лаборатория")
-    pid = _seed_patient("Лис", did, 1, lab)
+    pid, _ = _seed_patient("Лис", did, 1)
     _seed_user_ingredient(123, ing1, 2)
 
     with make_user_client(123, "player") as c:
@@ -206,7 +214,7 @@ def test_brew_already_healed_400(admin_client):
     rid = _seed_remedy("Мазь", [(ing1, 1)])
     did = _seed_disease("Кашель", rid)
     lab = _seed_field("remedy_lab", "Лаборатория")
-    pid = _seed_patient("Лис", did, 1, lab)
+    pid, _ = _seed_patient("Лис", did, 1)
     _seed_user_ingredient(123, ing1, 5)
 
     with make_user_client(123, "player") as c:
@@ -221,7 +229,7 @@ def test_collection(admin_client):
     rid = _seed_remedy("Мазь", [])
     did = _seed_disease("Кашель", rid)
     lab = _seed_field("remedy_lab", "Лаборатория")
-    _seed_patient("Лис", did, 1, lab)
+    _seed_patient("Лис", did, 1)
     with make_user_client(123, "player") as c:
         r = c.get("/api/collection")
         assert r.status_code == 200
@@ -237,7 +245,7 @@ def test_achievement_healed_count_awarded_once(admin_client):
     rid = _seed_remedy("Мазь", [(ing1, 1)])
     did = _seed_disease("Кашель", rid)
     lab = _seed_field("remedy_lab", "Лаборатория")
-    pid = _seed_patient("Лис", did, 1, lab)
+    pid, _ = _seed_patient("Лис", did, 1)
     _seed_user_ingredient(123, ing1, 5)
 
     with make_user_client(123, "player") as c:
@@ -253,7 +261,7 @@ def test_achievement_healed_count_awarded_once(admin_client):
         ing2 = _seed_ingredient("Вода")
         rid2 = _seed_remedy("Бальзам", [(ing2, 1)])
         did2 = _seed_disease("Хромота", rid2)
-        pid2 = _seed_patient("Сова", did2, 1, lab)
+        pid2, _ = _seed_patient("Сова", did2, 1)
         _seed_user_ingredient(123, ing2, 5)
         d2 = _diagnose(c, pid2, did2)
         c.post(f"/api/remedy-cards/{d2.json()['remedy_card_id']}/brew")
@@ -281,7 +289,7 @@ def test_brew_consumes_plants_from_inventory(admin_client):
     rid = r.json()["id"]
     did = _seed_disease("Кашель", rid)
     lab = _seed_field("remedy_lab", "Лаборатория")
-    pat = _seed_patient("Лис", did, 1, lab)
+    pat, _ = _seed_patient("Лис", did, 1)
     _seed_user_ingredient(123, ing, 5)
 
     s = TestingSessionLocal()
@@ -315,7 +323,7 @@ def test_brew_insufficient_plants_400(admin_client):
     rid = r.json()["id"]
     did = _seed_disease("Кашель", rid)
     lab = _seed_field("remedy_lab", "Лаборатория")
-    pat = _seed_patient("Лис", did, 1, lab)
+    pat, _ = _seed_patient("Лис", did, 1)
 
     s = TestingSessionLocal()
     try:
@@ -337,8 +345,8 @@ def test_two_players_heal_same_patient_independently(admin_client):
     ing = _seed_ingredient("Роса")
     rid = _seed_remedy("Мазь", [(ing, 1)])
     did = _seed_disease("Кашель", rid)
-    inf = _seed_field("infirmary", "ЛечебницаТест")
-    pid = _seed_patient("Лис", did, 1, inf)
+    pid, scenes = _seed_patient("Лис", did, 1)
+    inf = scenes["sick"]
     _seed_user_ingredient(1001, ing, 5)
     _seed_user_ingredient(1002, ing, 5)
 

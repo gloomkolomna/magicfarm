@@ -37,10 +37,10 @@ def _healed_patient_ids(user_id: int, db: Session) -> set[int]:
 
 class InfirmaryPatientOut(BaseModel):
     id: int
-    field_id: int | None
     name: str
     level: int
-    image_url: str | None
+    animal_type_name: str | None
+    animal_type_emoji: str | None
     healed: bool
     card_earned: bool
 
@@ -53,6 +53,8 @@ class InfirmaryLevelOut(BaseModel):
 
 class InfirmaryOut(BaseModel):
     levels: list[InfirmaryLevelOut]
+    current: InfirmaryCurrentOut | None = None
+    locations: list[InfirmaryLocationOut] = []
 
 
 class PartCellOut(BaseModel):
@@ -71,18 +73,46 @@ class InfirmaryZoneOut(BaseModel):
     row2: int
 
 
+class InfirmarySceneOut(BaseModel):
+    stage: str
+    field_id: int
+    name: str
+    map_url: str | None
+    cols: int
+    rows: int
+
+
+class InfirmaryCurrentOut(BaseModel):
+    id: int
+    name: str
+    level: int
+    animal_type_name: str | None
+    animal_type_emoji: str | None
+    disease_name: str | None
+    status: str
+    card_image_url: str | None
+    scenes: list[InfirmarySceneOut]
+
+
+class InfirmaryLocationOut(BaseModel):
+    field_id: int
+    name: str
+    field_kind: str
+    map_url: str | None
+
+
 class InfirmaryDetailOut(BaseModel):
     field_id: int
     name: str
     map_url: str | None
     cols: int
     rows: int
+    stage: str | None
     patient_id: int | None
     patient_name: str | None
     patient_level: int | None
-    patient_image_url: str | None
-    hospital_image_url: str | None
-    healthy_image_url: str | None
+    patient_type_name: str | None
+    patient_type_emoji: str | None
     status: str | None
     disease_name: str | None
     remedy_name: str | None
@@ -144,7 +174,25 @@ class DiagnoseRequest(BaseModel):
     disease_id: int
 
 
-# ── Список по уровням ──
+# ── Хаб лечебницы ──
+
+def _patient_status(user_id: int, patient_id: int, db: Session) -> str:
+    state = db.query(UserPatientState).filter(
+        UserPatientState.user_id == user_id, UserPatientState.patient_id == patient_id
+    ).first()
+    return state.status if state is not None else "sick"
+
+
+def _patient_scenes_out(p: PatientAnimal) -> list[InfirmarySceneOut]:
+    scenes = []
+    for stage in ("sick", "treating", "healthy"):
+        s = next((x for x in p.scenes if x.clinic_stage == stage), None)
+        if s is not None:
+            scenes.append(InfirmarySceneOut(
+                stage=stage, field_id=s.id, name=s.name, map_url=s.map_url, cols=s.cols, rows=s.rows,
+            ))
+    return scenes
+
 
 @router.get("", response_model=InfirmaryOut)
 def get_infirmary(
@@ -175,13 +223,46 @@ def get_infirmary(
             level=level,
             unlocked=unlocked,
             patients=[InfirmaryPatientOut(
-                id=p.id, field_id=p.field_id, name=p.name, level=p.level,
-                image_url=p.image_url,
+                id=p.id, name=p.name, level=p.level,
+                animal_type_name=p.animal_type.name if p.animal_type else None,
+                animal_type_emoji=p.animal_type.emoji if p.animal_type else None,
                 healed=p.id in healed,
                 card_earned=p.id in collection,
             ) for p in items],
         ))
-    return InfirmaryOut(levels=levels)
+
+    current = None
+    for p in patients:
+        if _patient_status(user.vk_id, p.id, db) != "released":
+            current = InfirmaryCurrentOut(
+                id=p.id, name=p.name, level=p.level,
+                animal_type_name=p.animal_type.name if p.animal_type else None,
+                animal_type_emoji=p.animal_type.emoji if p.animal_type else None,
+                disease_name=p.disease.name if p.disease else None,
+                status=_patient_status(user.vk_id, p.id, db),
+                card_image_url=p.card_image_url,
+                scenes=_patient_scenes_out(p),
+            )
+            break
+
+    locations = []
+    if current is not None:
+        sc = next(
+            (s for s in current.scenes if s.stage == current.status),
+            current.scenes[0] if current.scenes else None,
+        )
+        if sc is not None:
+            locations.append(InfirmaryLocationOut(
+                field_id=sc.field_id, name="Лесная лечебница",
+                field_kind="infirmary", map_url=sc.map_url,
+            ))
+    for f in db.query(Field).order_by(Field.id.asc()).all():
+        if f.field_kind in ("meadow", "shop", "remedy_lab"):
+            locations.append(InfirmaryLocationOut(
+                field_id=f.id, name=f.name, field_kind=f.field_kind, map_url=f.map_url,
+            ))
+
+    return InfirmaryOut(levels=levels, current=current, locations=locations)
 
 
 # ── Справочник ──
@@ -204,7 +285,7 @@ def get_handbook(
     ])
 
 
-# ── Детализация локации ──
+# ── Детализация сцены лечебницы ──
 
 @router.get("/{field_id}", response_model=InfirmaryDetailOut)
 def get_infirmary_detail(
@@ -217,23 +298,17 @@ def get_infirmary_detail(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Это не лесная лечебница")
     _check_field_gate(f, user)
 
-    patient = db.query(PatientAnimal).filter(PatientAnimal.field_id == f.id).first()
+    patient = f.clinic_animal
     collection = {
         c.patient_id for c in db.query(UserCard).filter(UserCard.user_id == user.vk_id).all()
     }
 
-    part_cells = []
-    patient_id = None
-    status_ = None
-    if patient is not None:
-        patient_id = patient.id
-        part_cells = db.query(ClinicPartCell).filter(
-            ClinicPartCell.animal_id == patient.id
-        ).order_by(ClinicPartCell.row.asc(), ClinicPartCell.col.asc()).all()
-        state = db.query(UserPatientState).filter(
-            UserPatientState.user_id == user.vk_id, UserPatientState.patient_id == patient.id
-        ).first()
-        status_ = state.status if state is not None else "sick"
+    part_cells = db.query(ClinicPartCell).filter(
+        ClinicPartCell.field_id == f.id
+    ).order_by(ClinicPartCell.row.asc(), ClinicPartCell.col.asc()).all()
+
+    patient_id = patient.id if patient else None
+    status_ = _patient_status(user.vk_id, patient.id, db) if patient else None
 
     zones = db.query(InfirmaryZone).filter(
         InfirmaryZone.field_id == f.id
@@ -241,12 +316,12 @@ def get_infirmary_detail(
 
     return InfirmaryDetailOut(
         field_id=f.id, name=f.name, map_url=f.map_url, cols=f.cols, rows=f.rows,
+        stage=f.clinic_stage,
         patient_id=patient_id,
         patient_name=patient.name if patient else None,
         patient_level=patient.level if patient else None,
-        patient_image_url=patient.image_url if patient else None,
-        hospital_image_url=patient.hospital_image_url if patient else None,
-        healthy_image_url=patient.healthy_image_url if patient else None,
+        patient_type_name=patient.animal_type.name if patient and patient.animal_type else None,
+        patient_type_emoji=patient.animal_type.emoji if patient and patient.animal_type else None,
         status=status_,
         disease_name=patient.disease.name if patient and patient.disease else None,
         remedy_name=(patient.disease.remedy.name if patient and patient.disease and patient.disease.remedy else None),
@@ -271,7 +346,9 @@ def examine_patient(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
 
     part_code = req.part_code.strip()
-    parts = {pc.part_code for pc in patient.part_cells}
+    parts = set()
+    for s in patient.scenes:
+        parts |= {pc.part_code for pc in s.part_cells}
     if not part_code or part_code not in parts:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестная часть тела")
 

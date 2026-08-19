@@ -12,7 +12,7 @@ from models import (
     BREWERY_MAX_INGREDIENT_CELLS, BREWERY_ZONE_KINDS, INFIRMARY_ZONE_KINDS, Animal, BreweryZone,
     ClinicPartCell, Field, FieldAnimal, FieldCell, FieldPet, FieldPlant, FieldPotionRecipe,
     GATHER_WINDOW_KINDS, GatherCell, GatherCellIngredient, Ingredient, InfirmaryZone, KASSA_KIND,
-    PatientAnimal, Pet, PetZone, Plant, PlantBed, PotionRecipe, ProductionTemplate, Tent, TradeCell,
+    Pet, PetZone, Plant, PlantBed, PotionRecipe, ProductionTemplate, Tent, TradeCell,
     TradeCellIngredient, User, WITCH_HOUSE_KIND,
 )
 from services.uploads import remove_upload, save_upload
@@ -247,7 +247,6 @@ class TradeCellOut(BaseModel):
 class ClinicPartCellOut(BaseModel):
     id: int
     field_id: int
-    animal_id: int
     col: int
     row: int
     part_code: str
@@ -1004,7 +1003,7 @@ def _trade_cell_out(tc: TradeCell) -> TradeCellOut:
 
 def _part_cell_out(pc: ClinicPartCell) -> ClinicPartCellOut:
     return ClinicPartCellOut(
-        id=pc.id, field_id=pc.field_id, animal_id=pc.animal_id,
+        id=pc.id, field_id=pc.field_id,
         col=pc.col, row=pc.row, part_code=pc.part_code,
     )
 
@@ -1374,16 +1373,6 @@ def _get_part_cell_on_field(pc_id: int, field_id: int, db: Session) -> ClinicPar
     return pc
 
 
-def _field_patient(f: Field, db: Session) -> PatientAnimal:
-    patient = db.query(PatientAnimal).filter(PatientAnimal.field_id == f.id).first()
-    if patient is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Сначала создайте животное-пациента для этой локации",
-        )
-    return patient
-
-
 class PartCellCreate(BaseModel):
     col: int
     row: int
@@ -1403,7 +1392,6 @@ def create_part_cell(
 ):
     f = _get_field_or_404(field_id, db)
     _check_infirmary_field(f)
-    patient = _field_patient(f, db)
     part_code = req.part_code.strip()
     if not part_code:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код части тела обязателен")
@@ -1415,7 +1403,7 @@ def create_part_cell(
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="На этой клетке уже настроена часть тела")
 
-    pc = ClinicPartCell(field_id=f.id, animal_id=patient.id, col=req.col, row=req.row, part_code=part_code)
+    pc = ClinicPartCell(field_id=f.id, col=req.col, row=req.row, part_code=part_code)
     db.add(pc)
     _mark_cell_kind(f.id, req.col, req.row, "body_part", db)
     db.commit()

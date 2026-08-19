@@ -20,6 +20,8 @@ const FIELD_KIND_LABEL: Record<string, string> = {
   default: '🗺️ Поля',
 };
 
+const HIDDEN_KINDS = new Set(['meadow', 'shop', 'infirmary', 'remedy_lab']);
+
 function groupByCategory(fields: FieldInfo[]): { category: string; items: FieldInfo[] }[] {
   const map = new Map<string, FieldInfo[]>();
   for (const f of fields) {
@@ -60,7 +62,8 @@ export default function FieldsPage() {
 
   const unactivated = potions.filter((p: any) => p.activated === false);
 
-  const categories = useMemo(() => groupByCategory(fields), [fields]);
+  const visibleFields = fields.filter((f) => !HIDDEN_KINDS.has(f.field_kind ?? ''));
+  const categories = useMemo(() => groupByCategory(visibleFields), [visibleFields]);
   const totalPages = categories.length;
   const safePage = Math.max(0, Math.min(page, Math.max(0, totalPages - 1)));
   const current = categories[safePage];

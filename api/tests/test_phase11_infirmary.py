@@ -54,42 +54,50 @@ def _seed_disease(name: str, remedy_id: int, symptoms: dict[str, str]) -> int:
         s.close()
 
 
-def _seed_infirmary_field(name: str = "Лесная лечебница", level: int = 0) -> int:
-    from models import Field
-    from routes.admin_fields import _make_code
+def _seed_clinic_animal_type(name: str = "Лис") -> int:
+    from models import ClinicAnimalType
+    from routes.admin_catalog import _auto_code, _unique_code
     s = TestingSessionLocal()
     try:
-        code = _make_code(name, s)
-        f = Field(code=code, name=name, cols=3, rows=2,
-                  field_kind="infirmary", min_level=level)
-        s.add(f)
+        code = _unique_code(_auto_code(name, "animal_type"), ClinicAnimalType, s)
+        t = ClinicAnimalType(code=code, name=name)
+        s.add(t)
         s.commit()
-        s.refresh(f)
-        return f.id
+        s.refresh(t)
+        return t.id
     finally:
         s.close()
 
 
-def _seed_patient(name: str, disease_id: int, level: int, field_id: int | None) -> int:
-    from models import PatientAnimal
+def _seed_patient(name: str, disease_id: int, level: int = 1, animal_type_id: int | None = None) -> tuple[int, dict[str, int]]:
+    from models import Field, PatientAnimal
     from routes.admin_catalog import _auto_code, _unique_code
     s = TestingSessionLocal()
     try:
         code = _unique_code(_auto_code(name, "patient"), PatientAnimal, s)
-        p = PatientAnimal(code=code, name=name, level=level, disease_id=disease_id, field_id=field_id)
+        p = PatientAnimal(code=code, name=name, level=level,
+                          disease_id=disease_id, animal_type_id=animal_type_id)
         s.add(p)
+        s.flush()
+        scenes: dict[str, int] = {}
+        for stage, label in (("sick", "больное"), ("treating", "на лечении"), ("healthy", "здоровое")):
+            fcode = _unique_code(_auto_code(f"{name}_{stage}", "scene"), Field, s)
+            f = Field(code=fcode, name=f"{name} — {label}", cols=3, rows=2,
+                      field_kind="infirmary", clinic_animal_id=p.id, clinic_stage=stage)
+            s.add(f)
+            s.flush()
+            scenes[stage] = f.id
         s.commit()
-        s.refresh(p)
-        return p.id
+        return p.id, scenes
     finally:
         s.close()
 
 
-def _seed_part_cell(field_id: int, animal_id: int, col: int, row: int, part_code: str) -> int:
+def _seed_part_cell(field_id: int, col: int, row: int, part_code: str) -> int:
     from models import ClinicPartCell, FieldCell
     s = TestingSessionLocal()
     try:
-        pc = ClinicPartCell(field_id=field_id, animal_id=animal_id, col=col, row=row, part_code=part_code)
+        pc = ClinicPartCell(field_id=field_id, col=col, row=row, part_code=part_code)
         s.add(pc)
         s.add(FieldCell(field_id=field_id, col=col, row=row, kind="body_part"))
         s.commit()
@@ -113,6 +121,8 @@ def _set_crosses(vk_id: int, amount: int) -> None:
     finally:
         s.close()
 
+
+# ── Мази ──
 
 def test_admin_create_remedy_generates_code(admin_client):
     ing = _seed_ingredient("Роса")
@@ -172,6 +182,8 @@ def test_admin_delete_remedy(admin_client):
     assert all(r["id"] != rid for r in admin_client.get("/api/admin/remedies").json())
 
 
+# ── Болезни ──
+
 def test_admin_create_disease_with_symptoms(admin_client):
     rid = _seed_remedy("Мазь", [])
     r = admin_client.post("/api/admin/diseases", json={
@@ -185,56 +197,114 @@ def test_admin_create_disease_with_symptoms(admin_client):
     assert data["symptoms"][0]["part_code"] == "nose"
 
 
+# ── Типы животных ──
+
+def test_admin_animal_type_crud(admin_client):
+    r = admin_client.post("/api/admin/clinic-animal-types", json={"name": "Лис", "emoji": "🦊"})
+    assert r.status_code == 201
+    t = r.json()
+    assert t["code"]
+    assert t["name"] == "Лис"
+
+    r2 = admin_client.put(f"/api/admin/clinic-animal-types/{t['id']}", json={"name": "Лисёнок"})
+    assert r2.status_code == 200
+    assert r2.json()["name"] == "Лисёнок"
+
+    rows = admin_client.get("/api/admin/clinic-animal-types").json()
+    assert any(x["id"] == t["id"] for x in rows)
+
+    assert admin_client.delete(f"/api/admin/clinic-animal-types/{t['id']}").status_code == 204
+    assert all(x["id"] != t["id"] for x in admin_client.get("/api/admin/clinic-animal-types").json())
+
+
+def test_admin_animal_type_requires_name(admin_client):
+    assert admin_client.post("/api/admin/clinic-animal-types", json={"name": "  "}).status_code == 400
+
+
+# ── Животные лечебницы ──
+
 def test_admin_create_patient_level_validation(admin_client):
     did = _seed_disease("Хворь", None, {})
     r = admin_client.post("/api/admin/patients", json={"name": "Лис", "level": 5, "disease_id": did})
     assert r.status_code == 400
 
 
-def test_admin_create_patient_unknown_field_400(admin_client):
+def test_admin_create_patient_unknown_type_400(admin_client):
     did = _seed_disease("Хворь", None, {})
-    r = admin_client.post("/api/admin/patients", json={"name": "Лис", "level": 1, "disease_id": did, "field_id": 9999})
+    r = admin_client.post("/api/admin/patients", json={"name": "Лис", "level": 1, "disease_id": did, "animal_type_id": 9999})
     assert r.status_code == 400
 
 
-def test_admin_create_patient_non_infirmary_field_400(admin_client):
+def test_admin_create_patient_creates_three_scenes(admin_client):
     did = _seed_disease("Хворь", None, {})
-    fid = admin_client.post(
-        "/api/admin/fields", json={"name": "Грядки", "cols": 3, "rows": 2, "field_kind": "garden_beds"}
-    ).json()["id"]
-    r = admin_client.post("/api/admin/patients", json={"name": "Лис", "level": 1, "disease_id": did, "field_id": fid})
-    assert r.status_code == 400
-
-
-def test_admin_create_patient_ok_infirmary_field(admin_client):
-    did = _seed_disease("Хворь", None, {})
-    fid = admin_client.post(
-        "/api/admin/fields", json={"name": "Лечебница", "cols": 3, "rows": 2, "field_kind": "infirmary"}
-    ).json()["id"]
-    r = admin_client.post("/api/admin/patients", json={"name": "Лис", "level": 1, "disease_id": did, "field_id": fid})
+    tid = _seed_clinic_animal_type("Лис")
+    r = admin_client.post("/api/admin/patients", json={
+        "name": "Лис", "level": 1, "disease_id": did, "animal_type_id": tid,
+    })
     assert r.status_code == 201
-    assert r.json()["field_id"] == fid
+    data = r.json()
+    assert data["animal_type_name"] == "Лис"
+    assert data["disease_id"] == did
+    stages = {s["stage"]: s["field_id"] for s in data["scenes"]}
+    assert set(stages) == {"sick", "treating", "healthy"}
+    assert len({s["field_id"] for s in data["scenes"]}) == 3
+
+    detail = admin_client.get(f"/api/admin/fields/{stages['sick']}").json()
+    assert detail["field_kind"] == "infirmary"
+    assert detail["name"].endswith("— больное")
 
 
-def test_part_cell_requires_patient(admin_client):
-    fid = _seed_infirmary_field()
-    r = admin_client.post(f"/api/admin/fields/{fid}/part-cells", json={"col": 0, "row": 0, "part_code": "nose"})
-    assert r.status_code == 400
+def test_admin_update_patient_renames_scenes(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    pid, scenes = _seed_patient("Лис", did, 1)
+    r = admin_client.put(f"/api/admin/patients/{pid}", json={"name": "Лисёнок"})
+    assert r.status_code == 200
+    sick = admin_client.get(f"/api/admin/fields/{scenes['sick']}").json()
+    assert "Лисёнок" in sick["name"]
+
+
+def test_admin_delete_patient_removes_scenes(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    pid, scenes = _seed_patient("Лис", did, 1)
+    assert admin_client.delete(f"/api/admin/patients/{pid}").status_code == 204
+    assert admin_client.get(f"/api/admin/fields/{scenes['sick']}").status_code == 404
+
+
+# ── Части тела (размещение на сцене без пациента) ──
+
+def test_part_cell_on_scene_without_extra_binding(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    pid, scenes = _seed_patient("Лис", did, 1)
+    sick = scenes["sick"]
+    r = admin_client.post(f"/api/admin/fields/{sick}/part-cells", json={"col": 0, "row": 0, "part_code": "nose"})
+    assert r.status_code == 201
+    pc = r.json()
+    assert pc["part_code"] == "nose"
+    assert pc["field_id"] == sick
+    assert "animal_id" not in pc
 
 
 def test_admin_part_cell_crud(admin_client):
-    fid = _seed_infirmary_field()
     did = _seed_disease("Хворь", None, {})
-    pid = _seed_patient("Лис", did, 1, fid)
-    r = admin_client.post(f"/api/admin/fields/{fid}/part-cells", json={"col": 0, "row": 0, "part_code": "nose"})
+    pid, scenes = _seed_patient("Лис", did, 1)
+    sick = scenes["sick"]
+    r = admin_client.post(f"/api/admin/fields/{sick}/part-cells", json={"col": 0, "row": 0, "part_code": "nose"})
     assert r.status_code == 201
     pc = r.json()
-    assert pc["animal_id"] == pid
     assert pc["part_code"] == "nose"
-    r2 = admin_client.put(f"/api/admin/fields/{fid}/part-cells/{pc['id']}", json={"part_code": "ear"})
+    r2 = admin_client.put(f"/api/admin/fields/{sick}/part-cells/{pc['id']}", json={"part_code": "ear"})
     assert r2.status_code == 200
     assert r2.json()["part_code"] == "ear"
-    assert admin_client.delete(f"/api/admin/fields/{fid}/part-cells/{pc['id']}").status_code == 204
+    assert admin_client.delete(f"/api/admin/fields/{sick}/part-cells/{pc['id']}").status_code == 204
+
+
+def test_admin_part_cell_duplicate_cell_409(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    pid, scenes = _seed_patient("Лис", did, 1)
+    sick = scenes["sick"]
+    admin_client.post(f"/api/admin/fields/{sick}/part-cells", json={"col": 0, "row": 0, "part_code": "nose"})
+    r = admin_client.post(f"/api/admin/fields/{sick}/part-cells", json={"col": 0, "row": 0, "part_code": "ear"})
+    assert r.status_code == 409
 
 
 def test_player_forbidden_on_admin_infirmary(player_client):
@@ -242,37 +312,82 @@ def test_player_forbidden_on_admin_infirmary(player_client):
         assert c.get("/api/admin/remedies").status_code == 403
         assert c.get("/api/admin/diseases").status_code == 403
         assert c.get("/api/admin/patients").status_code == 403
+        assert c.get("/api/admin/clinic-animal-types").status_code == 403
         assert c.post("/api/admin/remedies", json={"name": "X"}).status_code == 403
 
 
-def test_infirmary_list_levels_unlocked_progression(admin_client):
+# ── Хаб лечебницы ──
+
+def test_infirmary_hub_current_and_locations(admin_client):
     did = _seed_disease("Хворь", None, {})
-    fid1 = _seed_infirmary_field()
-    fid2 = _seed_infirmary_field()
-    _seed_patient("Лис 1", did, 1, fid1)
-    _seed_patient("Сова 2", did, 2, fid2)
+    tid = _seed_clinic_animal_type("Лис")
+    r = admin_client.post("/api/admin/patients", json={
+        "name": "Лис", "level": 1, "disease_id": did, "animal_type_id": tid,
+    })
+    assert r.status_code == 201
+    pid = r.json()["id"]
+
     with make_user_client(123, "player") as c:
-        r = c.get("/api/infirmary")
-        assert r.status_code == 200
-        levels = r.json()["levels"]
-        l1 = next(x for x in levels if x["level"] == 1)
-        l2 = next(x for x in levels if x["level"] == 2)
+        hub = c.get("/api/infirmary").json()
+        assert hub["current"]["id"] == pid
+        assert hub["current"]["animal_type_name"] == "Лис"
+        assert hub["current"]["status"] == "sick"
+        stages = {s["stage"] for s in hub["current"]["scenes"]}
+        assert stages == {"sick", "treating", "healthy"}
+
+        l1 = next(x for x in hub["levels"] if x["level"] == 1)
         assert l1["unlocked"] is True
-        assert l2["unlocked"] is False
+        assert l1["patients"][0]["id"] == pid
 
 
-def test_infirmary_detail(admin_client):
-    did = _seed_disease("Хворь", None, {"nose": "Горячий нос"})
-    fid = _seed_infirmary_field()
-    pid = _seed_patient("Лис", did, 1, fid)
-    _seed_part_cell(fid, pid, 0, 0, "nose")
+def test_infirmary_hub_infirmary_location_first(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    pid, scenes = _seed_patient("Лис", did, 1)
+    admin_client.post("/api/admin/fields", json={"name": "Поляна", "cols": 2, "rows": 1, "field_kind": "meadow"})
+    admin_client.post("/api/admin/fields", json={"name": "Лавка", "cols": 2, "rows": 1, "field_kind": "shop"})
+
     with make_user_client(123, "player") as c:
-        r = c.get(f"/api/infirmary/{fid}")
+        hub = c.get("/api/infirmary").json()
+        kinds = [loc["field_kind"] for loc in hub["locations"]]
+        assert kinds[0] == "infirmary"
+        assert "meadow" in kinds
+        assert "shop" in kinds
+
+
+def test_infirmary_hub_after_release_shows_next(admin_client):
+    ing = _seed_ingredient("Роса")
+    rid = _seed_remedy("Мазь", [(ing, 1)])
+    did = _seed_disease("Хворь", rid, {"nose": "Горячий нос"})
+    pid1, _ = _seed_patient("Лис 1", did, 1)
+    pid2, _ = _seed_patient("Сова 2", did, 1)
+    _seed_user_ingredient(123, ing, 5)
+
+    with make_user_client(123, "player") as c:
+        assert c.get("/api/infirmary").json()["current"]["id"] == pid1
+        d = c.post(f"/api/infirmary/patients/{pid1}/diagnose", json={"disease_id": did})
+        card_id = d.json()["remedy_card_id"]
+        assert c.post(f"/api/remedy-cards/{card_id}/brew").status_code == 200
+        assert c.post(f"/api/infirmary/patients/{pid1}/release").status_code == 200
+        hub = c.get("/api/infirmary").json()
+        assert hub["current"]["id"] == pid2
+
+
+# ── Детализация сцены ──
+
+def test_infirmary_detail_scene(admin_client):
+    did = _seed_disease("Хворь", None, {"nose": "Горячий нос"})
+    pid, scenes = _seed_patient("Лис", did, 1)
+    _seed_part_cell(scenes["sick"], 0, 0, "nose")
+    with make_user_client(123, "player") as c:
+        r = c.get(f"/api/infirmary/{scenes['sick']}")
         assert r.status_code == 200
         data = r.json()
         assert data["patient_id"] == pid
+        assert data["stage"] == "sick"
         assert len(data["part_cells"]) == 1
         assert data["part_cells"][0]["part_code"] == "nose"
+        assert data["status"] == "sick"
+        assert "patient_image_url" not in data
 
 
 def test_infirmary_wrong_field_kind(admin_client):
@@ -303,13 +418,24 @@ def test_handbook(admin_client):
         assert d["symptoms"][0]["text"] == "Хрипы"
 
 
+# ── Осмотр / диагноз / выпуск ──
+
+def _seed_user_ingredient(vk_id: int, ingredient_id: int, qty: int) -> None:
+    from models import UserIngredient
+    s = TestingSessionLocal()
+    try:
+        s.add(UserIngredient(user_id=vk_id, ingredient_id=ingredient_id, qty=qty))
+        s.commit()
+    finally:
+        s.close()
+
+
 def test_examine_returns_symptoms(admin_client):
     rid = _seed_remedy("Мазь", [])
     did = _seed_disease("Хворь", rid, {"nose": "Горячий нос", "ear": "Чешется ухо"})
-    fid = _seed_infirmary_field()
-    pid = _seed_patient("Лис", did, 1, fid)
-    _seed_part_cell(fid, pid, 0, 0, "nose")
-    _seed_part_cell(fid, pid, 1, 0, "ear")
+    pid, scenes = _seed_patient("Лис", did, 1)
+    _seed_part_cell(scenes["sick"], 0, 0, "nose")
+    _seed_part_cell(scenes["sick"], 1, 0, "ear")
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/infirmary/patients/{pid}/examine", json={"part_code": "nose"})
         assert r.status_code == 200
@@ -318,9 +444,8 @@ def test_examine_returns_symptoms(admin_client):
 
 def test_examine_unknown_part_400(admin_client):
     did = _seed_disease("Хворь", None, {"nose": "Горячий нос"})
-    fid = _seed_infirmary_field()
-    pid = _seed_patient("Лис", did, 1, fid)
-    _seed_part_cell(fid, pid, 0, 0, "nose")
+    pid, scenes = _seed_patient("Лис", did, 1)
+    _seed_part_cell(scenes["sick"], 0, 0, "nose")
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/infirmary/patients/{pid}/examine", json={"part_code": "tail"})
         assert r.status_code == 400
@@ -329,8 +454,7 @@ def test_examine_unknown_part_400(admin_client):
 def test_diagnose_correct_gives_card(admin_client):
     rid = _seed_remedy("Мазь от кашля", [])
     did = _seed_disease("Кашель", rid, {"chest": "Хрипы"})
-    fid = _seed_infirmary_field()
-    pid = _seed_patient("Лис", did, 1, fid)
+    pid, scenes = _seed_patient("Лис", did, 1)
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": did})
         assert r.status_code == 200
@@ -343,8 +467,7 @@ def test_diagnose_correct_gives_card(admin_client):
 def test_diagnose_wrong_deducts_200(admin_client):
     did = _seed_disease("Кашель", None, {})
     other = _seed_disease("Хромота", None, {})
-    fid = _seed_infirmary_field()
-    pid = _seed_patient("Лис", did, 1, fid)
+    pid, scenes = _seed_patient("Лис", did, 1)
     _set_crosses(123, 500)
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": other})
@@ -356,8 +479,7 @@ def test_diagnose_wrong_deducts_200(admin_client):
 def test_diagnose_wrong_blocked_when_balance_low(admin_client):
     did = _seed_disease("Кашель", None, {})
     other = _seed_disease("Хромота", None, {})
-    fid = _seed_infirmary_field()
-    pid = _seed_patient("Лис", did, 1, fid)
+    pid, scenes = _seed_patient("Лис", did, 1)
     _set_crosses(123, 100)
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": other})
@@ -367,8 +489,7 @@ def test_diagnose_wrong_blocked_when_balance_low(admin_client):
 def test_diagnose_repeat_after_correct_400(admin_client):
     rid = _seed_remedy("Мазь", [])
     did = _seed_disease("Кашель", rid, {})
-    fid = _seed_infirmary_field()
-    pid = _seed_patient("Лис", did, 1, fid)
+    pid, scenes = _seed_patient("Лис", did, 1)
     with make_user_client(123, "player") as c:
         assert c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": did}).status_code == 200
         r = c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": did})
@@ -382,28 +503,33 @@ def test_infirmary_requires_auth(client):
     assert client.post("/api/infirmary/patients/1/diagnose", json={"disease_id": 1}).status_code == 401
 
 
-# ── Зоны лечебницы ──
+# ── Зоны лечебницы (только «Книга») ──
 
-def test_admin_infirmary_zone_crud(admin_client):
-    fid = _seed_infirmary_field()
-    r = admin_client.post(f"/api/admin/fields/{fid}/infirmary-zones", json={
-        "zone_kind": "animal", "col1": 0, "row1": 0, "col2": 1, "row2": 1,
+def test_admin_infirmary_book_zone_crud(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    pid, scenes = _seed_patient("Лис", did, 1)
+    sick = scenes["sick"]
+    r = admin_client.post(f"/api/admin/fields/{sick}/infirmary-zones", json={
+        "zone_kind": "book", "col1": 0, "row1": 0, "col2": 1, "row2": 1,
     })
     assert r.status_code == 201
     z = r.json()
-    assert z["zone_kind"] == "animal"
+    assert z["zone_kind"] == "book"
     assert (z["col1"], z["row1"], z["col2"], z["row2"]) == (0, 0, 1, 1)
 
-    # Пересечение с другой зоной → 409.
-    r2 = admin_client.post(f"/api/admin/fields/{fid}/infirmary-zones", json={
-        "zone_kind": "book", "col1": 1, "row1": 1, "col2": 2, "row2": 1,
-    })
-    assert r2.status_code == 409
-
-    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    detail = admin_client.get(f"/api/admin/fields/{sick}").json()
     assert len(detail["infirmary_zones"]) == 1
 
-    assert admin_client.delete(f"/api/admin/fields/{fid}/infirmary-zones/{z['id']}").status_code == 204
+    assert admin_client.delete(f"/api/admin/fields/{sick}/infirmary-zones/{z['id']}").status_code == 204
+
+
+def test_admin_infirmary_animal_zone_rejected(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    pid, scenes = _seed_patient("Лис", did, 1)
+    r = admin_client.post(f"/api/admin/fields/{scenes['sick']}/infirmary-zones", json={
+        "zone_kind": "animal", "col1": 0, "row1": 0, "col2": 1, "row2": 1,
+    })
+    assert r.status_code == 400
 
 
 def test_admin_infirmary_zone_wrong_field_kind(admin_client):
@@ -411,75 +537,57 @@ def test_admin_infirmary_zone_wrong_field_kind(admin_client):
         "/api/admin/fields", json={"name": "Грядки", "cols": 3, "rows": 2, "field_kind": "garden_beds"}
     ).json()["id"]
     r = admin_client.post(f"/api/admin/fields/{fid}/infirmary-zones", json={
-        "zone_kind": "animal", "col1": 0, "row1": 0, "col2": 1, "row2": 1,
+        "zone_kind": "book", "col1": 0, "row1": 0, "col2": 1, "row2": 1,
     })
     assert r.status_code == 400
 
 
-# ── Картинки стадий пациента ──
+# ── Картинка карточки ──
 
-def test_admin_upload_patient_stage_images(admin_client, uploads_tmp):
+def test_admin_upload_patient_card_image(admin_client, uploads_tmp):
     did = _seed_disease("Хворь", None, {})
-    fid = _seed_infirmary_field()
-    pid = _seed_patient("Лис", did, 1, fid)
+    pid, scenes = _seed_patient("Лис", did, 1)
 
     from PIL import Image
     buf = io.BytesIO()
     Image.new("RGB", (80, 60), (120, 90, 60)).save(buf, format="PNG")
 
     r = admin_client.put(
-        f"/api/admin/patients/{pid}/hospital-image",
-        files={"image": ("h.png", io.BytesIO(buf.getvalue()), "image/png")},
+        f"/api/admin/patients/{pid}/card-image",
+        files={"image": ("c.png", io.BytesIO(buf.getvalue()), "image/png")},
     )
     assert r.status_code == 200
-    assert r.json()["hospital_image_url"].startswith("/api/uploads/patient_hospital_")
-
-    r2 = admin_client.put(
-        f"/api/admin/patients/{pid}/healthy-image",
-        files={"image": ("h.png", io.BytesIO(buf.getvalue()), "image/png")},
-    )
-    assert r2.status_code == 200
-    assert r2.json()["healthy_image_url"].startswith("/api/uploads/patient_healthy_")
+    assert r.json()["card_image_url"].startswith("/api/uploads/patient_card_")
 
 
 # ── Стадии пациента: sick → diagnosed → treated → released ──
 
-def _seed_user_ingredient(vk_id: int, ingredient_id: int, qty: int) -> None:
-    from models import UserIngredient
-    s = TestingSessionLocal()
-    try:
-        s.add(UserIngredient(user_id=vk_id, ingredient_id=ingredient_id, qty=qty))
-        s.commit()
-    finally:
-        s.close()
-
-
-def test_infirmary_detail_status_progression(admin_client):
+def test_infirmary_status_progression_scenes(admin_client):
     ing = _seed_ingredient("Роса")
     rid = _seed_remedy("Мазь", [(ing, 1)])
     did = _seed_disease("Хворь", rid, {"nose": "Горячий нос"})
-    fid = _seed_infirmary_field()
-    pid = _seed_patient("Лис", did, 1, fid)
-    _seed_part_cell(fid, pid, 0, 0, "nose")
+    pid, scenes = _seed_patient("Лис", did, 1)
+    _seed_part_cell(scenes["sick"], 0, 0, "nose")
     _seed_user_ingredient(123, ing, 5)
 
     with make_user_client(123, "player") as c:
-        d = c.get(f"/api/infirmary/{fid}").json()
+        d = c.get(f"/api/infirmary/{scenes['sick']}").json()
         assert d["status"] == "sick"
+        assert d["stage"] == "sick"
 
         r = c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": did})
         assert r.status_code == 200
-        d = c.get(f"/api/infirmary/{fid}").json()
+        d = c.get(f"/api/infirmary/{scenes['treating']}").json()
         assert d["status"] == "diagnosed"
         assert d["disease_name"] == "Хворь"
         assert d["remedy_name"] == "Мазь"
 
         card_id = r.json()["remedy_card_id"]
         assert c.post(f"/api/remedy-cards/{card_id}/brew").status_code == 200
-        d = c.get(f"/api/infirmary/{fid}").json()
+        d = c.get(f"/api/infirmary/{scenes['healthy']}").json()
         assert d["status"] == "treated"
 
         assert c.post(f"/api/infirmary/patients/{pid}/release").status_code == 200
-        d = c.get(f"/api/infirmary/{fid}").json()
+        d = c.get(f"/api/infirmary/{scenes['healthy']}").json()
         assert d["status"] == "released"
         assert d["card_earned"] is True

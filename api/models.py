@@ -322,6 +322,8 @@ class Field(Base):
     plant_category = Column(String, nullable=True)
     min_level = Column(Integer, nullable=False, default=0, server_default="0")
     field_kind = Column(String, nullable=True)
+    clinic_animal_id = Column(Integer, ForeignKey("patient_animals.id", ondelete="CASCADE"), nullable=True)
+    clinic_stage = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     cells = relationship("FieldCell", back_populates="field", cascade="all, delete-orphan")
@@ -337,6 +339,11 @@ class Field(Base):
     trade_cells = relationship("TradeCell", back_populates="field", cascade="all, delete-orphan")
     part_cells = relationship("ClinicPartCell", back_populates="field", cascade="all, delete-orphan")
     infirmary_zones = relationship("InfirmaryZone", back_populates="field", cascade="all, delete-orphan")
+    clinic_animal = relationship("PatientAnimal", back_populates="scenes")
+
+    __table_args__ = (
+        UniqueConstraint("clinic_animal_id", "clinic_stage", name="uq_field_clinic_animal_stage"),
+    )
 
 
 class FieldPlant(Base):
@@ -401,7 +408,7 @@ class BreweryZone(Base):
     recipe = relationship("PotionRecipe")
 
 
-INFIRMARY_ZONE_KINDS = ("animal", "book")
+INFIRMARY_ZONE_KINDS = ("book",)
 
 
 class InfirmaryZone(Base):
@@ -980,6 +987,18 @@ class DiseaseSymptom(Base):
     disease = relationship("Disease", back_populates="symptoms")
 
 
+class ClinicAnimalType(Base):
+    __tablename__ = "clinic_animal_types"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False)
+    emoji = Column(String, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0, server_default="0")
+
+    animals = relationship("PatientAnimal", back_populates="animal_type")
+
+
 class PatientAnimal(Base):
     __tablename__ = "patient_animals"
 
@@ -987,16 +1006,13 @@ class PatientAnimal(Base):
     code = Column(String, nullable=False, unique=True)
     name = Column(String, nullable=False)
     level = Column(Integer, nullable=False, default=1, server_default="1")
-    image_url = Column(String, nullable=True)
     card_image_url = Column(String, nullable=True)
-    hospital_image_url = Column(String, nullable=True)
-    healthy_image_url = Column(String, nullable=True)
+    animal_type_id = Column(Integer, ForeignKey("clinic_animal_types.id", ondelete="SET NULL"), nullable=True)
     disease_id = Column(Integer, ForeignKey("diseases.id", ondelete="SET NULL"), nullable=True)
-    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=True)
 
     disease = relationship("Disease")
-    field = relationship("Field")
-    part_cells = relationship("ClinicPartCell", back_populates="animal", cascade="all, delete-orphan")
+    animal_type = relationship("ClinicAnimalType", back_populates="animals")
+    scenes = relationship("Field", back_populates="clinic_animal", cascade="all, delete-orphan")
 
 
 class ClinicPartCell(Base):
@@ -1004,12 +1020,10 @@ class ClinicPartCell(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False)
-    animal_id = Column(Integer, ForeignKey("patient_animals.id", ondelete="CASCADE"), nullable=False)
     col = Column(Integer, nullable=False)
     row = Column(Integer, nullable=False)
     part_code = Column(String, nullable=False)
 
-    animal = relationship("PatientAnimal", back_populates="part_cells")
     field = relationship("Field", back_populates="part_cells")
 
     __table_args__ = (
