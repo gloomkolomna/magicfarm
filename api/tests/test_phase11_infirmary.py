@@ -427,6 +427,19 @@ def test_infirmary_scene_open_for_low_level_player(admin_client):
         assert c.get(f"/api/infirmary/{scenes['sick']}").status_code == 200
 
 
+def test_infirmary_detail_remedy_lab_field_id(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    pid, scenes = _seed_patient("Лис", did, 1)
+    lab = admin_client.post("/api/admin/fields", json={
+        "name": "Лаборатория снадобий", "cols": 3, "rows": 2, "field_kind": "remedy_lab",
+    }).json()
+    with make_user_client(123, "player") as c:
+        d = c.get(f"/api/infirmary/{scenes['sick']}").json()
+        assert d["remedy_lab_field_id"] == lab["id"]
+        hub = c.get("/api/infirmary").json()
+        assert hub["current"]["remedy_lab_field_id"] == lab["id"]
+
+
 def test_infirmary_wrong_field_kind(admin_client):
     from models import Field
     s = TestingSessionLocal()

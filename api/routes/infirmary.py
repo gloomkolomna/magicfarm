@@ -88,6 +88,7 @@ class InfirmaryCurrentOut(BaseModel):
     disease_name: str | None
     status: str
     current_field_id: int | None
+    remedy_lab_field_id: int | None = None
     card_image_url: str | None
     scenes: list[InfirmarySceneOut]
 
@@ -120,6 +121,7 @@ class InfirmaryDetailOut(BaseModel):
     part_cells: list[PartCellOut]
     infirmary_zones: list[InfirmaryZoneOut]
     patient_scenes: list[InfirmarySceneOut] = []
+    remedy_lab_field_id: int | None = None
 
 
 class SymptomOut(BaseModel):
@@ -239,6 +241,8 @@ def get_infirmary(
             ) for p in items],
         ))
 
+    lab = db.query(Field).filter(Field.field_kind == "remedy_lab").order_by(Field.id.asc()).first()
+
     current = None
     for p in patients:
         if _patient_status(user.vk_id, p.id, db) != "released":
@@ -257,6 +261,7 @@ def get_infirmary(
                 disease_name=p.disease.name if p.disease else None,
                 status=status_,
                 current_field_id=current_field_id,
+                remedy_lab_field_id=lab.id if lab else None,
                 card_image_url=p.card_image_url,
                 scenes=scenes,
             )
@@ -336,6 +341,8 @@ def get_infirmary_detail(
         InfirmaryZone.field_id == f.id
     ).order_by(InfirmaryZone.id.asc()).all()
 
+    lab = db.query(Field).filter(Field.field_kind == "remedy_lab").order_by(Field.id.asc()).first()
+
     return InfirmaryDetailOut(
         field_id=f.id, name=f.name, map_url=f.map_url, cols=f.cols, rows=f.rows,
         stage=f.clinic_stage,
@@ -351,6 +358,7 @@ def get_infirmary_detail(
         healed=(status_ in ("treated", "released")) if status_ else False,
         card_earned=(patient_id in collection) if patient_id else False,
         patient_scenes=_patient_scenes_out(patient) if patient else [],
+        remedy_lab_field_id=lab.id if lab else None,
         part_cells=[PartCellOut(id=pc.id, col=pc.col, row=pc.row, part_code=pc.part_code) for pc in part_cells],
         infirmary_zones=[InfirmaryZoneOut(id=z.id, zone_kind=z.zone_kind, col1=z.col1, row1=z.row1, col2=z.col2, row2=z.row2) for z in zones],
     )

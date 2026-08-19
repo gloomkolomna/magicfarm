@@ -786,6 +786,7 @@ export interface InfirmaryCurrent {
   disease_name: string | null;
   status: string;
   current_field_id: number | null;
+  remedy_lab_field_id: number | null;
   card_image_url: string | null;
   scenes: InfirmaryScene[];
 }
@@ -840,6 +841,7 @@ export interface InfirmaryDetail {
   part_cells: InfirmaryPartCell[];
   infirmary_zones: InfirmaryZone[];
   patient_scenes: InfirmaryScene[];
+  remedy_lab_field_id: number | null;
 }
 
 export interface HandbookDisease {

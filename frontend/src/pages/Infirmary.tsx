@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Swiper, SwiperSlide } from 'swiper/react';
-import { Navigation } from 'swiper/modules';
+import type { Swiper as SwiperInstance } from 'swiper';
 import 'swiper/css';
-import 'swiper/css/navigation';
 import { api, BODY_PART_LABELS, type DiagnoseResult, type HandbookDisease, type Infirmary, type InfirmaryDetail, type InfirmaryZone } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import LocationMap from '../components/LocationMap';
@@ -86,6 +85,11 @@ export default function InfirmaryHubPage() {
               Перейти в лечебницу
             </button>
           )}
+          {current.status === 'diagnosed' && current.remedy_lab_field_id != null && (
+            <button className="fm-btn" style={{ width: '100%', marginTop: 10 }} onClick={() => nav(`/remedy-lab/${current.remedy_lab_field_id}`)}>
+              ⚗️ Сварить лекарство
+            </button>
+          )}
         </div>
       ) : (
         <div className="fm-card" style={{ marginBottom: 14, color: 'var(--text-muted)' }}>
@@ -154,6 +158,9 @@ export function InfirmaryScenePage() {
   const [showHandbook, setShowHandbook] = useState(false);
   const [result, setResult] = useState<DiagnoseResult | null>(null);
   const [showWellbeing, setShowWellbeing] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [swiper, setSwiper] = useState<SwiperInstance | null>(null);
+  const [bookPage, setBookPage] = useState(0);
 
   const fieldId = Number(id);
 
@@ -312,6 +319,9 @@ export function InfirmaryScenePage() {
           {detail.status === 'diagnosed' && (
             <>
               <button className="fm-btn fm-btn-outline" onClick={doPet}>🤚 Погладить</button>
+              {detail.remedy_lab_field_id != null && (
+                <button className="fm-btn" onClick={() => nav(`/remedy-lab/${detail.remedy_lab_field_id}`)}>⚗️ Сварить лекарство</button>
+              )}
               <button className="fm-btn" onClick={() => setShowWellbeing(true)}>💊 Самочувствие</button>
             </>
           )}
@@ -371,45 +381,63 @@ export function InfirmaryScenePage() {
           ) : handbook.length === 0 ? (
             <div style={{ color: 'var(--text-muted)' }}>Болезней пока нет.</div>
           ) : (
-            <Swiper
-              modules={[Navigation]}
-              slidesPerView={1}
-              spaceBetween={0}
-              navigation
-              initialSlide={0}
-              style={{ paddingBottom: 4 }}
-            >
-              {handbook.map((d) => (
-                <SwiperSlide key={d.id}>
-                  <div style={{ textAlign: 'center' }}>
-                    {d.image_url ? (
-                      <img src={mediaUrl(d.image_url)} alt={d.name} style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 10, objectFit: 'contain' }} />
-                    ) : (
-                      <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 64, background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>🦠</div>
-                    )}
-                    <div style={{ marginTop: 10 }}>
-                      <strong style={{ fontSize: 17 }}>{d.name}</strong>
-                    </div>
-                    {d.remedy_name && (
-                      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-                        Мазь: {d.remedy_name}
+            <>
+              <Swiper
+                onSwiper={setSwiper}
+                onSlideChange={(s) => setBookPage(s.activeIndex)}
+                slidesPerView={1}
+                spaceBetween={0}
+                initialSlide={0}
+                style={{ paddingBottom: 4 }}
+              >
+                {handbook.map((d) => (
+                  <SwiperSlide key={d.id}>
+                    <div style={{ textAlign: 'center' }}>
+                      {d.image_url ? (
+                        <img
+                          src={mediaUrl(d.image_url)}
+                          alt={d.name}
+                          onClick={() => setPreviewImage(mediaUrl(d.image_url))}
+                          style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 10, objectFit: 'contain', cursor: 'zoom-in' }}
+                        />
+                      ) : (
+                        <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 64, background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>🦠</div>
+                      )}
+                      <div style={{ marginTop: 10 }}>
+                        <strong style={{ fontSize: 17 }}>{d.name}</strong>
                       </div>
-                    )}
-                    {d.symptoms.length > 0 && (
-                      <ul style={{ margin: '8px 0 0', paddingLeft: 18, textAlign: 'left', fontSize: 13 }}>
-                        {d.symptoms.map((s, i) => <li key={i}>{BODY_PART_LABELS[s.part_code] || s.part_code}: {s.text}</li>)}
-                      </ul>
-                    )}
-                  </div>
-                  {detail?.status === 'sick' && detail?.patient_id && (
-                    <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={() => doDiagnose(d.id)}>
-                      🩺 Выбрать это заболевание
-                    </button>
-                  )}
-                </SwiperSlide>
-              ))}
-            </Swiper>
+                      {d.remedy_name && (
+                        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
+                          Мазь: {d.remedy_name}
+                        </div>
+                      )}
+                      {d.symptoms.length > 0 && (
+                        <ul style={{ margin: '8px 0 0', paddingLeft: 18, textAlign: 'left', fontSize: 13 }}>
+                          {d.symptoms.map((s, i) => <li key={i}>{BODY_PART_LABELS[s.part_code] || s.part_code}: {s.text}</li>)}
+                        </ul>
+                      )}
+                    </div>
+                  </SwiperSlide>
+                ))}
+              </Swiper>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                <button className="fm-btn fm-btn-outline" style={{ minWidth: 60 }} disabled={!swiper || swiper.isBeginning} onClick={() => swiper?.slidePrev()}>◀</button>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{bookPage + 1} / {handbook.length}</span>
+                <button className="fm-btn fm-btn-outline" style={{ minWidth: 60 }} disabled={!swiper || swiper.isEnd} onClick={() => swiper?.slideNext()}>▶</button>
+              </div>
+              {detail?.status === 'sick' && detail?.patient_id && handbook[bookPage] && (
+                <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={() => doDiagnose(handbook[bookPage].id)}>
+                  🩺 Выбрать «{handbook[bookPage].name}»
+                </button>
+              )}
+            </>
           )}
+        </Modal>
+      )}
+
+      {previewImage && (
+        <Modal title="🔍" onClose={() => setPreviewImage(null)}>
+          <img src={previewImage} alt="" style={{ width: '100%', borderRadius: 10 }} />
         </Modal>
       )}
 
