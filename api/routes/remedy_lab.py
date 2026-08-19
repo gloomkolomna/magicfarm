@@ -28,6 +28,7 @@ class RecipeItemOut(BaseModel):
     plant_id: int | None
     plant_name: str | None
     qty: int
+    have: int = 0
 
 
 class RemedyCardOut(BaseModel):
@@ -51,7 +52,20 @@ class RemedyLabOut(BaseModel):
     apothecary: list[ApothecaryItemOut]
 
 
-def _remedy_card_out(card: UserRemedyCard) -> RemedyCardOut:
+def _have_qty(user_id: int, item, db: Session) -> int:
+    if item.ingredient_id is not None:
+        row = db.query(UserIngredient).filter(
+            UserIngredient.user_id == user_id,
+            UserIngredient.ingredient_id == item.ingredient_id,
+        ).first()
+        return row.qty if row else 0
+    row = db.query(Inventory).filter(
+        Inventory.user_id == user_id, Inventory.plant_id == item.plant_id
+    ).first()
+    return row.qty if row else 0
+
+
+def _remedy_card_out(card: UserRemedyCard, user_id: int, db: Session) -> RemedyCardOut:
     remedy = card.remedy
     patient = card.patient
     return RemedyCardOut(
@@ -69,6 +83,7 @@ def _remedy_card_out(card: UserRemedyCard) -> RemedyCardOut:
                 plant_id=item.plant_id,
                 plant_name=item.plant.name if item.plant else None,
                 qty=item.qty,
+                have=_have_qty(user_id, item, db),
             )
             for item in (remedy.recipe_items if remedy else [])
         ],
@@ -94,7 +109,7 @@ def get_remedy_lab(
     ).all()
     return RemedyLabOut(
         field_id=f.id, name=f.name, map_url=f.map_url, cols=f.cols, rows=f.rows,
-        remedy_cards=[_remedy_card_out(c) for c in cards],
+        remedy_cards=[_remedy_card_out(c, user.vk_id, db) for c in cards],
         apothecary=[_apothecary_item_out(ui) for ui in apo],
     )
 

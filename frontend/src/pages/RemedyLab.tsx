@@ -62,20 +62,31 @@ export default function RemedyLabPage() {
 
       <h3 style={{ margin: '0 0 8px' }}>Карточки рецептов</h3>
       <div className="fm-grid">
-        {lab?.remedy_cards.map((card) => (
-          <div key={card.id} className="fm-card fm-rise">
-            <strong>{card.remedy_name}</strong>
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0' }}>
-              Пациент: {card.patient_name}
+        {lab?.remedy_cards.map((card) => {
+          const canBrew = card.recipe_items.every((i) => (i.have ?? 0) >= i.qty);
+          return (
+            <div key={card.id} className="fm-card fm-rise">
+              <strong>{card.remedy_name}</strong>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0' }}>
+                Пациент: {card.patient_name}
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                {card.recipe_items.map((i, idx) => {
+                  const ok = (i.have ?? 0) >= i.qty;
+                  return (
+                    <div key={idx} style={{ fontSize: 12, color: ok ? '#7fdf7f' : '#ff9d9d', display: 'flex', justifyContent: 'space-between', gap: 6, lineHeight: 1.5 }}>
+                      <span>{ok ? '✓' : '✗'} {i.ingredient_name || i.plant_name}</span>
+                      <span>{i.have ?? 0} / {i.qty}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <button className="fm-btn fm-btn-sm" style={{ width: '100%' }} disabled={busy === card.id || !canBrew} onClick={() => doBrew(card.id, card.patient_name)}>
+                🧪 Сварить
+              </button>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-              {card.recipe_items.map((i) => `${i.ingredient_name} ×${i.qty}`).join(', ')}
-            </div>
-            <button className="fm-btn fm-btn-sm" style={{ width: '100%' }} disabled={busy === card.id} onClick={() => doBrew(card.id, card.patient_name)}>
-              🧪 Сварить
-            </button>
-          </div>
-        ))}
+          );
+        })}
         {(lab?.remedy_cards.length ?? 0) === 0 && (
           <div className="fm-card" style={{ color: 'var(--text-muted)' }}>
             Пока нет карточек рецептов. Поставьте верный диагноз в лечебнице, чтобы получить карточку.

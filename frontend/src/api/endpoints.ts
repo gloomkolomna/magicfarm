@@ -672,6 +672,10 @@ export interface RemedyRecipeItem {
   qty: number;
 }
 
+export interface RemedyRecipeItemHave extends RemedyRecipeItem {
+  have: number;
+}
+
 export interface Remedy {
   id: number;
   code: string;
@@ -880,7 +884,7 @@ export interface RemedyCard {
   remedy_id: number;
   remedy_name: string;
   remedy_image_url: string | null;
-  recipe_items: RemedyRecipeItem[];
+  recipe_items: RemedyRecipeItemHave[];
 }
 
 export interface RemedyLab {

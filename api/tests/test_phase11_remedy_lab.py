@@ -368,3 +368,23 @@ def test_two_players_heal_same_patient_independently(admin_client):
     # Животное не удаляется из админки.
     patients = admin_client.get("/api/admin/patients").json()
     assert any(p["id"] == pid for p in patients)
+
+
+def test_remedy_card_ingredients_show_have(admin_client):
+    ing = _seed_ingredient("Роса")
+    rid = _seed_remedy("Мазь", [(ing, 3)])
+    did = _seed_disease("Хворь", rid)
+    pid, scenes = _seed_patient("Лис", did, 1)
+    lab = admin_client.post("/api/admin/fields", json={
+        "name": "Лаборатория", "cols": 3, "rows": 2, "field_kind": "remedy_lab",
+    }).json()
+    _seed_user_ingredient(123, ing, 2)
+
+    with make_user_client(123, "player") as c:
+        assert c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": did}).status_code == 200
+        data = c.get(f"/api/remedy-lab/{lab['id']}").json()
+        card = data["remedy_cards"][0]
+        item = card["recipe_items"][0]
+        assert item["have"] == 2
+        assert item["qty"] == 3
+        assert item["ingredient_id"] == ing
