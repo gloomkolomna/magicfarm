@@ -237,6 +237,7 @@ export interface Plot {
   status: string;
   accumulated: number;
   required: number;
+  norm_per_unit: number | null;
   crystal_color: string | null;
   crystal_count: number | null;
   drawn_cards_json: string | null;

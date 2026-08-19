@@ -41,6 +41,7 @@ class PlotOut(BaseModel):
     status: str
     accumulated: int
     required: int
+    norm_per_unit: int | None = None
     crystal_color: str | None
     crystal_count: int | None
     drawn_cards_json: str | None
@@ -54,6 +55,7 @@ def _plot_to_out(p: Plot) -> PlotOut:
     return PlotOut(
         id=p.id, plant_id=p.plant_id, plant_name=p.plant.name, plant_emoji=p.plant.emoji,
         qty=p.qty, status=p.status, accumulated=p.accumulated, required=p.required,
+        norm_per_unit=(round(p.required / p.qty) if p.qty else p.required),
         crystal_color=p.crystal_color, crystal_count=p.crystal_count,
         drawn_cards_json=p.drawn_cards_json,
         norm_revealed=bool(p.norm_revealed),
