@@ -18,11 +18,6 @@ router = APIRouter(prefix="/api/infirmary", tags=["infirmary"])
 DIAGNOSE_PENALTY = 200
 
 
-def _check_field_gate(f: Field, user: User) -> None:
-    if f.min_level is not None and (user.level or 0) < f.min_level:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Эта локация пока недоступна")
-
-
 def _healed_patient_ids(user_id: int, db: Session) -> set[int]:
     return {
         s.patient_id
@@ -314,7 +309,6 @@ def get_infirmary_detail(
     f = _get_field_or_404(field_id, db)
     if f.field_kind != "infirmary":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Это не лесная лечебница")
-    _check_field_gate(f, user)
 
     patient = f.clinic_animal
     collection = {

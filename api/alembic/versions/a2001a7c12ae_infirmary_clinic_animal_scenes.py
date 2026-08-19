@@ -116,14 +116,14 @@ def upgrade() -> None:
                         sa.text("SELECT id, cols, rows FROM fields WHERE field_kind='infirmary' "
                                 "AND clinic_animal_id IS NULL ORDER BY id ASC LIMIT 1")
                     ).fetchone()
-                else:
-                    f_row = None
-                if f_row is not None:
-                    src_id, cols, rows = f_row
-                    bind.execute(
-                        sa.text("UPDATE fields SET clinic_animal_id=:p, clinic_stage='sick' WHERE id=:f"),
-                        {"p": pid, "f": src_id},
-                    )
+                    if f_row is not None:
+                        src_id = f_row[0]
+                        bind.execute(
+                            sa.text("UPDATE fields SET clinic_animal_id=:p, clinic_stage='sick', min_level=0 WHERE id=:f"),
+                            {"p": pid, "f": src_id},
+                        )
+                        continue
+                    cols, rows = (3, 2)
                 else:
                     cols, rows = (3, 2)
                 code = _unique_code(bind, "fields", f"{_slugify(name, 'scene')}_{stage}")

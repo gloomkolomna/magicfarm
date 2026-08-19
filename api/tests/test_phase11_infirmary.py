@@ -406,6 +406,27 @@ def test_infirmary_detail_scene(admin_client):
         assert stages == {"sick", "treating", "healthy"}
 
 
+def test_infirmary_scene_open_for_low_level_player(admin_client):
+    """Сцены лечебницы не зависят от уровня игрока (нет 403 «локация недоступна»)."""
+    did = _seed_disease("Хворь", None, {})
+    pid, scenes = _seed_patient("Лис", did, 1)
+
+    from models import User
+    s = TestingSessionLocal()
+    try:
+        u = s.query(User).filter(User.vk_id == 123).first()
+        if u is None:
+            u = User(vk_id=123, role="player", crosses_balance=0)
+            s.add(u)
+        u.level = 0
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as c:
+        assert c.get(f"/api/infirmary/{scenes['sick']}").status_code == 200
+
+
 def test_infirmary_wrong_field_kind(admin_client):
     from models import Field
     s = TestingSessionLocal()
