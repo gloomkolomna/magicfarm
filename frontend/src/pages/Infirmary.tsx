@@ -76,12 +76,12 @@ export default function InfirmaryHubPage() {
                 {current.status === 'released' && <span>🕊 Животное выпущено</span>}
               </div>
             </div>
-            {currentScene && (
-              <button className="fm-btn" onClick={() => nav(`/infirmary/${currentScene.field_id}`)}>
-                Перейти в лечебницу
-              </button>
-            )}
           </div>
+          {currentScene && (
+            <button className="fm-btn" style={{ width: '100%', marginTop: 10 }} onClick={() => nav(`/infirmary/${currentScene.field_id}`)}>
+              Перейти в лечебницу
+            </button>
+          )}
         </div>
       ) : (
         <div className="fm-card" style={{ marginBottom: 14, color: 'var(--text-muted)' }}>
@@ -239,7 +239,7 @@ export function InfirmaryScenePage() {
   const bookZone = (detail?.infirmary_zones ?? []).find((z) => z.zone_kind === 'book') ?? null;
   const treatingScene = (detail?.patient_scenes ?? []).find((s) => s.stage === 'treating') ?? null;
   const isSickScene = detail?.stage === 'sick';
-  const canExamine = detail?.status === 'sick' && !!detail.patient_id && isSickScene;
+  const canExamine = detail?.status === 'sick' && !!detail.patient_id && detail?.stage === 'treating';
   const active = !!detail?.patient_id && detail.status !== 'released';
 
   return (
