@@ -77,7 +77,7 @@ export default function MeadowPage() {
 
   return (
     <>
-      <LocationMap mapUrl={meadow?.map_url ?? null} name={meadow?.name ?? ''} emoji="🌿" onBack={() => nav('/fields')}>
+      <LocationMap mapUrl={meadow?.map_url ?? null} name={meadow?.name ?? ''} emoji="🌿" onBack={() => nav('/infirmary')}>
         {meadow && (
           <div
             style={{

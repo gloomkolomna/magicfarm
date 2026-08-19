@@ -732,6 +732,7 @@ export interface Patient {
   name: string;
   level: number;
   card_image_url: string | null;
+  animal_image_url: string | null;
   animal_type_id: number | null;
   animal_type_name: string | null;
   animal_type_emoji: string | null;
@@ -754,6 +755,7 @@ export interface InfirmaryPatient {
   level: number;
   animal_type_name: string | null;
   animal_type_emoji: string | null;
+  animal_image_url: string | null;
   healed: boolean;
   card_earned: boolean;
 }
@@ -779,8 +781,10 @@ export interface InfirmaryCurrent {
   level: number;
   animal_type_name: string | null;
   animal_type_emoji: string | null;
+  animal_image_url: string | null;
   disease_name: string | null;
   status: string;
+  current_field_id: number | null;
   card_image_url: string | null;
   scenes: InfirmaryScene[];
 }
@@ -826,6 +830,7 @@ export interface InfirmaryDetail {
   patient_level: number | null;
   patient_type_name: string | null;
   patient_type_emoji: string | null;
+  patient_animal_image_url: string | null;
   status: 'sick' | 'diagnosed' | 'treated' | 'released' | null;
   disease_name: string | null;
   remedy_name: string | null;
@@ -833,6 +838,7 @@ export interface InfirmaryDetail {
   card_earned: boolean;
   part_cells: InfirmaryPartCell[];
   infirmary_zones: InfirmaryZone[];
+  patient_scenes: InfirmaryScene[];
 }
 
 export interface HandbookDisease {
@@ -1688,6 +1694,11 @@ export const api = {
     const form = new FormData();
     form.append('image', file);
     return client.put<Patient>(`/admin/patients/${id}/card-image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadPatientAnimalImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<Patient>(`/admin/patients/${id}/animal-image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
   adminAnimalTypes: () => client.get<ClinicAnimalType[]>('/admin/clinic-animal-types').then((r) => r.data),
   adminCreateAnimalType: (data: { name: string; emoji?: string | null }) =>

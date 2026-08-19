@@ -81,7 +81,7 @@ export default function ShopPage() {
 
   return (
     <>
-      <LocationMap mapUrl={shop?.map_url ?? null} name={shop?.name ?? ''} emoji="🛒" onBack={() => nav('/fields')}>
+      <LocationMap mapUrl={shop?.map_url ?? null} name={shop?.name ?? ''} emoji="🛒" onBack={() => nav('/infirmary')}>
         {shop && (
           <div
             style={{

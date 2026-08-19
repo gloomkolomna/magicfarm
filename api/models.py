@@ -1007,6 +1007,7 @@ class PatientAnimal(Base):
     name = Column(String, nullable=False)
     level = Column(Integer, nullable=False, default=1, server_default="1")
     card_image_url = Column(String, nullable=True)
+    animal_image_url = Column(String, nullable=True)
     animal_type_id = Column(Integer, ForeignKey("clinic_animal_types.id", ondelete="SET NULL"), nullable=True)
     disease_id = Column(Integer, ForeignKey("diseases.id", ondelete="SET NULL"), nullable=True)
 
@@ -1038,6 +1039,7 @@ class UserPatientState(Base):
     user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
     patient_id = Column(Integer, ForeignKey("patient_animals.id", ondelete="CASCADE"), nullable=False)
     status = Column(String, nullable=False, default="sick", server_default="sick")
+    current_field_id = Column(Integer, ForeignKey("fields.id", ondelete="SET NULL"), nullable=True)
     healed_at = Column(DateTime, nullable=True)
 
     patient = relationship("PatientAnimal")

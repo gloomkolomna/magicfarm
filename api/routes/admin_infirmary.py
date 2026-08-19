@@ -83,6 +83,7 @@ class PatientOut(BaseModel):
     name: str
     level: int
     card_image_url: str | None
+    animal_image_url: str | None
     animal_type_id: int | None
     animal_type_name: str | None
     animal_type_emoji: str | None
@@ -132,7 +133,7 @@ def _patient_scenes(p: PatientAnimal) -> list[PatientSceneOut]:
 def _patient_out(p: PatientAnimal) -> PatientOut:
     return PatientOut(
         id=p.id, code=p.code, name=p.name, level=p.level,
-        card_image_url=p.card_image_url,
+        card_image_url=p.card_image_url, animal_image_url=p.animal_image_url,
         animal_type_id=p.animal_type_id,
         animal_type_name=p.animal_type.name if p.animal_type else None,
         animal_type_emoji=p.animal_type.emoji if p.animal_type else None,
@@ -550,6 +551,7 @@ def delete_patient(
     if p is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
     remove_upload(p.card_image_url)
+    remove_upload(p.animal_image_url)
     for s in p.scenes:
         remove_upload(s.map_url)
     db.delete(p)
@@ -569,6 +571,23 @@ def upload_patient_card_image(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
     remove_upload(p.card_image_url)
     p.card_image_url = save_upload(image, f"patient_card_{patient_id}", max_size=400)
+    db.commit()
+    db.refresh(p)
+    return _patient_out(p)
+
+
+@router.put("/patients/{patient_id}/animal-image", response_model=PatientOut)
+def upload_patient_animal_image(
+    patient_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    p = db.query(PatientAnimal).filter(PatientAnimal.id == patient_id).first()
+    if p is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
+    remove_upload(p.animal_image_url)
+    p.animal_image_url = save_upload(image, f"patient_animal_{patient_id}", max_size=400)
     db.commit()
     db.refresh(p)
     return _patient_out(p)

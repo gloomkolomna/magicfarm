@@ -49,7 +49,7 @@ export default function RemedyLabPage() {
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-        <button className="fm-btn fm-btn-outline fm-btn-xs" onClick={() => nav(-1)}>← Назад</button>
+        <button className="fm-btn fm-btn-outline fm-btn-xs" onClick={() => nav('/infirmary')}>← Назад</button>
         <h1 style={{ margin: 0, fontSize: 20, flex: 1 }}>⚗️ {lab?.name}</h1>
       </div>
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}

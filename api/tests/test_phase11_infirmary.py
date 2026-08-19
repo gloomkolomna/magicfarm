@@ -372,6 +372,20 @@ def test_infirmary_hub_after_release_shows_next(admin_client):
         assert hub["current"]["id"] == pid2
 
 
+def test_infirmary_hub_remembers_last_scene(admin_client):
+    did = _seed_disease("Хворь", None, {})
+    pid, scenes = _seed_patient("Лис", did, 1)
+    with make_user_client(123, "player") as c:
+        assert c.get(f"/api/infirmary/{scenes['sick']}").status_code == 200
+        hub = c.get("/api/infirmary").json()
+        assert hub["current"]["current_field_id"] == scenes["sick"]
+
+        assert c.get(f"/api/infirmary/{scenes['treating']}").status_code == 200
+        hub = c.get("/api/infirmary").json()
+        assert hub["current"]["status"] == "sick"
+        assert hub["current"]["current_field_id"] == scenes["treating"]
+
+
 # ── Детализация сцены ──
 
 def test_infirmary_detail_scene(admin_client):
@@ -388,6 +402,8 @@ def test_infirmary_detail_scene(admin_client):
         assert data["part_cells"][0]["part_code"] == "nose"
         assert data["status"] == "sick"
         assert "patient_image_url" not in data
+        stages = {s["stage"] for s in data["patient_scenes"]}
+        assert stages == {"sick", "treating", "healthy"}
 
 
 def test_infirmary_wrong_field_kind(admin_client):
@@ -558,6 +574,26 @@ def test_admin_upload_patient_card_image(admin_client, uploads_tmp):
     )
     assert r.status_code == 200
     assert r.json()["card_image_url"].startswith("/api/uploads/patient_card_")
+
+
+def test_admin_upload_patient_animal_image(admin_client, uploads_tmp):
+    did = _seed_disease("Хворь", None, {})
+    pid, scenes = _seed_patient("Лис", did, 1)
+
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (80, 60), (60, 120, 90)).save(buf, format="PNG")
+
+    r = admin_client.put(
+        f"/api/admin/patients/{pid}/animal-image",
+        files={"image": ("a.png", io.BytesIO(buf.getvalue()), "image/png")},
+    )
+    assert r.status_code == 200
+    assert r.json()["animal_image_url"].startswith("/api/uploads/patient_animal_")
+
+    with make_user_client(123, "player") as c:
+        hub = c.get("/api/infirmary").json()
+        assert hub["current"]["animal_image_url"].startswith("/api/uploads/patient_animal_")
 
 
 # ── Стадии пациента: sick → diagnosed → treated → released ──

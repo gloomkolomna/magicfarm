@@ -235,6 +235,7 @@ export default function AdminPage() {
   const [animalTypeEditingId, setAnimalTypeEditingId] = useState<number | null>(null);
   const [patientForm, setPatientForm] = useState<{ name: string; level: string; diseaseId: string; animalTypeId: string }>({ name: '', level: '1', diseaseId: '', animalTypeId: '' });
   const [patientEditingId, setPatientEditingId] = useState<number | null>(null);
+  const [infirmaryTab, setInfirmaryTab] = useState<'remedies' | 'diseases' | 'types' | 'locations'>('remedies');
 
   // ── Рецепты библиотеки ──
   const [recipes, setRecipes] = useState<AdminRecipe[]>([]);
@@ -357,6 +358,12 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => { if (!sessionLoading) loadCore(); }, [loadCore, sessionLoading]);
+
+  useEffect(() => {
+    const prevent = (e: Event) => e.preventDefault();
+    document.addEventListener('submit', prevent);
+    return () => document.removeEventListener('submit', prevent);
+  }, []);
 
   async function selectPlayer(p: Player) {
     setSelectedPlayer(p);
@@ -743,11 +750,11 @@ export default function AdminPage() {
             onChange={(e) => setCustomerForm(e.target.value)}
             style={{ maxWidth: 280 }}
           />
-          <button className="fm-btn" disabled={busy} onClick={saveCustomer}>
+          <button type="button" className="fm-btn" disabled={busy} onClick={saveCustomer}>
             {customerEditingId ? '✎ Сохранить' : '➕ Добавить'}
           </button>
           {customerEditingId && (
-            <button className="fm-btn fm-btn-outline" onClick={() => { setCustomerEditingId(null); setCustomerForm(''); }}>Отмена</button>
+            <button type="button" className="fm-btn fm-btn-outline" onClick={() => { setCustomerEditingId(null); setCustomerForm(''); }}>Отмена</button>
           )}
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
@@ -772,8 +779,8 @@ export default function AdminPage() {
                   </div>
                 </td>
                 <td>
-                  <button className="fm-btn fm-btn-sm" onClick={() => { setCustomerEditingId(c.id); setCustomerForm(c.name); }}>✎</button>
-                  <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteCustomer(c.id)}>🗑</button>
+                  <button type="button" className="fm-btn fm-btn-sm" onClick={() => { setCustomerEditingId(c.id); setCustomerForm(c.name); }}>✎</button>
+                  <button type="button" className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteCustomer(c.id)}>🗑</button>
                 </td>
               </tr>
             ))}
@@ -831,12 +838,12 @@ export default function AdminPage() {
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
-          <button className="fm-btn" disabled={busy} onClick={saveLevel}>💾 Сохранить</button>
+          <button type="button" className="fm-btn" disabled={busy} onClick={saveLevel}>💾 Сохранить</button>
         </div>
         <div className="fm-card" style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input className="fm-input" type="number" placeholder="Уровень" value={levelImageLevel} onChange={(e) => setLevelImageLevel(Number(e.target.value))} style={{ width: 80 }} />
           <input type="file" accept="image/*" onChange={(e) => setLevelImage(e.target.files?.[0] || null)} style={{ fontSize: 13 }} />
-          <button className="fm-btn fm-btn-sm" disabled={busy || !levelImage} onClick={uploadLevelImage}>🖼 Загрузить картинку</button>
+          <button type="button" className="fm-btn fm-btn-sm" disabled={busy || !levelImage} onClick={uploadLevelImage}>🖼 Загрузить картинку</button>
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
           <thead><tr><th>Уровень</th><th>Картинка</th><th>Монет</th><th>Грядок</th><th>Разблокировка</th><th></th></tr></thead>
@@ -849,8 +856,8 @@ export default function AdminPage() {
                 <td>{l.plots_required}</td>
                 <td>{l.unlock_type || '—'}</td>
                 <td>
-                  <button className="fm-btn fm-btn-sm" onClick={() => { setLevelForm({ level: l.level, coins_required: l.coins_required, plots_required: l.plots_required, unlock_type: l.unlock_type || '' }); }}>✎</button>
-                  <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteLevel(l.level)}>🗑</button>
+                  <button type="button" className="fm-btn fm-btn-sm" onClick={() => { setLevelForm({ level: l.level, coins_required: l.coins_required, plots_required: l.plots_required, unlock_type: l.unlock_type || '' }); }}>✎</button>
+                  <button type="button" className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteLevel(l.level)}>🗑</button>
                 </td>
               </tr>
             ))}
@@ -973,10 +980,10 @@ export default function AdminPage() {
               />
             </label>
           )}
-          <button className="fm-btn" disabled={busy} onClick={saveIngredient}>
+          <button type="button" className="fm-btn" disabled={busy} onClick={saveIngredient}>
             {ingEditingId ? '✎ Сохранить' : '➕ Создать'}
           </button>
-          {ingEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setIngEditingId(null); setIngForm({ name: '', description: '', sort_order: '0' }); }}>Отмена</button>}
+          {ingEditingId && <button type="button" className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setIngEditingId(null); setIngForm({ name: '', description: '', sort_order: '0' }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
           <thead><tr><th>ID</th><th>Картинка</th><th>Название</th><th>Код</th><th>Описание</th><th>Порядок</th><th></th></tr></thead>
@@ -994,8 +1001,8 @@ export default function AdminPage() {
                 <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{ing.description || '—'}</td>
                 <td>{ing.sort_order}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button className="fm-btn fm-btn-xs" onClick={() => { setIngEditingId(ing.id); setIngForm({ name: ing.name, description: ing.description || '', sort_order: String(ing.sort_order) }); }}>✎</button>{' '}
-                  <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteIngredient(ing.id)}>✕</button>
+                  <button type="button" className="fm-btn fm-btn-xs" onClick={() => { setIngEditingId(ing.id); setIngForm({ name: ing.name, description: ing.description || '', sort_order: String(ing.sort_order) }); }}>✎</button>{' '}
+                  <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteIngredient(ing.id)}>✕</button>
                 </td>
               </tr>
             ))}
@@ -1133,6 +1140,15 @@ export default function AdminPage() {
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
+  async function uploadPatientAnimalImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminUploadPatientAnimalImage(id, file);
+      await loadInfirmary();
+      setMsg('✓ Изображение животного загружено');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
   async function uploadSceneImage(fieldId: number, file: File) {
     setBusy(true); setMsg(null);
     try {
@@ -1147,6 +1163,14 @@ export default function AdminPage() {
     return (
       <div>
         <h2>🌲 Лечебница</h2>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+          <TabBtn active={infirmaryTab === 'remedies'} onClick={() => setInfirmaryTab('remedies')}>🧴 Мази</TabBtn>
+          <TabBtn active={infirmaryTab === 'diseases'} onClick={() => setInfirmaryTab('diseases')}>🦠 Болезни</TabBtn>
+          <TabBtn active={infirmaryTab === 'types'} onClick={() => setInfirmaryTab('types')}>🐾 Типы животных</TabBtn>
+          <TabBtn active={infirmaryTab === 'locations'} onClick={() => setInfirmaryTab('locations')}>🌲 Локации Лечебницы</TabBtn>
+        </div>
+
+        {infirmaryTab === 'remedies' && (<>
         <div className="fm-card" style={{ marginBottom: 10 }}>
           <h3 style={{ marginTop: 0 }}>Мази (состав)</h3>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -1164,7 +1188,7 @@ export default function AdminPage() {
                 : plants.map((p) => <option key={p.id} value={p.id}>{p.emoji || '🌱'} {p.name}</option>)}
             </select>
             <input className="fm-input" type="number" min={1} value={remedyPickQty} onChange={(e) => setRemedyPickQty(e.target.value)} style={{ width: 70 }} />
-            <button className="fm-btn fm-btn-sm" onClick={addRemedyItem}>+</button>
+            <button type="button" className="fm-btn fm-btn-sm" onClick={addRemedyItem}>+</button>
           </div>
           {remedyForm.items.length > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -1180,8 +1204,8 @@ export default function AdminPage() {
               })}
             </div>
           )}
-          <button className="fm-btn" disabled={busy} onClick={saveRemedy}>{remedyEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
-          {remedyEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setRemedyEditingId(null); setRemedyForm({ name: '', description: '', items: [] }); }}>Отмена</button>}
+          <button type="button" className="fm-btn" disabled={busy} onClick={saveRemedy}>{remedyEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
+          {remedyEditingId && <button type="button" className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setRemedyEditingId(null); setRemedyForm({ name: '', description: '', items: [] }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%', marginBottom: 16 }}>
           <thead><tr><th>ID</th><th>Название</th><th>Состав</th><th></th></tr></thead>
@@ -1192,14 +1216,16 @@ export default function AdminPage() {
                 <td><strong>{r.name}</strong></td>
                 <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{r.recipe_items.map((i) => `${i.ingredient_name || i.plant_name || i.ingredient_id} ×${i.qty}`).join(', ') || '—'}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button className="fm-btn fm-btn-xs" onClick={() => { setRemedyEditingId(r.id); setRemedyForm({ name: r.name, description: r.description || '', items: r.recipe_items.map((i) => ({ ingredient_id: i.ingredient_id, plant_id: i.plant_id, qty: i.qty })) }); }}>✎</button>{' '}
-                  <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteRemedy(r.id)}>✕</button>
+                  <button type="button" className="fm-btn fm-btn-xs" onClick={() => { setRemedyEditingId(r.id); setRemedyForm({ name: r.name, description: r.description || '', items: r.recipe_items.map((i) => ({ ingredient_id: i.ingredient_id, plant_id: i.plant_id, qty: i.qty })) }); }}>✎</button>{' '}
+                  <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteRemedy(r.id)}>✕</button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </>)}
 
+        {infirmaryTab === 'diseases' && (<>
         <div className="fm-card" style={{ marginBottom: 10 }}>
           <h3 style={{ marginTop: 0 }}>Болезни (симптомы)</h3>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -1215,7 +1241,7 @@ export default function AdminPage() {
               {BODY_PARTS.map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
             </select>
             <input className="fm-input" placeholder="Симптом (например: горячий нос)" value={diseaseSymText} onChange={(e) => setDiseaseSymText(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
-            <button className="fm-btn fm-btn-sm" onClick={addDiseaseSymptom}>+</button>
+            <button type="button" className="fm-btn fm-btn-sm" onClick={addDiseaseSymptom}>+</button>
           </div>
           {diseaseForm.symptoms.length > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -1226,8 +1252,8 @@ export default function AdminPage() {
               ))}
             </div>
           )}
-          <button className="fm-btn" disabled={busy} onClick={saveDisease}>{diseaseEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
-          {diseaseEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setDiseaseEditingId(null); setDiseaseForm({ name: '', description: '', remedyId: '', symptoms: [] }); }}>Отмена</button>}
+          <button type="button" className="fm-btn" disabled={busy} onClick={saveDisease}>{diseaseEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
+          {diseaseEditingId && <button type="button" className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setDiseaseEditingId(null); setDiseaseForm({ name: '', description: '', remedyId: '', symptoms: [] }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%', marginBottom: 16 }}>
           <thead><tr><th>ID</th><th>Название</th><th>Мазь</th><th>Симптомы</th><th></th></tr></thead>
@@ -1239,34 +1265,38 @@ export default function AdminPage() {
                 <td style={{ fontSize: 12 }}>{d.remedy_name || '—'}</td>
                 <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.symptoms.map((s) => `${BODY_PART_LABELS[s.part_code] || s.part_code}: ${s.text}`).join('; ') || '—'}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button className="fm-btn fm-btn-xs" onClick={() => { setDiseaseEditingId(d.id); setDiseaseForm({ name: d.name, description: d.description || '', remedyId: d.remedy_id ? String(d.remedy_id) : '', symptoms: d.symptoms.map((s) => ({ part_code: s.part_code, text: s.text })) }); }}>✎</button>{' '}
-                  <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteDisease(d.id)}>✕</button>
+                  <button type="button" className="fm-btn fm-btn-xs" onClick={() => { setDiseaseEditingId(d.id); setDiseaseForm({ name: d.name, description: d.description || '', remedyId: d.remedy_id ? String(d.remedy_id) : '', symptoms: d.symptoms.map((s) => ({ part_code: s.part_code, text: s.text })) }); }}>✎</button>{' '}
+                  <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteDisease(d.id)}>✕</button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </>)}
 
+        {infirmaryTab === 'types' && (<>
         <div className="fm-card" style={{ marginBottom: 10 }}>
           <h3 style={{ marginTop: 0 }}>🐾 Типы животных лечебницы</h3>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
             <input className="fm-input" placeholder="Название (например, Лис)" value={animalTypeForm.name} onChange={(e) => setAnimalTypeForm({ ...animalTypeForm, name: e.target.value })} />
             <input className="fm-input" placeholder="Эмодзи" value={animalTypeForm.emoji} onChange={(e) => setAnimalTypeForm({ ...animalTypeForm, emoji: e.target.value })} style={{ width: 80 }} />
           </div>
-          <button className="fm-btn" disabled={busy} onClick={saveAnimalType}>{animalTypeEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
-          {animalTypeEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setAnimalTypeEditingId(null); setAnimalTypeForm({ name: '', emoji: '' }); }}>Отмена</button>}
+          <button type="button" className="fm-btn" disabled={busy} onClick={saveAnimalType}>{animalTypeEditingId ? '✎ Сохранить' : '➕ Создать'}</button>
+          {animalTypeEditingId && <button type="button" className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setAnimalTypeEditingId(null); setAnimalTypeForm({ name: '', emoji: '' }); }}>Отмена</button>}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
             {animalTypes.map((t) => (
               <span key={t.id} className="fm-card" style={{ padding: '4px 10px', fontSize: 13 }}>
                 {t.emoji || '🐾'} {t.name}{' '}
-                <button className="fm-btn fm-btn-xs" style={{ marginLeft: 6 }} onClick={() => { setAnimalTypeEditingId(t.id); setAnimalTypeForm({ name: t.name, emoji: t.emoji || '' }); }}>✎</button>
-                <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteAnimalType(t.id)}>✕</button>
+                <button type="button" className="fm-btn fm-btn-xs" style={{ marginLeft: 6 }} onClick={() => { setAnimalTypeEditingId(t.id); setAnimalTypeForm({ name: t.name, emoji: t.emoji || '' }); }}>✎</button>
+                <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deleteAnimalType(t.id)}>✕</button>
               </span>
             ))}
             {animalTypes.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Типов пока нет.</span>}
           </div>
         </div>
+        </>)}
 
+        {infirmaryTab === 'locations' && (<>
         <div className="fm-card" style={{ marginBottom: 10 }}>
           <h3 style={{ marginTop: 0 }}>🌲 Локации Лечебницы</h3>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
@@ -1288,11 +1318,11 @@ export default function AdminPage() {
               {diseases.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
-          <button className="fm-btn" disabled={busy} onClick={savePatient}>{patientEditingId ? '✎ Сохранить' : '➕ Создать животное'}</button>
-          {patientEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setPatientEditingId(null); setPatientForm({ name: '', level: '1', diseaseId: '', animalTypeId: '' }); }}>Отмена</button>}
+          <button type="button" className="fm-btn" disabled={busy} onClick={savePatient}>{patientEditingId ? '✎ Сохранить' : '➕ Создать животное'}</button>
+          {patientEditingId && <button type="button" className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setPatientEditingId(null); setPatientForm({ name: '', level: '1', diseaseId: '', animalTypeId: '' }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
-          <thead><tr><th>ID</th><th>Название</th><th>Тип</th><th>Ур.</th><th>Болезнь</th><th>Сцены</th><th>Карточка</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Название</th><th>Тип</th><th>Ур.</th><th>Болезнь</th><th>Сцены</th><th>Изображения</th><th></th></tr></thead>
           <tbody>
             {patients.map((p) => (
               <tr key={p.id}>
@@ -1307,18 +1337,21 @@ export default function AdminPage() {
                       <div key={sc.field_id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
                         <span>{sc.stage === 'sick' ? '🤒' : sc.stage === 'treating' ? '🏥' : '✅'}</span>
                         <span style={{ minWidth: 90 }}>{sc.stage === 'sick' ? 'Больное' : sc.stage === 'treating' ? 'На лечении' : 'Здоровое'}</span>
-                        <label className="fm-btn fm-btn-xs fm-btn-outline" title="Картинка сцены" style={{ cursor: 'pointer', marginRight: 2 }}>🖼️<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadSceneImage(sc.field_id, f); }} /></label>
-                        <button className="fm-btn fm-btn-xs" onClick={() => { setEditorFieldId(sc.field_id); }}>✎ Разметить</button>
+                        <span style={{ fontSize: 12 }} title="Изображение сцены">{sc.map_url ? '🖼️✓' : '🖼️✗'}</span>
+                        <label className="fm-btn fm-btn-xs fm-btn-outline" title="Картинка сцены" style={{ cursor: 'pointer', marginRight: 2 }}>⬆<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadSceneImage(sc.field_id, f); }} /></label>
+                        <button type="button" className="fm-btn fm-btn-xs" onClick={() => { setEditorFieldId(sc.field_id); }}>✎ Разметить</button>
                       </div>
                     ))}
                   </div>
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
+                  <span title="Изображение животного">{p.animal_image_url ? '🐾✓' : '🐾✗'}</span>{' '}
+                  <label className="fm-btn fm-btn-xs fm-btn-outline" title="Изображение животного" style={{ cursor: 'pointer', marginRight: 2 }}>⬆<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPatientAnimalImage(p.id, f); }} /></label>
                   <label className="fm-btn fm-btn-xs fm-btn-outline" title="Карточка коллекции" style={{ cursor: 'pointer' }}>🃏<input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPatientCardImage(p.id, f); }} /></label>
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button className="fm-btn fm-btn-xs" onClick={() => { setPatientEditingId(p.id); setPatientForm({ name: p.name, level: String(p.level), diseaseId: p.disease_id ? String(p.disease_id) : '', animalTypeId: p.animal_type_id ? String(p.animal_type_id) : '' }); }}>✎</button>{' '}
-                  <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deletePatient(p.id)}>✕</button>
+                  <button type="button" className="fm-btn fm-btn-xs" onClick={() => { setPatientEditingId(p.id); setPatientForm({ name: p.name, level: String(p.level), diseaseId: p.disease_id ? String(p.disease_id) : '', animalTypeId: p.animal_type_id ? String(p.animal_type_id) : '' }); }}>✎</button>{' '}
+                  <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => deletePatient(p.id)}>✕</button>
                 </td>
               </tr>
             ))}
@@ -1327,6 +1360,7 @@ export default function AdminPage() {
             )}
           </tbody>
         </table>
+        </>)}
       </div>
     );
   }
@@ -1375,7 +1409,7 @@ export default function AdminPage() {
               <option value="alchemy">🔮 Товар зельеварения</option>
               <option value="barnyard">🏚️ Товар скотного двора</option>
             </select>
-            <button className="fm-btn fm-btn-sm" onClick={() => { if (potionSlotInput.trim()) { setPotionForm({ ...potionForm, ingredient_slots: [...potionForm.ingredient_slots, potionSlotInput.trim()] }); setPotionSlotInput(''); } }}>+</button>
+            <button type="button" className="fm-btn fm-btn-sm" onClick={() => { if (potionSlotInput.trim()) { setPotionForm({ ...potionForm, ingredient_slots: [...potionForm.ingredient_slots, potionSlotInput.trim()] }); setPotionSlotInput(''); } }}>+</button>
           </div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
             {potionForm.ingredient_slots.map((s, i) => (
@@ -1411,10 +1445,10 @@ export default function AdminPage() {
               </label>
             </>
           )}
-          <button className="fm-btn" disabled={busy} onClick={savePotionRecipe}>
+          <button type="button" className="fm-btn" disabled={busy} onClick={savePotionRecipe}>
             {potionEditingId ? '✎ Сохранить' : '➕ Создать'}
           </button>
-          {potionEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setPotionEditingId(null); setPotionForm({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100, description: '' }); }}>Отмена</button>}
+          {potionEditingId && <button type="button" className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setPotionEditingId(null); setPotionForm({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100, description: '' }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
           <thead><tr><th>ID</th><th>Название</th><th>Уровень</th><th>Слотов</th><th>Бонус</th><th>Описание</th><th></th></tr></thead>
@@ -1432,8 +1466,8 @@ export default function AdminPage() {
                 <td>{potionBonusLabel(r.bonus_code) || '—'}</td>
                 <td style={{ maxWidth: 220 }}>{r.description || '—'}</td>
                 <td>
-                  <button className="fm-btn fm-btn-sm" onClick={() => { setPotionEditingId(r.id); setPotionForm({ name: r.name, level: r.level, ingredient_slots: r.ingredient_slots, bonus_code: r.bonus_code, reward_coins: r.reward_coins, description: r.description || '' }); }}>✎</button>
-                  <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deletePotionRecipe(r.id)}>🗑</button>
+                  <button type="button" className="fm-btn fm-btn-sm" onClick={() => { setPotionEditingId(r.id); setPotionForm({ name: r.name, level: r.level, ingredient_slots: r.ingredient_slots, bonus_code: r.bonus_code, reward_coins: r.reward_coins, description: r.description || '' }); }}>✎</button>
+                  <button type="button" className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deletePotionRecipe(r.id)}>🗑</button>
                 </td>
               </tr>
             ))}
@@ -1528,10 +1562,10 @@ export default function AdminPage() {
               <option value="3">3 уровень</option>
             </select>
           </div>
-          <button className="fm-btn" disabled={busy} onClick={saveRecipe}>
+          <button type="button" className="fm-btn" disabled={busy} onClick={saveRecipe}>
             {recipeEditingId ? '✎ Сохранить' : '➕ Создать'}
           </button>
-          {recipeEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setRecipeEditingId(null); setRecipeForm({ source_kind: 'plant', plant_id: '', source_product_id: '', product_id: '', level: '1' }); }}>Отмена</button>}
+          {recipeEditingId && <button type="button" className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setRecipeEditingId(null); setRecipeForm({ source_kind: 'plant', plant_id: '', source_product_id: '', product_id: '', level: '1' }); }}>Отмена</button>}
         </div>
         <table className="fm-table" style={{ width: '100%' }}>
           <thead><tr><th>ID</th><th>Источник</th><th>Товар</th><th>Уровень</th><th></th></tr></thead>
@@ -1545,14 +1579,14 @@ export default function AdminPage() {
                 <td>{r.product_emoji || '📦'} {r.product_name}</td>
                 <td>{r.level}</td>
                 <td>
-                  <button className="fm-btn fm-btn-sm" onClick={() => { setRecipeEditingId(r.id); setRecipeForm({
+                  <button type="button" className="fm-btn fm-btn-sm" onClick={() => { setRecipeEditingId(r.id); setRecipeForm({
                     source_kind: r.source_product_id != null ? 'animal_product' : 'plant',
                     plant_id: r.plant_id != null ? String(r.plant_id) : '',
                     source_product_id: r.source_product_id != null ? String(r.source_product_id) : '',
                     product_id: String(r.product_id),
                     level: String(r.level),
                   }); }}>✎</button>
-                  <button className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteRecipe(r.id)}>🗑</button>
+                  <button type="button" className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteRecipe(r.id)}>🗑</button>
                 </td>
               </tr>
             ))}
@@ -1800,7 +1834,7 @@ export default function AdminPage() {
               <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 {totals[tab]?.shown ?? 0} из {totals[tab]?.total ?? 0}
               </span>
-              <button className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => setQuery('')}>✕</button>
+              <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => setQuery('')}>✕</button>
             </>
           )}
         </div>
@@ -1817,11 +1851,11 @@ export default function AdminPage() {
               {selectedPlayer ? (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                    <button className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => { setSelectedPlayer(null); setPlayerDetail(null); setPlayerReports([]); }}>← Назад</button>
+                    <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => { setSelectedPlayer(null); setPlayerDetail(null); setPlayerReports([]); }}>← Назад</button>
                     <h2 style={{ margin: 0, fontSize: 18 }}>
                       {selectedPlayer.first_name || selectedPlayer.last_name ? `${selectedPlayer.first_name} ${selectedPlayer.last_name}`.trim() : `#${selectedPlayer.vk_id}`}
                     </h2>
-                    <button className="fm-btn fm-btn-sm fm-btn-danger" style={{ marginLeft: 'auto' }} disabled={busy} onClick={restartPlayer}>
+                    <button type="button" className="fm-btn fm-btn-sm fm-btn-danger" style={{ marginLeft: 'auto' }} disabled={busy} onClick={restartPlayer}>
                       🔁 РЕСТАРТ
                     </button>
                   </div>
@@ -1928,8 +1962,8 @@ export default function AdminPage() {
                               </div>
                               {r.status === 'pending' && (
                                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                                  <button className="fm-btn fm-btn-sm" style={{ flex: 1 }} disabled={busy} onClick={() => reviewReport(r.id, 'accept')}>Зачесть</button>
-                                  <button className="fm-btn fm-btn-sm fm-btn-danger" disabled={busy} onClick={() => reviewReport(r.id, 'reject')}>Отклонить</button>
+                                  <button type="button" className="fm-btn fm-btn-sm" style={{ flex: 1 }} disabled={busy} onClick={() => reviewReport(r.id, 'accept')}>Зачесть</button>
+                                  <button type="button" className="fm-btn fm-btn-sm fm-btn-danger" disabled={busy} onClick={() => reviewReport(r.id, 'reject')}>Отклонить</button>
                                 </div>
                               )}
                             </div>
@@ -1987,9 +2021,9 @@ export default function AdminPage() {
                       </div>
                       {players.length > PER_PAGE && (
                         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 10, fontSize: 13 }}>
-                          <button className="fm-btn fm-btn-sm fm-btn-outline" disabled={playerPage === 0} onClick={() => setPlayerPage((p) => p - 1)}>← Назад</button>
+                          <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" disabled={playerPage === 0} onClick={() => setPlayerPage((p) => p - 1)}>← Назад</button>
                           <span style={{ color: 'var(--text-muted)' }}>{playerPage + 1} / {Math.ceil(players.length / PER_PAGE)}</span>
-                          <button className="fm-btn fm-btn-sm fm-btn-outline" disabled={playerPage >= Math.ceil(players.length / PER_PAGE) - 1} onClick={() => setPlayerPage((p) => p + 1)}>Вперёд →</button>
+                          <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" disabled={playerPage >= Math.ceil(players.length / PER_PAGE) - 1} onClick={() => setPlayerPage((p) => p + 1)}>Вперёд →</button>
                         </div>
                       )}
                     </>
@@ -2003,7 +2037,7 @@ export default function AdminPage() {
           {viewField && (
             <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#1a1a2e', display: 'flex', flexDirection: 'column' }}>
               <div style={{ padding: '10px var(--shell-pad)', display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,0.4)', flexShrink: 0 }}>
-                <button className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => setViewField(null)} style={{ color: '#fff', borderColor: '#fff' }}>← Назад</button>
+                <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => setViewField(null)} style={{ color: '#fff', borderColor: '#fff' }}>← Назад</button>
                 <span style={{ color: '#ccc', fontSize: 14 }}>{viewField.name} · {viewField.cols}×{viewField.rows}</span>
               </div>
               <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
@@ -2055,7 +2089,7 @@ export default function AdminPage() {
                 <h3>🖼️ Нейтральный фон</h3>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input className="fm-input" style={{ flex: 1 }} placeholder="URL фона" value={bgInput} onChange={(e) => setBgInput(e.target.value)} />
-                  <button className="fm-btn" disabled={busy} onClick={saveBg}>💾</button>
+                  <button type="button" className="fm-btn" disabled={busy} onClick={saveBg}>💾</button>
                 </div>
                 {bgUrl && <img src={bgUrl} alt="Фон" style={{ maxWidth: 200, marginTop: 8, borderRadius: 8 }} />}
               </div>
@@ -2068,7 +2102,7 @@ export default function AdminPage() {
                 <FieldEditor fieldId={editorFieldId} onClose={() => setEditorFieldId(null)} />
               ) : (
                 <>
-                  <button className="fm-btn" style={{ width: '100%', marginBottom: 14 }} disabled={busy} onClick={() => setShowCreate(true)}>
+                  <button type="button" className="fm-btn" style={{ width: '100%', marginBottom: 14 }} disabled={busy} onClick={() => setShowCreate(true)}>
                     ➕ Создать локацию
                   </button>
                   {shownFields.length === 0 ? (
@@ -2081,12 +2115,12 @@ export default function AdminPage() {
                           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{f.cols}×{f.rows} клеток</div>
                           {f.map_url && <img src={mediaUrl(f.map_url)} alt="" style={{ width: '100%', marginTop: 8, borderRadius: 'var(--radius-sm)' }} />}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                            <button className="fm-btn fm-btn-sm" disabled={busy} onClick={() => setEditorFieldId(f.id)}>✎ Редактировать</button>
+                            <button type="button" className="fm-btn fm-btn-sm" disabled={busy} onClick={() => setEditorFieldId(f.id)}>✎ Редактировать</button>
                             <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
                               {f.map_url ? '🖼️ Сменить картинку' : '🖼️ Загрузить карту'}
                               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadMap(f.id, file); }} />
                             </label>
-                            <button className="fm-btn fm-btn-sm fm-btn-danger" disabled={busy} onClick={() => deleteField(f.id)}>Удалить</button>
+                            <button type="button" className="fm-btn fm-btn-sm fm-btn-danger" disabled={busy} onClick={() => deleteField(f.id)}>Удалить</button>
                           </div>
                         </div>
                       ))}
@@ -2097,7 +2131,7 @@ export default function AdminPage() {
                       <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 'calc(var(--shell-max-width) * 0.633)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                           <h3 style={{ margin: 0 }}>➕ Новая локация</h3>
-                          <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setShowCreate(false)}>✕</button>
+                          <button type="button" className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setShowCreate(false)}>✕</button>
                         </div>
                         <label style={{ display: 'block', margin: '8px 0 6px', fontSize: 14 }}>Название</label>
                         <input className="fm-input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Огород" />
@@ -2144,7 +2178,7 @@ export default function AdminPage() {
                           <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Мин. уровень для открытия</label>
                           <input className="fm-input" type="number" min={0} max={16} value={newMinLevel} onChange={(e) => setNewMinLevel(e.target.value)} />
                         </div>
-                        <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || !newName.trim()} onClick={createField}>Создать</button>
+                        <button type="button" className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || !newName.trim()} onClick={createField}>Создать</button>
                       </div>
                     </div>
                   )}
@@ -2209,7 +2243,7 @@ export default function AdminPage() {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <h2 style={{ margin: 0 }}>🧺 Все заказы</h2>
-                <button className="fm-btn fm-btn-sm" disabled={busy} onClick={startCreateOrder}>
+                <button type="button" className="fm-btn fm-btn-sm" disabled={busy} onClick={startCreateOrder}>
                   ➕ Создать заказ
                 </button>
               </div>
@@ -2298,8 +2332,8 @@ export default function AdminPage() {
                     {orderImage && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{orderImage.name}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="fm-btn" disabled={busy} onClick={saveOrder}>💾 Сохранить</button>
-                    <button className="fm-btn fm-btn-outline" disabled={busy} onClick={() => { setOrderFormOpen(false); setOrderEditingId(null); setOrderImage(null); }}>Отмена</button>
+                    <button type="button" className="fm-btn" disabled={busy} onClick={saveOrder}>💾 Сохранить</button>
+                    <button type="button" className="fm-btn fm-btn-outline" disabled={busy} onClick={() => { setOrderFormOpen(false); setOrderEditingId(null); setOrderImage(null); }}>Отмена</button>
                   </div>
                 </div>
               )}
@@ -2340,13 +2374,13 @@ export default function AdminPage() {
                           <span style={{ color: 'var(--accent-warm)', fontWeight: 600, whiteSpace: 'nowrap' }}>🪙 {o.reward_coins}</span>
                         </div>
                         <div style={{ display: 'flex', gap: 6 }}>
-                          <button className="fm-btn fm-btn-xs" style={{ flex: 1 }} disabled={busy} onClick={() => startEditOrder(o)}>✎</button>
+                          <button type="button" className="fm-btn fm-btn-xs" style={{ flex: 1 }} disabled={busy} onClick={() => startEditOrder(o)}>✎</button>
                           {o.status === 'open' && (
-                            <button className="fm-btn fm-btn-xs fm-btn-danger" style={{ flex: 1 }} disabled={busy} onClick={() => cancelOrder(o.id)}>
+                            <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" style={{ flex: 1 }} disabled={busy} onClick={() => cancelOrder(o.id)}>
                               ✖️
                             </button>
                           )}
-                          <button className="fm-btn fm-btn-xs fm-btn-danger" style={{ flex: 1 }} disabled={busy} onClick={() => deleteOrder(o.id)}>
+                          <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" style={{ flex: 1 }} disabled={busy} onClick={() => deleteOrder(o.id)}>
                             🗑
                           </button>
                           <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer', flex: 1 }}>
@@ -2385,7 +2419,7 @@ export default function AdminPage() {
                     ))}
                   </select>
                 </div>
-                <button className="fm-btn fm-btn-sm" disabled={busy || !mediaTypeSel} onClick={saveGameMedia}>➕ Создать</button>
+                <button type="button" className="fm-btn fm-btn-sm" disabled={busy || !mediaTypeSel} onClick={saveGameMedia}>➕ Создать</button>
               </div>
               <div className="fm-grid">
                 {shownMedia.map((gm) => {
@@ -2405,7 +2439,7 @@ export default function AdminPage() {
                           <input type="file" accept="image/*,video/*" style={{ display: 'none' }}
                             onChange={async (e) => { const f = e.target.files?.[0]; if (f) await uploadGameMediaFile(gm.id, f); }} />
                         </label>
-                        <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteGameMedia(gm.id)}>🗑</button>
+                        <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteGameMedia(gm.id)}>🗑</button>
                       </div>
                     </div>
                   );
@@ -2440,10 +2474,10 @@ export default function AdminPage() {
                   <input type="file" accept="image/*" onChange={(e) => setAchImage(e.target.files?.[0] ?? null)} style={{ fontSize: 13 }} />
                   {achImage && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{achImage.name}</div>}
                 </div>
-                <button className="fm-btn" disabled={busy} onClick={saveAchievement}>
+                <button type="button" className="fm-btn" disabled={busy} onClick={saveAchievement}>
                   {achEditingId ? '✎ Сохранить' : '➕ Создать'}
                 </button>
-                {achEditingId && <button className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setAchEditingId(null); setAchForm({ name: '', condition_kind: '', condition_value: '1', production_code: '' }); setAchImage(null); }}>Отмена</button>}
+                {achEditingId && <button type="button" className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setAchEditingId(null); setAchForm({ name: '', condition_kind: '', condition_value: '1', production_code: '' }); setAchImage(null); }}>Отмена</button>}
               </div>
               <div className="fm-grid">
                 {shownAchievements.map((a) => (
@@ -2452,12 +2486,12 @@ export default function AdminPage() {
                     <strong>{a.name}</strong>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{achKinds.find((x) => x.kind === a.condition_kind)?.label ?? a.condition_kind}: {a.condition_value}</div>
                     <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-                      <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setAchEditingId(a.id); setAchForm({ name: a.name, condition_kind: a.condition_kind, condition_value: String(a.condition_value), production_code: a.production_code || '' }); setAchImage(null); }}>✎</button>
+                      <button type="button" className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setAchEditingId(a.id); setAchForm({ name: a.name, condition_kind: a.condition_kind, condition_value: String(a.condition_value), production_code: a.production_code || '' }); setAchImage(null); }}>✎</button>
                       <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
                         🖼️
                         <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAchImage(a.id, f); e.target.value = ''; }} />
                       </label>
-                      <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteAchievement(a.id)}>🗑</button>
+                      <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteAchievement(a.id)}>🗑</button>
                     </div>
                   </div>
                 ))}
@@ -2511,8 +2545,8 @@ export default function AdminPage() {
                 </select>
                 <input className="fm-input" placeholder="user_id" value={logFilter.user_id} onChange={(e) => setLogFilter({ ...logFilter, user_id: e.target.value })} style={{ width: 90 }} />
                 <input className="fm-input" placeholder="Поиск (путь / событие / текст)" value={logFilter.q} onChange={(e) => setLogFilter({ ...logFilter, q: e.target.value })} style={{ flex: 1, minWidth: 180 }} />
-                <button className="fm-btn" disabled={busy} onClick={() => { setLogOffset(0); loadLogs(false); }}>🔄 Обновить</button>
-                <button className="fm-btn fm-btn-danger" disabled={busy} onClick={clearLogs}>🗑 Очистить</button>
+                <button type="button" className="fm-btn" disabled={busy} onClick={() => { setLogOffset(0); loadLogs(false); }}>🔄 Обновить</button>
+                <button type="button" className="fm-btn fm-btn-danger" disabled={busy} onClick={clearLogs}>🗑 Очистить</button>
               </div>
 
               {logs.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Логов пока нет.</div>}
@@ -2543,7 +2577,7 @@ export default function AdminPage() {
 
               {logHasMore && (
                 <div style={{ textAlign: 'center', marginTop: 10 }}>
-                  <button className="fm-btn fm-btn-outline" disabled={busy} onClick={() => loadLogs(true)}>Показать ещё</button>
+                  <button type="button" className="fm-btn fm-btn-outline" disabled={busy} onClick={() => loadLogs(true)}>Показать ещё</button>
                 </div>
               )}
             </div>
@@ -2573,7 +2607,7 @@ function SettingRow({
       <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>{field.hint}</div>
       <div style={{ display: 'flex', gap: 6 }}>
         <input className="fm-input" value={v} onChange={(e) => setV(e.target.value)} />
-        <button className="fm-btn fm-btn-sm" disabled={disabled || v === value} onClick={() => onSave(v)}>
+        <button type="button" className="fm-btn fm-btn-sm" disabled={disabled || v === value} onClick={() => onSave(v)}>
           OK
         </button>
       </div>
@@ -2583,7 +2617,7 @@ function SettingRow({
 
 function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button className={active ? 'fm-btn' : 'fm-btn fm-btn-outline'} onClick={onClick} style={{ fontSize: 13, padding: '6px 10px' }}>
+    <button type="button" className={active ? 'fm-btn' : 'fm-btn fm-btn-outline'} onClick={onClick} style={{ fontSize: 13, padding: '6px 10px' }}>
       {children}
     </button>
   );
@@ -2642,7 +2676,7 @@ function CatalogTab({
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <h2 style={{ margin: 0 }}>{title}</h2>
-        <button className="fm-btn fm-btn-sm" disabled={busy} onClick={onCreate}>
+        <button type="button" className="fm-btn fm-btn-sm" disabled={busy} onClick={onCreate}>
           ➕ Добавить
         </button>
       </div>
@@ -2672,8 +2706,8 @@ function CatalogTab({
             </div>
           ))}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="fm-btn" disabled={busy} onClick={onSave}>💾 Сохранить</button>
-            <button className="fm-btn fm-btn-outline" disabled={busy} onClick={onCancel}>Отмена</button>
+            <button type="button" className="fm-btn" disabled={busy} onClick={onSave}>💾 Сохранить</button>
+            <button type="button" className="fm-btn fm-btn-outline" disabled={busy} onClick={onCancel}>Отмена</button>
           </div>
           <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {!hideMainImage && (
@@ -2776,7 +2810,7 @@ function CatalogTab({
                 )}
                 {onUploadImageYoung ? (
                   <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
-                    <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => onEdit(item)}>✎</button>
+                    <button type="button" className="fm-btn fm-btn-xs" disabled={busy} onClick={() => onEdit(item)}>✎</button>
                     <label className="fm-btn fm-btn-xs fm-btn-outline" title="Загрузить молодое растение" style={{ cursor: 'pointer' }}>
                       🌱
                       <input type="file" accept="image/*" style={{ display: 'none' }}
@@ -2797,11 +2831,11 @@ function CatalogTab({
                         />
                       </label>
                     )}
-                    <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => onDelete(item.id)}>✕</button>
+                    <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => onDelete(item.id)}>✕</button>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
-                    <button className="fm-btn fm-btn-xs" disabled={busy} onClick={() => onEdit(item)}>✎</button>
+                    <button type="button" className="fm-btn fm-btn-xs" disabled={busy} onClick={() => onEdit(item)}>✎</button>
                     {!hideMainImage && (
                       <label className="fm-btn fm-btn-xs fm-btn-outline" title="Загрузить изображение" style={{ cursor: 'pointer' }}>
                         🖼️
@@ -2813,7 +2847,7 @@ function CatalogTab({
                         />
                       </label>
                     )}
-                    <button className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => onDelete(item.id)}>✕</button>
+                    <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => onDelete(item.id)}>✕</button>
                   </div>
                 )}
               </div>
@@ -2923,11 +2957,11 @@ function FieldGridView({ field, playerVkId, onResetNorm, onDeletePlot }: { field
               Клетка ({selectedCell.col}, {selectedCell.row})
             </div>
             <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-              <button className="fm-btn fm-btn-sm" style={{ background: '#c90', borderColor: '#c90' }}
+              <button type="button" className="fm-btn fm-btn-sm" style={{ background: '#c90', borderColor: '#c90' }}
                 onClick={() => { onResetNorm?.(selectedCell.plotId); setSelectedCell(null); }}>
                 🎲 Сброс нормы
               </button>
-              <button className="fm-btn fm-btn-sm fm-btn-danger"
+              <button type="button" className="fm-btn fm-btn-sm fm-btn-danger"
                 onClick={() => { onDeletePlot?.(selectedCell.plotId); setSelectedCell(null); }}>
                 🗑 Удалить
               </button>

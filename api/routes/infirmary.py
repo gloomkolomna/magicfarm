@@ -41,6 +41,7 @@ class InfirmaryPatientOut(BaseModel):
     level: int
     animal_type_name: str | None
     animal_type_emoji: str | None
+    animal_image_url: str | None
     healed: bool
     card_earned: bool
 
@@ -88,8 +89,10 @@ class InfirmaryCurrentOut(BaseModel):
     level: int
     animal_type_name: str | None
     animal_type_emoji: str | None
+    animal_image_url: str | None
     disease_name: str | None
     status: str
+    current_field_id: int | None
     card_image_url: str | None
     scenes: list[InfirmarySceneOut]
 
@@ -113,6 +116,7 @@ class InfirmaryDetailOut(BaseModel):
     patient_level: int | None
     patient_type_name: str | None
     patient_type_emoji: str | None
+    patient_animal_image_url: str | None
     status: str | None
     disease_name: str | None
     remedy_name: str | None
@@ -120,6 +124,7 @@ class InfirmaryDetailOut(BaseModel):
     card_earned: bool
     part_cells: list[PartCellOut]
     infirmary_zones: list[InfirmaryZoneOut]
+    patient_scenes: list[InfirmarySceneOut] = []
 
 
 class SymptomOut(BaseModel):
@@ -183,6 +188,12 @@ def _patient_status(user_id: int, patient_id: int, db: Session) -> str:
     return state.status if state is not None else "sick"
 
 
+def _get_state(user_id: int, patient_id: int, db: Session) -> UserPatientState | None:
+    return db.query(UserPatientState).filter(
+        UserPatientState.user_id == user_id, UserPatientState.patient_id == patient_id
+    ).first()
+
+
 def _patient_scenes_out(p: PatientAnimal) -> list[InfirmarySceneOut]:
     scenes = []
     for stage in ("sick", "treating", "healthy"):
@@ -226,6 +237,7 @@ def get_infirmary(
                 id=p.id, name=p.name, level=p.level,
                 animal_type_name=p.animal_type.name if p.animal_type else None,
                 animal_type_emoji=p.animal_type.emoji if p.animal_type else None,
+                animal_image_url=p.animal_image_url,
                 healed=p.id in healed,
                 card_earned=p.id in collection,
             ) for p in items],
@@ -234,23 +246,29 @@ def get_infirmary(
     current = None
     for p in patients:
         if _patient_status(user.vk_id, p.id, db) != "released":
+            status_ = _patient_status(user.vk_id, p.id, db)
+            scenes = _patient_scenes_out(p)
+            state = _get_state(user.vk_id, p.id, db)
+            current_field_id = state.current_field_id if state and state.current_field_id else None
+            if current_field_id is None or not any(s.field_id == current_field_id for s in scenes):
+                sc = next((s for s in scenes if s.stage == status_), scenes[0] if scenes else None)
+                current_field_id = sc.field_id if sc else None
             current = InfirmaryCurrentOut(
                 id=p.id, name=p.name, level=p.level,
                 animal_type_name=p.animal_type.name if p.animal_type else None,
                 animal_type_emoji=p.animal_type.emoji if p.animal_type else None,
+                animal_image_url=p.animal_image_url,
                 disease_name=p.disease.name if p.disease else None,
-                status=_patient_status(user.vk_id, p.id, db),
+                status=status_,
+                current_field_id=current_field_id,
                 card_image_url=p.card_image_url,
-                scenes=_patient_scenes_out(p),
+                scenes=scenes,
             )
             break
 
     locations = []
-    if current is not None:
-        sc = next(
-            (s for s in current.scenes if s.stage == current.status),
-            current.scenes[0] if current.scenes else None,
-        )
+    if current is not None and current.current_field_id is not None:
+        sc = next((s for s in current.scenes if s.field_id == current.current_field_id), None)
         if sc is not None:
             locations.append(InfirmaryLocationOut(
                 field_id=sc.field_id, name="Лесная лечебница",
@@ -303,6 +321,14 @@ def get_infirmary_detail(
         c.patient_id for c in db.query(UserCard).filter(UserCard.user_id == user.vk_id).all()
     }
 
+    if patient is not None:
+        state = _get_state(user.vk_id, patient.id, db)
+        if state is None:
+            state = UserPatientState(user_id=user.vk_id, patient_id=patient.id, status="sick")
+            db.add(state)
+        state.current_field_id = f.id
+        db.commit()
+
     part_cells = db.query(ClinicPartCell).filter(
         ClinicPartCell.field_id == f.id
     ).order_by(ClinicPartCell.row.asc(), ClinicPartCell.col.asc()).all()
@@ -322,11 +348,13 @@ def get_infirmary_detail(
         patient_level=patient.level if patient else None,
         patient_type_name=patient.animal_type.name if patient and patient.animal_type else None,
         patient_type_emoji=patient.animal_type.emoji if patient and patient.animal_type else None,
+        patient_animal_image_url=patient.animal_image_url if patient else None,
         status=status_,
         disease_name=patient.disease.name if patient and patient.disease else None,
         remedy_name=(patient.disease.remedy.name if patient and patient.disease and patient.disease.remedy else None),
         healed=(status_ in ("treated", "released")) if status_ else False,
         card_earned=(patient_id in collection) if patient_id else False,
+        patient_scenes=_patient_scenes_out(patient) if patient else [],
         part_cells=[PartCellOut(id=pc.id, col=pc.col, row=pc.row, part_code=pc.part_code) for pc in part_cells],
         infirmary_zones=[InfirmaryZoneOut(id=z.id, zone_kind=z.zone_kind, col1=z.col1, row1=z.row1, col2=z.col2, row2=z.row2) for z in zones],
     )
