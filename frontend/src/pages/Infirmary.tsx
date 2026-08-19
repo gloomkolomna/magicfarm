@@ -159,6 +159,7 @@ export function InfirmaryScenePage() {
   const [result, setResult] = useState<DiagnoseResult | null>(null);
   const [showWellbeing, setShowWellbeing] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewScale, setPreviewScale] = useState(1);
   const [swiper, setSwiper] = useState<SwiperInstance | null>(null);
   const [bookPage, setBookPage] = useState(0);
 
@@ -302,7 +303,7 @@ export function InfirmaryScenePage() {
       </LocationMap>
 
       {detail && active && (
-        <div style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(12px + var(--vk-inset-bottom, 0px))', zIndex: 30, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <div style={{ position: 'fixed', left: 12, right: 76, bottom: 'calc(12px + var(--vk-inset-bottom, 0px))', zIndex: 30, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
           {detail.status === 'sick' && (
             isSickScene ? (
               <button
@@ -318,7 +319,7 @@ export function InfirmaryScenePage() {
           )}
           {detail.status === 'diagnosed' && (
             <>
-              <button className="fm-btn fm-btn-outline" onClick={doPet}>🤚 Погладить</button>
+              <button className="fm-btn fm-btn-outline" title="Погладить" aria-label="Погладить" onClick={doPet}>🤚</button>
               {detail.remedy_lab_field_id != null && (
                 <button className="fm-btn" onClick={() => nav(`/remedy-lab/${detail.remedy_lab_field_id}`)}>⚗️ Сварить лекарство</button>
               )}
@@ -327,7 +328,7 @@ export function InfirmaryScenePage() {
           )}
           {detail.status === 'treated' && (
             <>
-              <button className="fm-btn fm-btn-outline" onClick={doPet}>🤚 Погладить</button>
+              <button className="fm-btn fm-btn-outline" title="Погладить" aria-label="Погладить" onClick={doPet}>🤚</button>
               <button className="fm-btn" disabled={busy} onClick={doRelease}>🕊 Выпустить на волю</button>
             </>
           )}
@@ -336,7 +337,7 @@ export function InfirmaryScenePage() {
       )}
 
       {detail && !active && (
-        <div style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(12px + var(--vk-inset-bottom, 0px))', zIndex: 30 }}>
+        <div style={{ position: 'fixed', left: 12, right: 76, bottom: 'calc(12px + var(--vk-inset-bottom, 0px))', zIndex: 30 }}>
           <div className="fm-card" style={{ textAlign: 'center', margin: 0 }}>
             {detail.patient_id == null ? 'В этой локации пока нет пациента.' : 'Животное выпущено на волю. Карточка в коллекции.'}
           </div>
@@ -397,7 +398,7 @@ export function InfirmaryScenePage() {
                         <img
                           src={mediaUrl(d.image_url)}
                           alt={d.name}
-                          onClick={() => setPreviewImage(mediaUrl(d.image_url))}
+                          onClick={() => { setPreviewScale(1); setPreviewImage(mediaUrl(d.image_url)); }}
                           style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 10, objectFit: 'contain', cursor: 'zoom-in' }}
                         />
                       ) : (
@@ -437,7 +438,15 @@ export function InfirmaryScenePage() {
 
       {previewImage && (
         <Modal title="🔍" onClose={() => setPreviewImage(null)}>
-          <img src={previewImage} alt="" style={{ width: '100%', borderRadius: 10 }} />
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+            <button className="fm-btn fm-btn-outline" onClick={() => setPreviewScale((s) => Math.min(4, s + 0.5))}>＋</button>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)', minWidth: 44, textAlign: 'center' }}>{Math.round(previewScale * 100)}%</span>
+            <button className="fm-btn fm-btn-outline" onClick={() => setPreviewScale(1)}>⤢</button>
+            <button className="fm-btn fm-btn-outline" onClick={() => setPreviewScale((s) => Math.max(0.5, s - 0.5))}>−</button>
+          </div>
+          <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
+            <img src={previewImage} alt="" style={{ width: `${previewScale * 100}%`, borderRadius: 10, display: 'block', margin: '0 auto' }} />
+          </div>
         </Modal>
       )}
 
