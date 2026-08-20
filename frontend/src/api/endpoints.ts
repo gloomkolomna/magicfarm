@@ -395,12 +395,27 @@ export interface PlayerPlantNorm {
   norm_per_unit: number;
 }
 
+export interface PlayerBarnyardSlot {
+  id: number;
+  animal_id: number | null;
+  animal_name: string | null;
+  animal_emoji: string | null;
+  status: string;
+  accumulated: number;
+  required: number;
+  cell_id: number | null;
+  cell_col: number | null;
+  cell_row: number | null;
+  is_ghost: boolean;
+}
+
 export interface PlayerDetail extends Player {
   plots: Plot[];
   productions: Production[];
   inventory: InventoryItem[];
   plant_norms?: PlayerPlantNorm[];
   dlc_locations?: string[];
+  barnyard?: PlayerBarnyardSlot[];
 }
 
 export interface AllowedPlayer {
@@ -1549,6 +1564,8 @@ export const api = {
     client.post<Player>(`/admin/players/${vkId}/restart`).then((r) => r.data),
   adminDeletePlayerPlot: (vkId: number, plotId: number) =>
     client.delete(`/admin/players/${vkId}/plots/${plotId}`).then((r) => r.data),
+  adminDeletePlayerBarnyard: (vkId: number, slotId: number) =>
+    client.delete(`/admin/players/${vkId}/barnyard/${slotId}`).then((r) => r.data),
   adminGrantDlc: (vkId: number, locationCode: string) =>
     client.post(`/admin/players/${vkId}/dlc`, { location_code: locationCode }).then((r) => r.data),
   adminRevokeDlc: (vkId: number, locationCode: string) =>
@@ -1687,6 +1704,8 @@ export const api = {
     client.post<BarnyardPen>(`/animals/pens/${slotId}/prepare`).then((r) => r.data),
   barnyardCollectProduct: (slotId: number) =>
     client.post<BarnyardCollectResult>(`/animals/pens/${slotId}/produce`).then((r) => r.data),
+  barnyardReleasePen: (slotId: number) =>
+    client.delete(`/animals/pens/${slotId}`).then((r) => r.data),
   barnyardTentStorage: () =>
     client.get<BarnyardTentStorage>('/animals/tents/storage').then((r) => r.data),
   barnyardWithdraw: (productId: number, qty: number) =>

@@ -198,3 +198,101 @@ def test_migration_orders_single_model(migrated_db):
     assert {"user_id", "order_id", "taken_at", "fulfilled_at", "reward_coins"} <= set(uo_cols)
     rows = _fetch(migrated_db, "SELECT status FROM orders ORDER BY id")
     assert rows == [("open",), ("open",)]
+
+
+PRE_GHOST_PURGE_REV = "ba7f5ee8385b"
+
+
+@pytest.fixture
+def ghost_purge_db(tmp_path, monkeypatch):
+    """База на ревизии перед чисткой загонов-призраков, с засеянными призраками.
+
+    Таблицы fields/field_cells/barnyard_slots создаются не миграциями, а create_all,
+    поэтому после upgrade до PRE_GHOST_PURGE_REV они досоздаются по моделям.
+    """
+    import config
+    db_path = tmp_path / "farm_ghost_purge.db"
+    monkeypatch.setattr(config, "DATABASE_URL", f"sqlite:///{db_path}")
+
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.executescript("""
+            CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL);
+            CREATE TABLE users (vk_id INTEGER PRIMARY KEY, role VARCHAR NOT NULL);
+            CREATE TABLE house_builds (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL);
+            CREATE TABLE user_crystal_norms (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL,
+                color VARCHAR NOT NULL, count INTEGER NOT NULL, value INTEGER NOT NULL);
+            CREATE TABLE plots (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, plant_id INTEGER,
+                qty INTEGER NOT NULL DEFAULT 1, required INTEGER NOT NULL DEFAULT 0,
+                created_at DATETIME);
+            CREATE TABLE settings (key VARCHAR PRIMARY KEY, value VARCHAR);
+            CREATE TABLE production_templates (
+                id INTEGER PRIMARY KEY, code VARCHAR NOT NULL,
+                name VARCHAR NOT NULL, emoji VARCHAR,
+                required INTEGER NOT NULL DEFAULT 500,
+                cards_to_draw INTEGER NOT NULL DEFAULT 3,
+                surcharge INTEGER NOT NULL DEFAULT 30);
+            CREATE TABLE user_recipes (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL);
+            CREATE TABLE potion_recipes (
+                id INTEGER PRIMARY KEY, code VARCHAR NOT NULL, name VARCHAR NOT NULL,
+                level VARCHAR NOT NULL, ingredient_slots TEXT NOT NULL,
+                bonus_code VARCHAR, reward_coins INTEGER NOT NULL DEFAULT 100,
+                image_url VARCHAR);
+            CREATE TABLE user_potions (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL,
+                potion_recipe_id INTEGER NOT NULL, bonus_code VARCHAR,
+                activated BOOLEAN NOT NULL DEFAULT 0,
+                acquired_at DATETIME NOT NULL,
+                CONSTRAINT uq_userpotion_user_recipe UNIQUE (user_id, potion_recipe_id));
+            CREATE TABLE orders (
+                id INTEGER PRIMARY KEY, user_id INTEGER, product_id INTEGER NOT NULL,
+                qty INTEGER NOT NULL, reward_coins INTEGER NOT NULL DEFAULT 0,
+                customer VARCHAR, status VARCHAR NOT NULL DEFAULT 'open',
+                name VARCHAR, image_url VARCHAR,
+                created_at DATETIME, fulfilled_at DATETIME);
+        """)
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES (:r)", {"r": OLD_REV})
+        conn.execute("INSERT INTO users (vk_id, role) VALUES (1, 'player')")
+        conn.commit()
+    finally:
+        conn.close()
+
+    from alembic import command
+    from alembic.config import Config
+    cfg = Config(os.path.join(API_DIR, "alembic.ini"))
+    command.upgrade(cfg, PRE_GHOST_PURGE_REV)
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from models import Base, BarnyardSlot, Field, FieldCell
+    eng = create_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(eng)
+    Session = sessionmaker(bind=eng)
+    s = Session()
+    try:
+        s.add(Field(id=9, code="f9", name="Скотный", cols=4, rows=2))
+        s.flush()
+        in_grid = FieldCell(id=100, field_id=9, col=1, row=1, kind="barnyard")
+        out_grid = FieldCell(id=101, field_id=9, col=2, row=2, kind="barnyard")
+        bed = FieldCell(id=102, field_id=9, col=0, row=0, kind="bed")
+        s.add_all([in_grid, out_grid, bed])
+        s.flush()
+        s.add(BarnyardSlot(id=1, user_id=1, animal_id=1, cell_id=100, status="ready"))
+        s.add(BarnyardSlot(id=2, user_id=1, animal_id=1, cell_id=None, status="ready"))
+        s.add(BarnyardSlot(id=3, user_id=1, animal_id=1, cell_id=101, status="ready"))
+        s.add(BarnyardSlot(id=4, user_id=1, animal_id=1, cell_id=102, status="ready"))
+        s.add(BarnyardSlot(id=6, user_id=1, animal_id=1, cell_id=99999, status="ready"))
+        s.commit()
+    finally:
+        s.close()
+    eng.dispose()
+
+    command.upgrade(cfg, "head")
+    yield str(db_path)
+
+
+def test_migration_purges_barnyard_ghost_slots(ghost_purge_db):
+    rows = _fetch(ghost_purge_db, "SELECT id, cell_id FROM barnyard_slots")
+    assert rows == [(1, 100)]

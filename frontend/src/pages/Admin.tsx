@@ -2153,6 +2153,42 @@ export default function AdminPage() {
                           ))}
                         </div>
                       )}
+
+                      <h3 style={{ marginTop: 16 }}>🏚️ Загоны ({playerDetail.barnyard?.length ?? 0})</h3>
+                      {(playerDetail.barnyard ?? []).length === 0 ? (
+                        <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Загонов нет.</div>
+                      ) : (
+                        <div className="fm-grid">
+                          {(playerDetail.barnyard ?? []).map((b) => (
+                            <div key={b.id} className="fm-card fm-rise" style={{ fontSize: 13, borderColor: b.is_ghost ? '#e05555' : undefined }}>
+                              <strong>{b.animal_emoji || '🐾'} {b.animal_name ?? '— пусто —'}</strong>
+                              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                                {b.is_ghost
+                                  ? <span style={{ color: '#e05555' }}>⚠️ призрак: не отображается в игре</span>
+                                  : <>клетка ({b.cell_col}, {b.cell_row})</>}
+                              </div>
+                              <div style={{ fontSize: 12, marginTop: 2 }}>
+                                {b.status} · {b.accumulated}/{b.required} ❎
+                              </div>
+                              <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" style={{ marginTop: 6 }} disabled={busy}
+                                onClick={async () => {
+                                  if (!selectedPlayer) return;
+                                  if (!(await confirmDialog('Удалить загон игрока? Животное и прогресс будут потеряны.'))) return;
+                                  setBusy(true);
+                                  try {
+                                    await api.adminDeletePlayerBarnyard(selectedPlayer.vk_id, b.id);
+                                    setMsg('✓ Загон удалён');
+                                    await reloadPlayerDetail();
+                                  } catch (e: any) {
+                                    setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+                                  } finally { setBusy(false); }
+                                }}>
+                                🗑 Удалить
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 

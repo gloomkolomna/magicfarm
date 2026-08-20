@@ -30,10 +30,8 @@ def create_session(req: SessionRequest, db: Session = Depends(get_db)):
 
     user = db.query(User).filter(User.vk_id == vk_id).first()
     is_admin = vk_id in config.get_admin_vk_ids()
-    allowed = (
-        db.query(AllowedPlayer.vk_id).filter(AllowedPlayer.vk_id == vk_id).first() is not None
-    )
-    if config.ADMIN_ONLY and not is_admin and not allowed:
+    invite = db.query(AllowedPlayer).filter(AllowedPlayer.vk_id == vk_id).first()
+    if config.ADMIN_ONLY and not is_admin and user is None and invite is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ к игре пока закрыт")
     if user is None:
         user = User(
@@ -51,6 +49,10 @@ def create_session(req: SessionRequest, db: Session = Depends(get_db)):
             user.role = "admin"
             db.commit()
             db.refresh(user)
+
+    if invite is not None:
+        db.delete(invite)
+        db.commit()
 
     token = create_access_token(user.vk_id)
     return SessionResponse(token=token, vk_id=user.vk_id, role=user.role)

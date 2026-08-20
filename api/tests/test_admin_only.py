@@ -1,5 +1,3 @@
-import pytest
-from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from types import SimpleNamespace
 
@@ -27,7 +25,7 @@ def test_admin_only_login_allows_admin(client, monkeypatch):
     assert res.json()["role"] == "admin"
 
 
-def test_get_current_user_blocks_player(monkeypatch, db):
+def test_get_current_user_allows_existing_player(monkeypatch, db):
     from deps import get_current_user
     from models import User
     from services.auth import create_access_token
@@ -38,9 +36,8 @@ def test_get_current_user_blocks_player(monkeypatch, db):
     monkeypatch.setattr(config, "ADMIN_ONLY", True)
     token = create_access_token(424242)
 
-    with pytest.raises(HTTPException) as exc:
-        get_current_user(_req(), _creds(token), db)
-    assert exc.value.status_code == 403
+    user = get_current_user(_req(), _creds(token), db)
+    assert user.vk_id == 424242
 
 
 def test_get_current_user_allows_admin(monkeypatch, db):

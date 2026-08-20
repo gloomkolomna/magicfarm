@@ -270,6 +270,10 @@ def get_field(
             detail="Эта локация пока недоступна",
         )
 
+    if f.field_kind == "barnyard":
+        from routes.barnyard import purge_ghost_slots
+        purge_ghost_slots(db, user)
+
     cell_ids = [c.id for c in f.cells if c.kind == "bed"]
     cell_plots: dict[int, Plot] = {}
     if cell_ids:

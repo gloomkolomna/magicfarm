@@ -109,6 +109,20 @@ class PlayerPlantNormOut(BaseModel):
     norm_per_unit: int
 
 
+class PlayerBarnyardOut(BaseModel):
+    id: int
+    animal_id: int | None
+    animal_name: str | None
+    animal_emoji: str | None
+    status: str
+    accumulated: int
+    required: int
+    cell_id: int | None
+    cell_col: int | None
+    cell_row: int | None
+    is_ghost: bool
+
+
 class PlayerProductionOut(BaseModel):
     id: int
     kind: str
@@ -144,6 +158,7 @@ class PlayerDetailOut(BaseModel):
     inventory: list[PlayerInventoryOut]
     plant_norms: list[PlayerPlantNormOut] = []
     dlc_locations: list[str] = []
+    barnyard: list[PlayerBarnyardOut] = []
 
 
 @router.get("/{vk_id}", response_model=PlayerDetailOut)
@@ -175,6 +190,38 @@ def get_player_detail(
         r[0] for r in db.query(UserDlcUnlock.location_code)
         .filter(UserDlcUnlock.user_id == vk_id).all()
     )
+
+    from models import Animal, BarnyardSlot
+    barnyard_slots = (
+        db.query(BarnyardSlot)
+        .filter(BarnyardSlot.user_id == vk_id)
+        .order_by(BarnyardSlot.id.asc())
+        .all()
+    )
+    animals = {a.id: a for a in db.query(Animal).all()}
+    cells = {
+        c.id: c for c in db.query(FieldCell).filter(
+            FieldCell.id.in_([s.cell_id for s in barnyard_slots if s.cell_id is not None])
+        ).all()
+    }
+    fields_by_id = {f.id: f for f in db.query(Field).all()}
+    barnyard_out = []
+    for s in barnyard_slots:
+        cell = cells.get(s.cell_id) if s.cell_id is not None else None
+        animal = animals.get(s.animal_id) if s.animal_id is not None else None
+        is_ghost = True
+        if cell is not None and cell.kind == "barnyard":
+            fld = fields_by_id.get(cell.field_id)
+            if fld is not None and cell.col < fld.cols and cell.row < fld.rows:
+                is_ghost = False
+        barnyard_out.append(PlayerBarnyardOut(
+            id=s.id, animal_id=s.animal_id,
+            animal_name=animal.name if animal else None,
+            animal_emoji=animal.emoji if animal else None,
+            status=s.status, accumulated=s.accumulated or 0, required=s.required or 0,
+            cell_id=s.cell_id, cell_col=cell.col if cell else None, cell_row=cell.row if cell else None,
+            is_ghost=is_ghost,
+        ))
 
     return PlayerDetailOut(
         vk_id=player.vk_id,
@@ -222,6 +269,7 @@ def get_player_detail(
             ) for n, pl in plant_norms
         ],
         dlc_locations=dlc_locations,
+        barnyard=barnyard_out,
     )
 
 
@@ -713,5 +761,25 @@ def delete_player_plot(
             cell.occupant_user_id = None
 
     db.delete(plot)
+    db.commit()
+    return None
+
+
+@router.delete("/{vk_id}/barnyard/{slot_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_player_barnyard_slot(
+    vk_id: int,
+    slot_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    from models import BarnyardSlot
+
+    slot = db.query(BarnyardSlot).filter(
+        BarnyardSlot.id == slot_id, BarnyardSlot.user_id == vk_id
+    ).first()
+    if slot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Загон не найден")
+
+    db.delete(slot)
     db.commit()
     return None

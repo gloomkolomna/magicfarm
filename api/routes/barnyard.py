@@ -28,6 +28,30 @@ def _roll_die() -> int:
     return random.randint(1, MAX_DIE)
 
 
+def _slot_is_ghost(s: BarnyardSlot, db: Session) -> bool:
+    if s.cell_id is None:
+        return True
+    cell = db.query(FieldCell).filter(FieldCell.id == s.cell_id).first()
+    if cell is None or cell.kind != "barnyard":
+        return True
+    field = cell.field
+    return field is None or cell.col >= field.cols or cell.row >= field.rows
+
+
+def purge_ghost_slots(db: Session, user: User) -> int:
+    """Удаляет загоны-призраки игрока: слоты без клетки, с перекрашенной/удалённой
+    клеткой или клеткой за пределами сетки поля. Такие слоты не видны в игре,
+    но занимают лимит загонов и блокируют повторное заселение животного."""
+    removed = 0
+    for s in db.query(BarnyardSlot).filter(BarnyardSlot.user_id == user.vk_id).all():
+        if _slot_is_ghost(s, db):
+            db.delete(s)
+            removed += 1
+    if removed:
+        db.commit()
+    return removed
+
+
 @router.get("", response_model=list[AnimalOut])
 def list_available_animals(
     db: Session = Depends(get_db),
@@ -97,6 +121,8 @@ def install_animal_on_cell(
     cell = db.query(FieldCell).filter(FieldCell.id == cell_id).first()
     if cell is None or cell.kind != "barnyard":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Загон не найден")
+
+    purge_ghost_slots(db, user)
 
     slot = db.query(BarnyardSlot).filter(
         BarnyardSlot.user_id == user.vk_id, BarnyardSlot.cell_id == cell.id
@@ -213,6 +239,23 @@ def produce(
         "product_name": product.name,
         "storage_qty": storage.qty,
     }
+
+
+@router.delete("/pens/{slot_id}", status_code=status.HTTP_204_NO_CONTENT)
+def release_pen(
+    slot_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Выселить животное: загон освобождается полностью, прогресс теряется."""
+    slot = db.query(BarnyardSlot).filter(
+        BarnyardSlot.id == slot_id, BarnyardSlot.user_id == user.vk_id
+    ).first()
+    if slot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Загон не найден")
+    db.delete(slot)
+    db.commit()
+    return None
 
 
 class StorageItemOut(BaseModel):

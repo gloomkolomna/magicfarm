@@ -450,7 +450,28 @@ def set_blocked_cells(
             c = int(item["col"]); r = int(item["row"])
         except (KeyError, ValueError, TypeError):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверные координаты клетки")
+        if c < 0 or r < 0 or c >= f.cols or r >= f.rows:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Клетка вне поля")
         wanted.add((c, r))
+    from models import BarnyardSlot
+    occupied_cells = {
+        row[0] for row in db.query(BarnyardSlot.cell_id).filter(
+            BarnyardSlot.cell_id.isnot(None), BarnyardSlot.animal_id.isnot(None)
+        ).all()
+    }
+    for cell in f.cells:
+        if cell.kind == "tent":
+            continue
+        leaves_barnyard = (
+            cell.kind == "barnyard"
+            and ((cell.col, cell.row) in wanted and req.kind != "barnyard"
+                 or (cell.col, cell.row) not in wanted and req.kind == "barnyard")
+        )
+        if leaves_barnyard and cell.id in occupied_cells:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Загон ({cell.col}, {cell.row}) занят животным — сначала выселите его",
+            )
     for cell in f.cells:
         if cell.kind == "tent":
             continue
@@ -496,7 +517,19 @@ def set_cell_kind(
     if cell.kind == "tent":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Клетка занята шатром")
 
-    cell.kind = "empty" if cell.kind == req.kind else req.kind
+    new_kind = "empty" if cell.kind == req.kind else req.kind
+    if cell.kind == "barnyard" and new_kind != "barnyard":
+        from models import BarnyardSlot
+        occupied = db.query(BarnyardSlot).filter(
+            BarnyardSlot.cell_id == cell.id, BarnyardSlot.animal_id.isnot(None)
+        ).first()
+        if occupied is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Загон занят животным — сначала выселите его",
+            )
+
+    cell.kind = new_kind
     if cell.kind == "empty":
         cell.plant_id = None
         cell.occupant_user_id = None

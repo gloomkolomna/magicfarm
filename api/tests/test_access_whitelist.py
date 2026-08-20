@@ -1,5 +1,3 @@
-import pytest
-from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from types import SimpleNamespace
 
@@ -72,7 +70,7 @@ def test_get_current_user_whitelisted_player(monkeypatch, db):
     assert user.vk_id == 777
 
 
-def test_whitelist_revocation_is_immediate(monkeypatch, db):
+def test_whitelist_removal_does_not_revoke_logged_in_player(monkeypatch, db):
     from deps import get_current_user
     from models import AllowedPlayer, User
     from services.auth import create_access_token
@@ -89,9 +87,32 @@ def test_whitelist_revocation_is_immediate(monkeypatch, db):
     db.delete(row)
     db.commit()
 
-    with pytest.raises(HTTPException) as exc:
-        get_current_user(_req(), _creds(token), db)
-    assert exc.value.status_code == 403
+    assert get_current_user(_req(), _creds(token), db).vk_id == 777
+
+
+def test_session_consumes_invite(client, db, monkeypatch):
+    from models import AllowedPlayer
+
+    monkeypatch.setattr(config, "ADMIN_ONLY", True)
+    db.add(AllowedPlayer(vk_id=777))
+    db.commit()
+
+    res = client.post("/api/auth/session", json={"params": {"vk_user_id": "777"}})
+    assert res.status_code == 200
+
+    assert db.query(AllowedPlayer).filter(AllowedPlayer.vk_id == 777).first() is None
+
+
+def test_existing_player_logs_in_without_invite(client, db, monkeypatch):
+    from models import User
+
+    monkeypatch.setattr(config, "ADMIN_ONLY", True)
+    db.add(User(vk_id=777, role="player"))
+    db.commit()
+
+    res = client.post("/api/auth/session", json={"params": {"vk_user_id": "777"}})
+    assert res.status_code == 200
+    assert res.json()["role"] == "player"
 
 
 def test_admin_add_player_by_numeric_url(admin_client, db, monkeypatch):

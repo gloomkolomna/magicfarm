@@ -5,9 +5,8 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
-import config
 from db import get_db
-from models import AllowedPlayer, User
+from models import User
 from services.auth import decode_access_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -29,12 +28,6 @@ def get_current_user(
     user = db.query(User).filter(User.vk_id == vk_id).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь не найден")
-    if config.ADMIN_ONLY and user.role != "admin":
-        allowed = (
-            db.query(AllowedPlayer.vk_id).filter(AllowedPlayer.vk_id == user.vk_id).first() is not None
-        )
-        if not allowed:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ к игре пока закрыт")
     if user.role != "admin" and user.status == "blocked":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Аккаунт заблокирован")
     if user.role != "admin" and user.status == "readonly" and request.method not in READONLY_SAFE_METHODS:

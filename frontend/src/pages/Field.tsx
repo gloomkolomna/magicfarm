@@ -519,6 +519,22 @@ export default function FieldPage() {
     } finally { setBusy(false); }
   }
 
+  async function doBarnyardRelease() {
+    if (!barnyardCell?.barnyard) return;
+    if (!(await confirmDialog('Выселить животное? Загон освободится, прогресс будет потерян.'))) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.barnyardReleasePen(barnyardCell.barnyard.slot_id);
+      setMsg('✓ Животное выселено');
+      setBarnyardCell(null);
+      setBarnyardCollect(null);
+      await load();
+      await refresh();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
   async function reloadBarnyardStorage() {
     try {
       setBarnyardStorage(await api.barnyardTentStorage());
@@ -1896,7 +1912,15 @@ export default function FieldPage() {
                 Продукция хранится на складе шатра скотного двора. Забрать её на общий склад
                 (и продать через заказы) можно в шатре скотного двора.
               </p>
+              <button className="fm-btn fm-btn-outline" style={{ width: '100%', marginTop: 10 }} disabled={busy} onClick={doBarnyardRelease}>
+                🚪 Выселить животное
+              </button>
             </>
+          )}
+          {barnyardCell.barnyard && barnyardCell.barnyard.animal_id != null && barnyardCell.barnyard.status !== 'ready' && (
+            <button className="fm-btn fm-btn-outline" style={{ width: '100%', marginTop: 10 }} disabled={busy} onClick={doBarnyardRelease}>
+              🚪 Выселить животное
+            </button>
           )}
         </Modal>
       )}
