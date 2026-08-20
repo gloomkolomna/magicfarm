@@ -81,28 +81,9 @@ def test_library_product_image(admin_client, uploads_tmp):
         assert rec["product_image"] == expected
 
 
-def test_library_source_product_image(admin_client, uploads_tmp):
+def test_library_excludes_animal_product_recipe(admin_client):
     rid = _seed_animal_recipe()
     with make_user_client(123, "player") as c:
         rows = c.get("/api/library").json()
-        rec = next(x for x in rows if x["id"] == rid)
-        assert rec["source_kind"] == "animal_product"
-        assert rec["source_product_image"] is None
-
-    from models import Recipe
-    s = TestingSessionLocal()
-    try:
-        r = s.query(Recipe).filter(Recipe.id == rid).first()
-        src_id = r.source_product_id
-    finally:
-        s.close()
-
-    resp = admin_client.put(
-        f"/api/admin/catalog/products/{src_id}/image",
-        files={"image": ("sp.png", io.BytesIO(_img_bytes()), "image/png")},
-    )
-    assert resp.status_code == 200
-    with make_user_client(123, "player") as c:
-        rows = c.get("/api/library").json()
-        rec = next(x for x in rows if x["id"] == rid)
-        assert rec["source_product_image"] is not None
+    assert all(x["id"] != rid for x in rows)
+    assert any(x["plant_id"] is not None for x in rows)

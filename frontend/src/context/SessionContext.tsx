@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import client from '../api/client';
 import { useVkBridge } from './VkBridgeContext';
-import { isAdminAllowed } from '../auth/adminGate';
 
 export interface MeUser {
   vk_id: number;
   role: string;
+  status: string;
   display_name: string | null;
   crosses_balance: number;
   crosses_total: number;
@@ -16,6 +16,7 @@ export interface MeUser {
   unlocked_garden_level: number;
   onboarding_done: boolean;
   plots_placed: number;
+  locked_locations: string[];
 }
 
 interface SessionState {
@@ -48,10 +49,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // 1. Логин: когда есть vkUserId и нет валидного токена — получить новый.
   useEffect(() => {
     if (vkLoading || vkUserId == null) return;
-    if (!isAdminAllowed(vkUserId)) {
-      setLoading(false);
-      return;
-    }
 
     let cancelled = false;
 

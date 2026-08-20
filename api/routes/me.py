@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user
 from models import User
+from services.availability import locked_locations_for
 from services.leveling import count_route_plots
 
 router = APIRouter(prefix="/api", tags=["me"])
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/api", tags=["me"])
 class MeResponse(BaseModel):
     vk_id: int
     role: str
+    status: str
     display_name: str | None
     crosses_balance: int
     crosses_total: int
@@ -26,6 +28,7 @@ class MeResponse(BaseModel):
     unlocked_garden_level: int
     onboarding_done: bool
     plots_placed: int
+    locked_locations: list[str]
 
 
 @router.get("/me", response_model=MeResponse)
@@ -36,6 +39,7 @@ def get_me(
     return MeResponse(
         vk_id=user.vk_id,
         role=user.role,
+        status=user.status or "active",
         display_name=user.display_name,
         crosses_balance=user.crosses_balance,
         crosses_total=user.crosses_total,
@@ -48,4 +52,5 @@ def get_me(
         unlocked_garden_level=user.unlocked_garden_level or 0,
         onboarding_done=bool(user.onboarding_done),
         plots_placed=count_route_plots(db, user.vk_id),
+        locked_locations=locked_locations_for(user, db),
     )

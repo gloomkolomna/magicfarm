@@ -143,10 +143,6 @@ export function VkBridgeProvider({ children }: { children: ReactNode }) {
         setIsVkWebView(true);
         setVkUserId(id);
         setLaunchParams(params);
-        reportVk('info', 'vk_app_launch', inVk ? 'launched in VK' : 'launched (URL params)', {
-          vk_user_id: id,
-          in_vk: inVk,
-        });
         const cur = getComputedStyle(document.documentElement)
           .getPropertyValue('--vk-inset-top').trim();
         if (!cur || cur === '0px') {

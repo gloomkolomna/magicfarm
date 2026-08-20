@@ -1,6 +1,6 @@
 import client from './client';
 
-export type VkLogLevel = 'info' | 'warn' | 'error';
+export type VkLogLevel = 'warn' | 'error';
 
 let installed = false;
 

@@ -1,12 +1,17 @@
 import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
+from types import SimpleNamespace
 
 import config
 
 
 def _creds(token: str) -> HTTPAuthorizationCredentials:
     return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+
+def _req(method: str = "GET"):
+    return SimpleNamespace(method=method)
 
 
 def test_admin_only_login_blocks_player(client, monkeypatch):
@@ -34,7 +39,7 @@ def test_get_current_user_blocks_player(monkeypatch, db):
     token = create_access_token(424242)
 
     with pytest.raises(HTTPException) as exc:
-        get_current_user(_creds(token), db)
+        get_current_user(_req(), _creds(token), db)
     assert exc.value.status_code == 403
 
 
@@ -49,7 +54,7 @@ def test_get_current_user_allows_admin(monkeypatch, db):
     monkeypatch.setattr(config, "ADMIN_ONLY", True)
     token = create_access_token(400977)
 
-    user = get_current_user(_creds(token), db)
+    user = get_current_user(_req(), _creds(token), db)
     assert user.vk_id == 400977
 
 
@@ -64,5 +69,5 @@ def test_get_current_user_off_allows_player(monkeypatch, db):
     monkeypatch.setattr(config, "ADMIN_ONLY", False)
     token = create_access_token(424242)
 
-    user = get_current_user(_creds(token), db)
+    user = get_current_user(_req(), _creds(token), db)
     assert user.vk_id == 424242

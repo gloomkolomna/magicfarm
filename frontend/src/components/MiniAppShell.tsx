@@ -5,6 +5,9 @@ import { useSession } from '../context/SessionContext';
 interface Tab {
   path: string;
   label: string;
+  location?: string;
+  locked?: boolean;
+  hideWhenLocked?: boolean;
 }
 
 interface Props {
@@ -15,14 +18,14 @@ const BAR_BG = 'linear-gradient(180deg, rgba(10,16,8,0.92) 0%, rgba(10,16,8,0.78
 
 const BASE_TABS: Tab[] = [
   { path: '/', label: '🗺️ Поля' },
-  { path: '/infirmary', label: '🌲 Лечебница' },
+  { path: '/infirmary', label: '🌲 Лечебница', location: 'infirmary' },
   { path: '/library', label: '📖 Библиотека' },
-  { path: '/brewery', label: '🧪 Зельеварение' },
-  { path: '/bonuses', label: '⚡ Бонусы' },
+  { path: '/brewery', label: '🧪 Зельеварение', location: 'brewery' },
+  { path: '/bonuses', label: '⚡ Бонусы', location: 'brewery', hideWhenLocked: true },
   { path: '/inventory', label: '📦 Склад' },
   { path: '/orders', label: '🧺 Заказы' },
   { path: '/achievements', label: '🏆 Достижения' },
-  { path: '/collection', label: '🃏 Коллекция' },
+  { path: '/collection', label: '🃏 Коллекция', location: 'infirmary', hideWhenLocked: true },
   { path: '/profile', label: '👤 Профиль' },
 ];
 
@@ -32,7 +35,12 @@ function MiniAppShell({ children }: Props) {
   const { user } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const tabs: Tab[] = [...BASE_TABS];
+  const isLocked = (code?: string) =>
+    user?.role !== 'admin' && !!code && (user?.locked_locations ?? []).includes(code);
+
+  const tabs: Tab[] = BASE_TABS
+    .filter((t) => !(t.hideWhenLocked && isLocked(t.location)))
+    .map((t) => (isLocked(t.location) ? { ...t, label: `${t.label} 🔒`, locked: true } : t));
   if (user?.role === 'admin') tabs.push({ path: '/admin', label: '⚙️ Управление' });
 
   const active = tabs.find(
@@ -46,6 +54,19 @@ function MiniAppShell({ children }: Props) {
 
   return (
     <>
+      {user?.status === 'readonly' && (
+        <div
+          style={{
+            background: 'rgba(120,80,10,0.92)',
+            color: '#ffe9b0',
+            fontSize: 13,
+            textAlign: 'center',
+            padding: '6px 12px',
+          }}
+        >
+          👁 Режим только просмотра — действия недоступны
+        </div>
+      )}
       <div
         style={{
           display: 'flex',
@@ -132,9 +153,14 @@ function MiniAppShell({ children }: Props) {
             {tabs.map((t) => (
               <button
                 key={t.path}
-                onClick={() => go(t.path)}
-                className={active?.path === t.path ? 'fm-btn' : 'fm-btn fm-btn-outline'}
-                style={{ padding: '16px 18px', fontSize: 17 }}
+                onClick={() => (t.locked ? undefined : go(t.path))}
+                disabled={t.locked}
+                className={active?.path === t.path && !t.locked ? 'fm-btn' : 'fm-btn fm-btn-outline'}
+                style={{
+                  padding: '16px 18px',
+                  fontSize: 17,
+                  ...(t.locked ? { opacity: 0.55, cursor: 'not-allowed' } : {}),
+                }}
               >
                 {t.label}
               </button>

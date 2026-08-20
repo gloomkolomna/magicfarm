@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 import config
 from db import get_db
-from models import User
+from models import AllowedPlayer, User
 from services.auth import create_access_token
 from services.vk_sign import verify_launch_params
 
@@ -30,8 +30,11 @@ def create_session(req: SessionRequest, db: Session = Depends(get_db)):
 
     user = db.query(User).filter(User.vk_id == vk_id).first()
     is_admin = vk_id in config.get_admin_vk_ids()
-    if config.ADMIN_ONLY and not is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ только для администраторов")
+    allowed = (
+        db.query(AllowedPlayer.vk_id).filter(AllowedPlayer.vk_id == vk_id).first() is not None
+    )
+    if config.ADMIN_ONLY and not is_admin and not allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ к игре пока закрыт")
     if user is None:
         user = User(
             vk_id=vk_id,
@@ -41,10 +44,13 @@ def create_session(req: SessionRequest, db: Session = Depends(get_db)):
         db.add(user)
         db.commit()
         db.refresh(user)
-    elif is_admin and user.role != "admin":
-        user.role = "admin"
-        db.commit()
-        db.refresh(user)
+    else:
+        if user.role != "admin" and user.status == "blocked":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Аккаунт заблокирован")
+        if is_admin and user.role != "admin":
+            user.role = "admin"
+            db.commit()
+            db.refresh(user)
 
     token = create_access_token(user.vk_id)
     return SessionResponse(token=token, vk_id=user.vk_id, role=user.role)

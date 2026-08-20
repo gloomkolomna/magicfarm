@@ -400,13 +400,28 @@ export interface PlayerDetail extends Player {
   productions: Production[];
   inventory: InventoryItem[];
   plant_norms?: PlayerPlantNorm[];
+  dlc_locations?: string[];
 }
+
+export interface AllowedPlayer {
+  vk_id: number;
+  screen_name: string | null;
+  first_name: string;
+  last_name: string;
+  created_at: string | null;
+}
+
+export const LOCATION_TITLES: Record<string, string> = {
+  infirmary: '🌲 Лечебница',
+  brewery: '🧪 Зельеварение',
+};
 
 export interface Player {
   vk_id: number;
   first_name: string;
   last_name: string;
   role: string;
+  status: string;
   crosses_balance: number;
   crosses_total: number;
   coins: number;
@@ -1533,6 +1548,26 @@ export const api = {
     client.post<Player>(`/admin/players/${vkId}/restart`).then((r) => r.data),
   adminDeletePlayerPlot: (vkId: number, plotId: number) =>
     client.delete(`/admin/players/${vkId}/plots/${plotId}`).then((r) => r.data),
+  adminGrantDlc: (vkId: number, locationCode: string) =>
+    client.post(`/admin/players/${vkId}/dlc`, { location_code: locationCode }).then((r) => r.data),
+  adminRevokeDlc: (vkId: number, locationCode: string) =>
+    client.delete(`/admin/players/${vkId}/dlc/${locationCode}`).then((r) => r.data),
+  adminSetPlayerStatus: (vkId: number, status: string) =>
+    client.post<Player>(`/admin/players/${vkId}/status`, { status }).then((r) => r.data),
+  adminDeletePlayer: (vkId: number) =>
+    client.delete(`/admin/players/${vkId}`).then((r) => r.data),
+
+  adminAccessPlayers: () =>
+    client.get<AllowedPlayer[]>('/admin/access/players').then((r) => r.data),
+  adminAddAccessPlayer: (link: string) =>
+    client.post<AllowedPlayer>('/admin/access/players', { link }).then((r) => r.data),
+  adminDeleteAccessPlayer: (vkId: number) =>
+    client.delete(`/admin/access/players/${vkId}`).then((r) => r.data),
+
+  getLockedLocations: () =>
+    client.get<{ codes: string[] }>('/settings/locked-locations').then((r) => r.data),
+  setLockedLocations: (codes: string[]) =>
+    client.put<{ codes: string[] }>('/admin/settings/locked-locations', { codes }).then((r) => r.data),
 
   // ── Админ: заказы ──
   adminOrders: () =>

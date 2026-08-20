@@ -62,6 +62,7 @@ class User(Base):
 
     vk_id = Column(Integer, primary_key=True)
     role = Column(String, nullable=False, default="player", server_default="player")
+    status = Column(String, nullable=False, default="active", server_default="active")
     display_name = Column(String, nullable=True)
     crosses_balance = Column(Integer, nullable=False, default=0, server_default="0")
     crosses_total = Column(Integer, nullable=False, default=0, server_default="0")
@@ -138,6 +139,32 @@ class Setting(Base):
 
     key = Column(String, primary_key=True)
     value = Column(String, nullable=False)
+
+
+LOCATION_CODES = ("infirmary", "brewery")
+LOCATION_NAMES = {"infirmary": "Лечебница", "brewery": "Зельеварение"}
+
+
+class AllowedPlayer(Base):
+    __tablename__ = "allowed_players"
+
+    vk_id = Column(Integer, primary_key=True)
+    screen_name = Column(String, nullable=True)
+    added_by = Column(Integer, ForeignKey("users.vk_id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+
+class UserDlcUnlock(Base):
+    __tablename__ = "user_dlc_unlocks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    location_code = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "location_code", name="uq_userdlcunlock_user_location"),
+    )
 
 
 class StitchReport(Base):

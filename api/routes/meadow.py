@@ -6,13 +6,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user
+from deps import get_current_user, require_location
 from models import Field, GatherCell, Ingredient, User, UserGatherLog, UserIngredient
 from routes.admin_fields import _get_field_or_404
 from routes.ingredients import IngredientOut, _ingredient_out
 from services import msk_time
 
-router = APIRouter(prefix="/api/meadow", tags=["meadow"])
+router = APIRouter(prefix="/api/meadow", tags=["meadow"], dependencies=[Depends(require_location("infirmary"))])
 
 
 def _check_field_gate(f: Field, user: User) -> None:

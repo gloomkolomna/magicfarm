@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api, type ApothecaryItem, type InventoryItem } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import { useSession } from '../context/SessionContext';
 import Toast from '../components/Toast';
 import SpritePedestal from '../components/SpritePedestal';
 
 export default function InventoryPage() {
+  const { user } = useSession();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [apothecary, setApothecary] = useState<ApothecaryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,14 +19,17 @@ export default function InventoryPage() {
   const [sellQty, setSellQty] = useState('');
   const [sellResult, setSellResult] = useState<number | null>(null);
 
+  const locked = (code: string) =>
+    user?.role !== 'admin' && (user?.locked_locations ?? []).includes(code);
+
   const SECTIONS = [
     { key: 'all', label: 'Всё' },
     { key: 'plant', label: '🌱 Растения' },
     { key: 'product', label: '📦 Товары' },
-    { key: 'potion', label: '🧪 Зелья' },
+    { key: 'potion', label: '🧪 Зелья', hidden: locked('brewery') },
     { key: 'production', label: '🏭 Продукция' },
-    { key: 'apothecary', label: '⚗️ Аптека' },
-  ];
+    { key: 'apothecary', label: '⚗️ Аптека', hidden: locked('infirmary') && locked('brewery') },
+  ].filter((s) => !s.hidden);
 
   useEffect(() => {
     Promise.all([api.inventory(), api.apothecary()])

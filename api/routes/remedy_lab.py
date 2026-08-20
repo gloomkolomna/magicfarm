@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user
+from deps import get_current_user, require_location
 from models import (
     Field, Inventory, PatientAnimal, Remedy, RemedyDeviceCell, RemedyDeviceRemedy,
     User, UserCard, UserIngredient, UserPatientState, UserRemedy, UserRemedyCard,
@@ -18,7 +18,7 @@ from routes.admin_fields import _get_field_or_404
 from routes.ingredients import ApothecaryItemOut, _apothecary_item_out
 from services.card_draw import calculate_norm, cards_to_json, draw_cards
 
-router = APIRouter(prefix="/api", tags=["remedy-lab"])
+router = APIRouter(prefix="/api", tags=["remedy-lab"], dependencies=[Depends(require_location("infirmary"))])
 
 
 def _check_field_gate(f: Field, user: User) -> None:

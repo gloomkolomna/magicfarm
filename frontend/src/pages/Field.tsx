@@ -22,6 +22,44 @@ const HOUSE_MATERIALS: { code: string; name: string; emoji: string }[] = [
 ];
 const DICE_FACE_EMOJI = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
+function PlantPickerCards({ plants, selected, onSelect, lockOf, busy }: {
+  plants: Plant[];
+  selected: number | null;
+  onSelect: (id: number) => void;
+  lockOf: (p: Plant | undefined) => string | null;
+  busy: boolean;
+}) {
+  return (
+    <div className="fm-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+      {plants.map((p) => {
+        const lock = lockOf(p);
+        return (
+          <button
+            key={p.id}
+            type="button"
+            className="fm-card fm-rise"
+            disabled={busy || !!lock}
+            onClick={() => onSelect(p.id)}
+            style={{
+              padding: 8, textAlign: 'center', cursor: lock ? 'not-allowed' : 'pointer',
+              border: selected === p.id ? '2px solid var(--accent-warm)' : '1px solid var(--border)',
+              opacity: lock ? 0.5 : 1,
+            }}
+          >
+            {p.image_young_url ? (
+              <img src={mediaUrl(p.image_young_url)} alt="" style={{ height: 44, maxWidth: '100%', objectFit: 'contain', display: 'block', margin: '0 auto 4px' }} />
+            ) : (
+              <div style={{ fontSize: 22, marginBottom: 2 }}>{p.emoji || '🌿'}</div>
+            )}
+            <div style={{ fontSize: 11 }}>{p.name}</div>
+            {lock && <div style={{ fontSize: 10, color: 'var(--danger, #e08080)', marginTop: 2 }}>{lock}</div>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function FieldPage() {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
@@ -1000,12 +1038,13 @@ export default function FieldPage() {
               return <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Все доступные растения уже посажены.</div>;
             }
             return (
-              <select className="fm-input" value={plantSel ?? ''} onChange={(e) => setPlantSel(Number(e.target.value))}>
-                {available.map((p) => {
-                  const lock = plantLock(p);
-                  return <option key={p.id} value={p.id} disabled={!!lock}>{lock ? `${p.emoji} ${p.name} — ${lock}` : `${p.emoji} ${p.name}`}</option>;
-                })}
-              </select>
+              <PlantPickerCards
+                plants={available}
+                selected={plantSel}
+                onSelect={setPlantSel}
+                lockOf={plantLock}
+                busy={busy}
+              />
             );
           })()}
           <div style={{ marginTop: 8 }}>
@@ -1035,12 +1074,13 @@ export default function FieldPage() {
               return <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Все доступные растения уже посажены.</div>;
             }
             return (
-              <select className="fm-input" value={plantBedSel ?? ''} onChange={(e) => setPlantBedSel(Number(e.target.value))}>
-                {available.map((p) => {
-                  const lock = plantLock(p);
-                  return <option key={p.id} value={p.id} disabled={!!lock}>{lock ? `${p.emoji} ${p.name} — ${lock}` : `${p.emoji} ${p.name}`}</option>;
-                })}
-              </select>
+              <PlantPickerCards
+                plants={available}
+                selected={plantBedSel}
+                onSelect={setPlantBedSel}
+                lockOf={plantLock}
+                busy={busy}
+              />
             );
           })()}
           <div style={{ marginTop: 8 }}>

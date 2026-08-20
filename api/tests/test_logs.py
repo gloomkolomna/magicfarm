@@ -41,15 +41,16 @@ def test_vk_log_creates_entry(admin_client):
     assert "launch_params" in mine[0]["details"]
 
 
-def test_vk_log_normalizes_unknown_level(admin_client):
+def test_vk_log_drops_info_and_unknown_level(admin_client):
+    admin_client.post("/api/logs/vk", json={"level": "info", "event": "launch_info"})
     admin_client.post("/api/logs/vk", json={"level": "fatal", "event": "weird"})
-    rows = admin_client.get("/api/admin/logs", params={"source": "vk", "level": "info"}).json()
-    assert any(r["event"] == "weird" for r in rows)
+    rows = admin_client.get("/api/admin/logs", params={"source": "vk"}).json()
+    assert not any(r["event"] in ("launch_info", "weird") for r in rows)
 
 
 def test_admin_logs_search_and_user_filter(admin_client):
     with make_user_client(77001, "player") as p:
-        p.post("/api/logs/vk", json={"event": "player_event", "message": "special-token-xyz"})
+        p.post("/api/logs/vk", json={"level": "warn", "event": "player_event", "message": "special-token-xyz"})
     rows = admin_client.get("/api/admin/logs", params={"q": "special-token-xyz"}).json()
     assert rows and any(r["event"] == "player_event" for r in rows)
     by_user = admin_client.get("/api/admin/logs", params={"user_id": 77001}).json()
@@ -77,7 +78,7 @@ def test_cleanup_old_logs(db):
 
 
 def test_admin_clear_logs(admin_client):
-    admin_client.post("/api/logs/vk", json={"event": "to-be-cleared"})
+    admin_client.post("/api/logs/vk", json={"level": "warn", "event": "to-be-cleared"})
     assert any(r["event"] == "to-be-cleared" for r in admin_client.get("/api/admin/logs").json())
     res = admin_client.delete("/api/admin/logs")
     assert res.status_code == 204

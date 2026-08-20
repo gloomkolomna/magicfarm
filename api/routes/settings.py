@@ -45,6 +45,29 @@ DEFAULT_SALE_RATIO = 0.5
 DEFAULT_BG_KEY = "default_background_url"
 INFIRMARY_BG_KEY = "infirmary_background_url"
 
+LOCKED_LOCATIONS_KEY = "locked_locations"
+
+
+def get_locked_locations(db: Session) -> set[str]:
+    from models import LOCATION_CODES
+    s = db.query(Setting).filter(Setting.key == LOCKED_LOCATIONS_KEY).first()
+    if s is None:
+        return set()
+    return {c.strip() for c in s.value.split(",") if c.strip() and c.strip() in LOCATION_CODES}
+
+
+def set_locked_locations(db: Session, codes: list[str]) -> None:
+    from models import LOCATION_CODES
+    valid = [c for c in dict.fromkeys(codes) if c in LOCATION_CODES]
+    value = ",".join(valid)
+    s = db.query(Setting).filter(Setting.key == LOCKED_LOCATIONS_KEY).first()
+    if s is None:
+        s = Setting(key=LOCKED_LOCATIONS_KEY, value=value)
+        db.add(s)
+    else:
+        s.value = value
+    db.commit()
+
 
 CRYSTAL_COLORS = ("green", "blue", "violet")
 
@@ -260,6 +283,40 @@ def set_background(
         s.value = req.url
     db.commit()
     return {"url": req.url}
+
+
+class LockedLocationsOut(BaseModel):
+    codes: list[str]
+
+
+class LockedLocationsUpdate(BaseModel):
+    codes: list[str]
+
+
+@router.get("/settings/locked-locations", response_model=LockedLocationsOut)
+def get_locked_locations_endpoint(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return LockedLocationsOut(codes=sorted(get_locked_locations(db)))
+
+
+@router.put("/admin/settings/locked-locations", response_model=LockedLocationsOut)
+def update_locked_locations(
+    req: LockedLocationsUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    from models import LOCATION_CODES
+
+    unknown = [c for c in req.codes if c not in LOCATION_CODES]
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Неизвестные локации: {', '.join(unknown)}",
+        )
+    set_locked_locations(db, req.codes)
+    return LockedLocationsOut(codes=sorted(get_locked_locations(db)))
 
 
 _SETTING_META = {

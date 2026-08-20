@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user
+from deps import get_current_user, require_location
 from models import (
     ClinicPartCell, Disease, DiseaseSymptom, Field, InfirmaryZone, PatientAnimal, User,
     UserCard, UserExamineLog, UserPatientState, UserRemedy, UserRemedyCard,
@@ -14,7 +14,7 @@ from models import (
 from routes.admin_fields import _get_field_or_404
 from services.achievements import check_and_award
 
-router = APIRouter(prefix="/api/infirmary", tags=["infirmary"])
+router = APIRouter(prefix="/api/infirmary", tags=["infirmary"], dependencies=[Depends(require_location("infirmary"))])
 
 DIAGNOSE_PENALTY = 200
 EXAMINE_PENALTY = 100

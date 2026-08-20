@@ -8,10 +8,13 @@ from sqlalchemy import func
 
 from db import get_db
 from deps import require_role
-from models import Field, FieldCell, FieldPlant, Inventory, Plant, Plot, Production, StitchReport, Tent, TentBuild, User, UserPlantNorm
+from models import AllowedPlayer, Field, FieldCell, FieldPlant, Inventory, Plant, PlantBed, Plot, Production, StitchReport, Tent, TentBuild, User, UserDlcUnlock, UserPlantNorm
+from services.uploads import remove_upload
 from services.vk_names import resolve_vk_names
 
 router = APIRouter(prefix="/api/admin/players", tags=["admin-players"])
+
+PLAYER_STATUSES = ("active", "blocked", "readonly")
 
 
 class PlayerOut(BaseModel):
@@ -19,12 +22,29 @@ class PlayerOut(BaseModel):
     first_name: str
     last_name: str
     role: str
+    status: str
     crosses_balance: int
     crosses_total: int
     coins: int
     round: int
     reports_total: int
     created_at: str | None
+
+
+def _player_out(u: User, reports_total: int, nm: dict) -> PlayerOut:
+    return PlayerOut(
+        vk_id=u.vk_id,
+        first_name=nm.get("first_name", ""),
+        last_name=nm.get("last_name", ""),
+        role=u.role,
+        status=u.status or "active",
+        crosses_balance=u.crosses_balance or 0,
+        crosses_total=u.crosses_total or 0,
+        coins=u.coins or 0,
+        round=u.round or 1,
+        reports_total=reports_total,
+        created_at=u.created_at.isoformat() if u.created_at else None,
+    )
 
 
 @router.get("", response_model=list[PlayerOut])
@@ -46,18 +66,7 @@ def list_players(
     result = []
     for u in users:
         nm = names.get(u.vk_id, {})
-        result.append(PlayerOut(
-            vk_id=u.vk_id,
-            first_name=nm.get("first_name", ""),
-            last_name=nm.get("last_name", ""),
-            role=u.role,
-            crosses_balance=u.crosses_balance or 0,
-            crosses_total=u.crosses_total or 0,
-            coins=u.coins or 0,
-            round=u.round or 1,
-            reports_total=report_counts.get(u.vk_id, 0),
-            created_at=u.created_at.isoformat() if u.created_at else None,
-        ))
+        result.append(_player_out(u, report_counts.get(u.vk_id, 0), nm))
     return result
 
 
@@ -123,6 +132,7 @@ class PlayerDetailOut(BaseModel):
     first_name: str
     last_name: str
     role: str
+    status: str
     crosses_balance: int
     crosses_total: int
     coins: int
@@ -133,6 +143,7 @@ class PlayerDetailOut(BaseModel):
     productions: list[PlayerProductionOut]
     inventory: list[PlayerInventoryOut]
     plant_norms: list[PlayerPlantNormOut] = []
+    dlc_locations: list[str] = []
 
 
 @router.get("/{vk_id}", response_model=PlayerDetailOut)
@@ -160,12 +171,17 @@ def get_player_detail(
         .order_by(Plant.name.asc())
         .all()
     )
+    dlc_locations = sorted(
+        r[0] for r in db.query(UserDlcUnlock.location_code)
+        .filter(UserDlcUnlock.user_id == vk_id).all()
+    )
 
     return PlayerDetailOut(
         vk_id=player.vk_id,
         first_name=nm.get("first_name", ""),
         last_name=nm.get("last_name", ""),
         role=player.role,
+        status=player.status or "active",
         crosses_balance=player.crosses_balance or 0,
         crosses_total=player.crosses_total or 0,
         coins=player.coins or 0,
@@ -205,6 +221,7 @@ def get_player_detail(
                 norm_per_unit=n.norm_per_unit or 0,
             ) for n, pl in plant_norms
         ],
+        dlc_locations=dlc_locations,
     )
 
 
@@ -492,6 +509,58 @@ def set_player_plant_norm(
     )
 
 
+class DlcGrantRequest(BaseModel):
+    location_code: str
+
+
+@router.post("/{vk_id}/dlc", status_code=status.HTTP_201_CREATED)
+def grant_player_dlc(
+    vk_id: int,
+    req: DlcGrantRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    from models import LOCATION_CODES
+
+    if req.location_code not in LOCATION_CODES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестная локация")
+    player = db.query(User).filter(User.vk_id == vk_id).first()
+    if player is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    existing = db.query(UserDlcUnlock).filter(
+        UserDlcUnlock.user_id == vk_id, UserDlcUnlock.location_code == req.location_code
+    ).first()
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Дополнение уже выдано")
+    db.add(UserDlcUnlock(user_id=vk_id, location_code=req.location_code))
+    db.commit()
+    return {"vk_id": vk_id, "location_code": req.location_code, "granted": True}
+
+
+@router.delete("/{vk_id}/dlc/{location_code}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_player_dlc(
+    vk_id: int,
+    location_code: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    from models import LOCATION_CODES
+
+    if location_code not in LOCATION_CODES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестная локация")
+    player = db.query(User).filter(User.vk_id == vk_id).first()
+    if player is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    row = db.query(UserDlcUnlock).filter(
+        UserDlcUnlock.user_id == vk_id, UserDlcUnlock.location_code == location_code
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Дополнение не выдано")
+    db.delete(row)
+    db.commit()
+    return None
+
+
 @router.post("/{vk_id}/restart", response_model=PlayerOut)
 def restart_player(
     vk_id: int,
@@ -540,18 +609,91 @@ def restart_player(
 
     names = resolve_vk_names([target.vk_id])
     nm = names.get(target.vk_id, {})
-    return PlayerOut(
-        vk_id=target.vk_id,
-        first_name=nm.get("first_name", ""),
-        last_name=nm.get("last_name", ""),
-        role=target.role,
-        crosses_balance=0,
-        crosses_total=0,
-        coins=0,
-        round=1,
-        reports_total=0,
-        created_at=target.created_at.isoformat() if target.created_at else None,
+    return _player_out(target, 0, nm)
+
+
+class PlayerStatusRequest(BaseModel):
+    status: str
+
+
+@router.post("/{vk_id}/status", response_model=PlayerOut)
+def set_player_status(
+    vk_id: int,
+    req: PlayerStatusRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    if req.status not in PLAYER_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Статус должен быть одним из: {', '.join(PLAYER_STATUSES)}",
+        )
+    target = db.query(User).filter(User.vk_id == vk_id).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    if target.role == "admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нельзя менять статус администратора")
+
+    target.status = req.status
+    db.commit()
+    db.refresh(target)
+
+    reports_total = db.query(func.count(StitchReport.id)).filter(StitchReport.user_id == vk_id).scalar() or 0
+    names = resolve_vk_names([target.vk_id])
+    nm = names.get(target.vk_id, {})
+    return _player_out(target, reports_total, nm)
+
+
+@router.delete("/{vk_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_player(
+    vk_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    from models import (
+        BarnyardSlot, BarnyardStorage, BarnyardWithdrawal, Cauldron,
+        CraftSession, HouseBuild, PetActionLog, PetForestTask, Plot, Production,
+        StitchReport, TentBuild, UserAchievement, UserCard, UserCrystalNorm,
+        UserDlcUnlock, UserExamineLog, UserGatherLog, UserIngredient, UserOrder,
+        UserPatientState, UserPet, UserPlantNorm, UserPotion, UserRecipe,
+        UserRemedy, UserRemedyCard, UserRemedyDevice,
     )
+
+    target = db.query(User).filter(User.vk_id == vk_id).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    if target.role == "admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нельзя удалить администратора")
+
+    reports = db.query(StitchReport).filter(StitchReport.user_id == vk_id).all()
+    for r in reports:
+        remove_upload(r.photo_before_url)
+        remove_upload(r.photo_after_url)
+
+    for model in (
+        UserRemedyDevice, UserRemedyCard, UserRemedy, UserExamineLog, UserCard,
+        UserPatientState, UserGatherLog, UserIngredient, PetActionLog, PetForestTask,
+        UserDlcUnlock, UserPlantNorm, UserCrystalNorm, UserAchievement, UserPotion,
+        Cauldron, UserPet, BarnyardWithdrawal, BarnyardStorage, BarnyardSlot,
+        CraftSession, UserRecipe, HouseBuild, TentBuild, UserOrder, Inventory,
+        Production, Plot, StitchReport,
+    ):
+        db.query(model).filter(model.user_id == vk_id).delete(synchronize_session=False)
+
+    db.query(FieldCell).filter(FieldCell.occupant_user_id == vk_id).update(
+        {FieldCell.occupant_user_id: None}, synchronize_session=False
+    )
+    db.query(PlantBed).filter(PlantBed.occupant_user_id == vk_id).update(
+        {PlantBed.occupant_user_id: None}, synchronize_session=False
+    )
+    db.query(Tent).filter(Tent.builder_user_id == vk_id).update(
+        {Tent.builder_user_id: None}, synchronize_session=False
+    )
+    db.query(AllowedPlayer).filter(AllowedPlayer.vk_id == vk_id).delete(synchronize_session=False)
+
+    db.delete(target)
+    db.commit()
+    return None
 
 
 @router.delete("/{vk_id}/plots/{plot_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, BODY_PARTS, BODY_PART_LABELS, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport } from '../api/endpoints';
+import { api, BODY_PARTS, BODY_PART_LABELS, LOCATION_TITLES, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type AllowedPlayer, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import Toast from '../components/Toast';
 import CrystalStandardEditor from '../components/CrystalStandardEditor';
 import { confirmDialog } from '../components/Confirm';
 import SpritePedestal from '../components/SpritePedestal';
+
+const PLAYER_STATUS_META: Record<string, { label: string; emoji: string }> = {
+  active: { label: 'активен', emoji: '🟢' },
+  blocked: { label: 'заблокирован', emoji: '🚫' },
+  readonly: { label: 'только просмотр', emoji: '👁' },
+};
 
 const BONUS_KIND_OPTIONS = [
   { value: 'harvest_orchard', label: '🍎 +1 к урожаю сада' },
@@ -82,6 +88,9 @@ export default function AdminPage() {
   const [viewField, setViewField] = useState<FieldDetail | null>(null);
   const [playerFields, setPlayerFields] = useState<FieldInfo[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const [accessPlayers, setAccessPlayers] = useState<AllowedPlayer[]>([]);
+  const [accessLink, setAccessLink] = useState('');
+  const [lockedLocations, setLockedLocationsState] = useState<string[]>([]);
   const { loading: sessionLoading } = useSession();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -120,6 +129,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     const r = loadedRef.current;
+    if (tab === 'players' && !r.has('access')) { r.add('access'); api.adminAccessPlayers().then(setAccessPlayers).catch(() => {}); }
+    if (tab === 'settings' && !r.has('locked-locations')) { r.add('locked-locations'); api.getLockedLocations().then((res) => setLockedLocationsState(res.codes)).catch(() => {}); }
     if (tab === 'plants' && !r.has('plants')) { r.add('plants'); api.plants().then(setPlants).catch(() => {}); }
     if (tab === 'animals' && !r.has('animals')) { r.add('animals'); api.adminAnimals().then(setAnimals).catch(() => {}); }
     if (tab === 'pets' && !r.has('pets')) { r.add('pets'); api.adminPets().then(setPets).catch(() => {}); }
@@ -428,6 +439,110 @@ export default function AdminPage() {
   async function reloadPlayerDetail() {
     if (!selectedPlayer) return;
     try { setPlayerDetail(await api.adminPlayerDetail(selectedPlayer.vk_id)); } catch {}
+  }
+
+  async function addAccessPlayer() {
+    const link = accessLink.trim();
+    if (!link) return;
+    setBusy(true); setMsg(null);
+    try {
+      const added = await api.adminAddAccessPlayer(link);
+      setMsg(`✓ Игрок #${added.vk_id} получил доступ`);
+      setAccessLink('');
+      setAccessPlayers(await api.adminAccessPlayers());
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeAccessPlayer(vkId: number) {
+    if (!(await confirmDialog(`Убрать игрока #${vkId} из списка доступа? Он сразу потеряет вход.`))) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminDeleteAccessPlayer(vkId);
+      setAccessPlayers((prev) => prev.filter((p) => p.vk_id !== vkId));
+      setMsg('✓ Доступ убран');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleLockedLocation(code: string) {
+    setBusy(true); setMsg(null);
+    try {
+      const next = lockedLocations.includes(code)
+        ? lockedLocations.filter((c) => c !== code)
+        : [...lockedLocations, code];
+      const res = await api.setLockedLocations(next);
+      setLockedLocationsState(res.codes);
+      setMsg('✓ Сохранено');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function togglePlayerDlc(vkId: number, code: string, granted: boolean) {
+    setBusy(true); setMsg(null);
+    try {
+      if (granted) {
+        await api.adminRevokeDlc(vkId, code);
+        setMsg('✓ Дополнение забрано');
+      } else {
+        await api.adminGrantDlc(vkId, code);
+        setMsg('✓ Дополнение выдано');
+      }
+      await reloadPlayerDetail();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setPlayerStatus(vkId: number, status: string) {
+    setBusy(true); setMsg(null);
+    try {
+      const updated = await api.adminSetPlayerStatus(vkId, status);
+      if (selectedPlayer?.vk_id === vkId) setSelectedPlayer(updated);
+      const patch = (p: Player) => (p.vk_id === vkId ? { ...p, status: updated.status } : p);
+      setPlayers((prev) => prev.map(patch));
+      setAllPlayers((prev) => prev.map(patch));
+      setMsg(`✓ Статус: ${PLAYER_STATUS_META[updated.status]?.label ?? updated.status}`);
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deletePlayerAccount() {
+    if (!selectedPlayer) return;
+    if (!(await confirmDialog(`Удалить игрока #${selectedPlayer.vk_id} ПОЛНОСТЬЮ (профиль, весь прогресс, фото-отчёты, доступ)?`))) return;
+    if (!(await confirmDialog('Точно? Восстановить будет невозможно.'))) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminDeletePlayer(selectedPlayer.vk_id);
+      setMsg('✓ Игрок удалён');
+      setSelectedPlayer(null);
+      setPlayerDetail(null);
+      setPlayerReports([]);
+      try {
+        const list = await api.adminPlayers();
+        setAllPlayers(list);
+        setPlayers(list);
+      } catch {}
+      try { setAccessPlayers(await api.adminAccessPlayers()); } catch {}
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function reviewReport(id: number, action: 'accept' | 'reject') {
@@ -1901,10 +2016,51 @@ export default function AdminPage() {
                     <button type="button" className="fm-btn fm-btn-sm fm-btn-danger" style={{ marginLeft: 'auto' }} disabled={busy} onClick={restartPlayer}>
                       🔁 РЕСТАРТ
                     </button>
+                    {selectedPlayer.role !== 'admin' && (
+                      <button type="button" className="fm-btn fm-btn-sm fm-btn-danger" disabled={busy} onClick={deletePlayerAccount}>
+                        🗑 Удалить
+                      </button>
+                    )}
                   </div>
                   <div className="fm-card" style={{ marginBottom: 14, fontSize: 13 }}>
-                    <div>ID: {selectedPlayer.vk_id} · Роль: {selectedPlayer.role}</div>
+                    <div>ID: {selectedPlayer.vk_id} · Роль: {selectedPlayer.role} · Статус: {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.emoji} {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.label ?? selectedPlayer.status}</div>
                     <div>Крестики: {selectedPlayer.crosses_balance} (всего {selectedPlayer.crosses_total}) · Монеты: {selectedPlayer.coins} · Раунд: {selectedPlayer.round}</div>
+                    {selectedPlayer.role !== 'admin' && (
+                      <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {selectedPlayer.status !== 'blocked' && (
+                          <button type="button" className="fm-btn fm-btn-sm fm-btn-danger" disabled={busy} onClick={() => setPlayerStatus(selectedPlayer.vk_id, 'blocked')}>
+                            🚫 Заблокировать
+                          </button>
+                        )}
+                        {selectedPlayer.status !== 'readonly' && (
+                          <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy} onClick={() => setPlayerStatus(selectedPlayer.vk_id, 'readonly')}>
+                            👁 Только просмотр
+                          </button>
+                        )}
+                        {selectedPlayer.status !== 'active' && (
+                          <button type="button" className="fm-btn fm-btn-sm" disabled={busy} onClick={() => setPlayerStatus(selectedPlayer.vk_id, 'active')}>
+                            ✅ Разблокировать
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span>Дополнения:</span>
+                      {Object.entries(LOCATION_TITLES).map(([code, title]) => {
+                        const granted = playerDetail?.dlc_locations?.includes(code);
+                        return (
+                          <button
+                            key={code}
+                            type="button"
+                            className={granted ? 'fm-btn fm-btn-sm' : 'fm-btn fm-btn-sm fm-btn-outline'}
+                            disabled={busy || !playerDetail}
+                            onClick={() => togglePlayerDlc(selectedPlayer.vk_id, code, !!granted)}
+                          >
+                            {granted ? '✓ ' : ''}{title}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
@@ -2036,6 +2192,40 @@ export default function AdminPage() {
               ) : (
                 <div>
                   <h2 style={{ marginTop: 0 }}>👥 Игроки</h2>
+                  <div className="fm-card" style={{ marginBottom: 12 }}>
+                    <h3 style={{ margin: '0 0 8px' }}>🔑 Доступ к игре</h3>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        className="fm-input"
+                        style={{ flex: 1 }}
+                        placeholder="Ссылка ВК: https://vk.ru/id123 или vk.ru/имя"
+                        value={accessLink}
+                        onChange={(e) => setAccessLink(e.target.value)}
+                      />
+                      <button type="button" className="fm-btn" disabled={busy || !accessLink.trim()} onClick={addAccessPlayer}>➕ Добавить</button>
+                    </div>
+                    {accessPlayers.length === 0 ? (
+                      <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 8 }}>
+                        Пока доступ есть только у администраторов. Добавьте игрока по ссылке ВК.
+                      </div>
+                    ) : (
+                      <div className="fm-grid" style={{ marginTop: 10 }}>
+                        {accessPlayers.map((p) => (
+                          <div key={p.vk_id} className="fm-card fm-rise" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <strong style={{ overflowWrap: 'anywhere' }}>
+                                {p.first_name || p.last_name ? `${p.first_name} ${p.last_name}`.trim() : `#${p.vk_id}`}
+                              </strong>
+                              <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                                #{p.vk_id}{p.screen_name ? ` · ${p.screen_name}` : ''}
+                              </div>
+                            </div>
+                            <button type="button" className="fm-btn fm-btn-sm fm-btn-danger" disabled={busy} onClick={() => removeAccessPlayer(p.vk_id)}>✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div style={{ marginBottom: 12 }}>
                     <input
                       className="fm-input"
@@ -2070,6 +2260,11 @@ export default function AdminPage() {
                                 <td style={{ padding: '8px 12px' }}>
                                   <strong>{p.first_name || p.last_name ? `${p.first_name} ${p.last_name}`.trim() : `#${p.vk_id}`}</strong>
                                   <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 11 }}>{p.role}</span>
+                                  {p.status && p.status !== 'active' && (
+                                    <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title={PLAYER_STATUS_META[p.status]?.label}>
+                                      {PLAYER_STATUS_META[p.status]?.emoji ?? p.status}
+                                    </span>
+                                  )}
                                 </td>
                                 <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.crosses_balance}</td>
                                 <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.coins}</td>
@@ -2136,6 +2331,23 @@ export default function AdminPage() {
           {tab === 'settings' && (
             <>
               <CrystalStandardEditor disabled={busy} />
+              <div className="fm-card" style={{ marginTop: 10 }}>
+                <h3>🔒 Закрытые локации</h3>
+                <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+                  Закрытые локации видны игрокам с замком 🔒 и недоступны без дополнения. Админам всё доступно всегда. Дополнения выдаются в карточке игрока.
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {Object.entries(LOCATION_TITLES).map(([code, title]) => (
+                    <label key={code} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={lockedLocations.includes(code)} disabled={busy} onChange={() => toggleLockedLocation(code)} />
+                      <span>{title}</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                        {lockedLocations.includes(code) ? 'закрыта 🔒' : 'открыта'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
               {shownSettings.length === 0 ? (
                 <div className="fm-card" style={{ color: 'var(--text-muted)' }}>{NO_MATCH}</div>
               ) : (
@@ -2249,7 +2461,7 @@ export default function AdminPage() {
 
           {tab === 'plants' && (
             <CatalogTab title="🌱 Растения" items={shownPlants} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePlant} onDelete={deletePlant} onUploadImage={uploadPlantImage} onUploadImageYoung={uploadPlantImageYoung} onUploadImageGrown={uploadPlantImageGrown} onUploadImageHarvested={uploadPlantImageHarvested} hideMainImage emptyText={qActive ? NO_MATCH : undefined}
-              fields={[{ key: 'name', label: 'Название', ph: 'Джекобоб' }, { key: 'level', label: 'Уровень', ph: '1', type: 'number' }, { key: 'category', label: 'Категория', options: [{ value: 'garden', label: '🌱 Грядка' }, { value: 'orchard', label: '🍎 Сад' }] }, { key: 'description', label: 'Описание', ph: 'Грибы' }, { key: 'stitch_condition', label: 'Условие отшива', ph: 'Вышить на белой канве' }]}
+              fields={[{ key: 'name', label: 'Название', ph: 'Джекобоб' }, { key: 'emoji', label: 'Эмодзи', ph: '🌱' }, { key: 'level', label: 'Уровень', ph: '1', type: 'number' }, { key: 'category', label: 'Категория', options: [{ value: 'garden', label: '🌱 Грядка' }, { value: 'orchard', label: '🍎 Сад' }] }, { key: 'description', label: 'Описание', ph: 'Грибы' }, { key: 'stitch_condition', label: 'Условие отшива', ph: 'Вышить на белой канве' }]}
             />
           )}
 
@@ -2601,7 +2813,6 @@ export default function AdminPage() {
                   <option value="">Уровень: все</option>
                   <option value="error">Ошибка</option>
                   <option value="warn">Предупреждение</option>
-                  <option value="info">Инфо</option>
                 </select>
                 <input className="fm-input" placeholder="user_id" value={logFilter.user_id} onChange={(e) => setLogFilter({ ...logFilter, user_id: e.target.value })} style={{ width: 90 }} />
                 <input className="fm-input" placeholder="Поиск (путь / событие / текст)" value={logFilter.q} onChange={(e) => setLogFilter({ ...logFilter, q: e.target.value })} style={{ flex: 1, minWidth: 180 }} />
@@ -2612,7 +2823,7 @@ export default function AdminPage() {
               {logs.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Логов пока нет.</div>}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {logs.map((l) => {
+                {logs.filter((l) => l.level !== 'info').map((l) => {
                   const lvlColor = l.level === 'error' ? '#e55' : l.level === 'warn' ? '#e90' : 'var(--text-muted)';
                   const srcColor = l.source === 'vk' ? '#3a7a4f' : '#3a5a7a';
                   return (
@@ -2851,7 +3062,7 @@ function CatalogTab({
             return (
               <div key={item.id} className="fm-card fm-rise">
                 <div style={{ marginBottom: 4 }}>
-                  <strong style={{ wordBreak: 'break-word' }}>{item.emoji} {item.name}</strong>
+                  <strong style={{ wordBreak: 'break-word' }}>{item.emoji || '❔'} {item.name}</strong>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', wordBreak: 'break-all' }}>{item.code}</div>
                 </div>
                 {!hideMainImage && item.image_url && (

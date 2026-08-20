@@ -52,8 +52,10 @@ def _calc_order_reward(db: Session, product: Product, qty: int) -> int:
 
 
 def _order_lock_reason(o: OrderReq, user: User, db: Session) -> str | None:
-    from services.availability import product_lock_reason
+    from services.availability import location_lock_reason, product_lock_reason
 
+    if o.potion_recipe_id is not None:
+        return location_lock_reason("brewery", user, db)
     return product_lock_reason(o.product, user, db)
 
 

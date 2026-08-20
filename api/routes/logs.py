@@ -30,7 +30,8 @@ def report_vk_log(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    level = req.level if req.level in ("info", "warn", "error") else "info"
+    if req.level not in ("warn", "error"):
+        return {"status": "ok"}
     details_json = None
     if req.details is not None:
         try:
@@ -38,7 +39,7 @@ def report_vk_log(
         except Exception:
             details_json = str(req.details)
     db.add(Log(
-        source="vk", level=level, event=req.event, message=req.message,
+        source="vk", level=req.level, event=req.event, message=req.message,
         details=details_json, user_id=user.vk_id,
     ))
     db.commit()

@@ -153,7 +153,7 @@ def test_admin_recipe_rejects_plant_source_as_animal_product(admin_client):
 
 # ── Библиотека ──
 
-def test_library_lists_animal_product_recipe(admin_client):
+def test_library_hides_animal_product_recipe(admin_client):
     wool_id, fabric_id = _make_barnyard_pair(admin_client)
     admin_client.post("/api/admin/catalog/recipes", json={
         "source_product_id": wool_id, "product_id": fabric_id, "level": 2,
@@ -161,13 +161,10 @@ def test_library_lists_animal_product_recipe(admin_client):
 
     with make_user_client(PLAYER_VK, "player") as c:
         rows = c.get("/api/library").json()
-    r = next(x for x in rows if x["source_product_id"] == wool_id)
-    assert r["source_kind"] == "animal_product"
-    assert r["source_product_name"] == "Радужная шерсть"
-    assert r["status"] == "locked"
+    assert all(x["source_product_id"] != wool_id for x in rows)
 
 
-def test_library_study_animal_product_recipe(admin_client, monkeypatch):
+def test_library_study_rejects_animal_product_recipe(admin_client):
     wool_id, fabric_id = _make_barnyard_pair(admin_client)
     rid = admin_client.post("/api/admin/catalog/recipes", json={
         "source_product_id": wool_id, "product_id": fabric_id, "level": 2,
@@ -175,15 +172,8 @@ def test_library_study_animal_product_recipe(admin_client, monkeypatch):
 
     with make_user_client(PLAYER_VK, "player") as c:
         res = c.post(f"/api/library/{rid}/study")
-        assert res.status_code == 201
-        assert res.json()["status"] == "studying"
-
-        rep = _report(c, monkeypatch, 1000, "recipe_study", rid)
-        assert rep.status_code == 201
-
-        rows = c.get("/api/library").json()
-    r = next(x for x in rows if x["id"] == rid)
-    assert r["status"] == "studied"
+        assert res.status_code == 403
+        assert "скотного двора" in res.json()["detail"]
 
 
 # ── Крафт в шатре скотного двора ──

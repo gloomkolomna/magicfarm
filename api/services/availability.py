@@ -15,6 +15,49 @@ def has_installed_kassa(user, db: Session) -> bool:
     )
 
 
+def user_dlc_codes(user, db: Session) -> set[str]:
+    from models import UserDlcUnlock
+
+    rows = (
+        db.query(UserDlcUnlock.location_code)
+        .filter(UserDlcUnlock.user_id == user.vk_id)
+        .all()
+    )
+    return {r[0] for r in rows}
+
+
+def location_lock_reason(code: str, user, db: Session) -> str | None:
+    """Причина закрытости локации для игрока: глобальный замок минус ДЛС игрока.
+
+    None — локация доступна. Админам всё доступно всегда.
+    """
+    from routes.settings import get_locked_locations
+
+    if user is not None and user.role == "admin":
+        return None
+    if code not in get_locked_locations(db):
+        return None
+    if code in user_dlc_codes(user, db):
+        return None
+    from models import LOCATION_NAMES
+
+    return f"{LOCATION_NAMES.get(code, code)} пока закрыта"
+
+
+def locked_locations_for(user, db: Session) -> list[str]:
+    """Список кодов локаций, закрытых лично для этого игрока (админу — пусто)."""
+    from models import LOCATION_CODES
+    from routes.settings import get_locked_locations
+
+    if user is not None and user.role == "admin":
+        return []
+    locked = get_locked_locations(db)
+    if not locked:
+        return []
+    owned = user_dlc_codes(user, db)
+    return sorted(c for c in LOCATION_CODES if c in locked and c not in owned)
+
+
 def product_lock_reason(product, user, db: Session) -> str | None:
     """Причина недоступности товара для игрока: уровень растения или закрытые локации.
 

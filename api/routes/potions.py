@@ -6,13 +6,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, require_role
+from deps import get_current_user, require_location, require_role
 from models import BreweryZone, Cauldron, CauldronSlot, Inventory, Plant, PotionRecipe, Product, User, UserPotion
 from services.achievements import check_and_award
 from services.potion_bonuses import CONDITIONAL_BONUSES, INSTANT_BONUSES
 from services.uploads import remove_upload, save_upload
 
-router = APIRouter(prefix="/api/potions", tags=["potions"])
+router = APIRouter(prefix="/api/potions", tags=["potions"], dependencies=[Depends(require_location("brewery"))])
 
 POTION_BONUS_LABELS = {
     "double_garden_harvest": "×2 урожай с грядки",

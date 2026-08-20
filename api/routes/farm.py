@@ -510,20 +510,23 @@ def list_inventory(
         result = [_inv_to_out(i) for i in q.all()]
 
     if item_kind in (None, "potion"):
-        potion_rows = (
-            db.query(PotionRecipe, func.count(UserPotion.id))
-            .join(UserPotion, UserPotion.potion_recipe_id == PotionRecipe.id)
-            .filter(UserPotion.user_id == user.vk_id, UserPotion.used.is_(False))
-            .group_by(PotionRecipe.id)
-            .all()
-        )
-        for recipe, qty in potion_rows:
-            result.append(InventoryOut(
-                item_kind="potion", item_id=recipe.id, item_code=recipe.code,
-                item_name=recipe.name, item_emoji=None,
-                item_image=recipe.image_url, qty=qty,
-                ingredient_type=None, ingredient_icon=None,
-            ))
+        from services.availability import location_lock_reason
+
+        if location_lock_reason("brewery", user, db) is None:
+            potion_rows = (
+                db.query(PotionRecipe, func.count(UserPotion.id))
+                .join(UserPotion, UserPotion.potion_recipe_id == PotionRecipe.id)
+                .filter(UserPotion.user_id == user.vk_id, UserPotion.used.is_(False))
+                .group_by(PotionRecipe.id)
+                .all()
+            )
+            for recipe, qty in potion_rows:
+                result.append(InventoryOut(
+                    item_kind="potion", item_id=recipe.id, item_code=recipe.code,
+                    item_name=recipe.name, item_emoji=None,
+                    item_image=recipe.image_url, qty=qty,
+                    ingredient_type=None, ingredient_icon=None,
+                ))
 
     return result
 

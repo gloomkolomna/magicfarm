@@ -1,11 +1,10 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useVkBridge } from './context/VkBridgeContext';
 import { useSession } from './context/SessionContext';
 import Background from './components/Background';
 import MiniAppShell from './components/MiniAppShell';
 import { ConfirmHost } from './components/Confirm';
-import { isAdminAllowed } from './auth/adminGate';
 import { installGlobalErrorReporters } from './api/vkLogger';
 
 function reloadOnStaleChunk(err: unknown): never {
@@ -46,6 +45,32 @@ const Onboarding = lazyPage(() => import('./pages/Onboarding'));
 
 const zoomed = { zoom: 'var(--app-scale)', width: 'calc(100% / var(--app-scale))', margin: '0 auto' } as const;
 
+const LOCATION_TITLES: Record<string, string> = {
+  infirmary: '🌲 Лечебница',
+  brewery: '🧪 Зельеварение',
+};
+
+function LocationGate({ location, children }: { location: string; children: ReactNode }) {
+  const { user } = useSession();
+  const locked = user?.role !== 'admin' && (user?.locked_locations ?? []).includes(location);
+  if (!locked) return <>{children}</>;
+  return (
+    <div style={zoomed}>
+      <div style={{ maxWidth: 'calc(var(--shell-max-width) * 0.8)', margin: '0 auto', padding: 'var(--shell-pad)', textAlign: 'center' }}>
+        <div className="fm-card fm-rise">
+          <div style={{ fontSize: 46, marginBottom: 8 }}>🔒</div>
+          <h1 style={{ fontSize: 22, lineHeight: 1.2 }}>
+            {LOCATION_TITLES[location] ?? 'Локация'} пока закрыта
+          </h1>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            Это дополнение ещё не открыто.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Skeleton() {
   return (
     <div style={zoomed}>
@@ -78,7 +103,7 @@ function StubPage() {
 
 function App() {
   const { vkUserId, loading } = useVkBridge();
-  const { user, loading: sessionLoading } = useSession();
+  const { user, loading: sessionLoading, error: sessionError } = useSession();
 
   useEffect(() => { installGlobalErrorReporters(); }, []);
 
@@ -87,9 +112,32 @@ function App() {
   }, []);
 
   if (loading) return <><Background /><Skeleton /></>;
-  if (!isAdminAllowed(vkUserId)) return <><Background /><StubPage /></>;
+  if (vkUserId == null) return <><Background /><StubPage /></>;
   if (sessionLoading) return <><Background /><Skeleton /></>;
-  if (!user) return <><Background /><StubPage /></>;
+  if (!user) {
+    const blocked = (sessionError ?? '').toLowerCase().includes('заблокирован');
+    return (
+      <>
+        <Background />
+        <div style={zoomed}>
+          <div style={{ maxWidth: 'calc(var(--shell-max-width) * 0.8)', margin: '0 auto', padding: 'var(--shell-pad)', textAlign: 'center' }}>
+            <div className="fm-card fm-rise">
+              <div style={{ fontSize: 46, marginBottom: 8 }}>{blocked ? '🚫' : '✨'}</div>
+              <h1 style={{ fontSize: 22, lineHeight: 1.2 }}>
+                {blocked ? 'Аккаунт заблокирован' : 'История одной магической фермы'}
+              </h1>
+              <p style={{ color: 'var(--text-secondary)' }}>
+                {blocked
+                  ? 'Если вы считаете это ошибкой — свяжитесь с администратором игры.'
+                  : 'Скоро здесь расцветёт ваша волшебная ферма.'}
+              </p>
+              {!blocked && <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Мы готовим волшебство ✨</p>}
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
   if (user && !user.onboarding_done) {
     return (
       <>
@@ -111,16 +159,17 @@ function App() {
           <Route path="/field/:id" element={<FieldPage />} />
           <Route path="/meadow/:id" element={<MeadowPage />} />
           <Route path="/shop/:id" element={<ShopPage />} />
-          <Route path="/infirmary" element={<MiniAppShell><InfirmaryPage /></MiniAppShell>} />
-          <Route path="/infirmary/:id" element={<InfirmaryScenePage />} />
-          <Route path="/remedy-lab/:id" element={<RemedyLabPage />} />
-          <Route path="/brewery" element={<MiniAppShell><BreweryHubPage /></MiniAppShell>} />
-          <Route path="/brewery/:id" element={<BreweryScenePage />} />
+          <Route path="/infirmary" element={<LocationGate location="infirmary"><MiniAppShell><InfirmaryPage /></MiniAppShell></LocationGate>} />
+          <Route path="/infirmary/:id" element={<LocationGate location="infirmary"><InfirmaryScenePage /></LocationGate>} />
+          <Route path="/remedy-lab/:id" element={<LocationGate location="infirmary"><RemedyLabPage /></LocationGate>} />
+          <Route path="/meadow/:id" element={<LocationGate location="infirmary"><MeadowPage /></LocationGate>} />
+          <Route path="/brewery" element={<LocationGate location="brewery"><MiniAppShell><BreweryHubPage /></MiniAppShell></LocationGate>} />
+          <Route path="/brewery/:id" element={<LocationGate location="brewery"><BreweryScenePage /></LocationGate>} />
           <Route path="/potions" element={<Navigate to="/brewery" replace />} />
-          <Route path="/collection" element={<MiniAppShell><CollectionPage /></MiniAppShell>} />
+          <Route path="/collection" element={<LocationGate location="infirmary"><MiniAppShell><CollectionPage /></MiniAppShell></LocationGate>} />
           <Route path="/inventory" element={<MiniAppShell><InventoryPage /></MiniAppShell>} />
           <Route path="/library" element={<MiniAppShell><LibraryPage /></MiniAppShell>} />
-          <Route path="/bonuses" element={<MiniAppShell><BonusesPage /></MiniAppShell>} />
+          <Route path="/bonuses" element={<LocationGate location="brewery"><MiniAppShell><BonusesPage /></MiniAppShell></LocationGate>} />
           <Route path="/achievements" element={<MiniAppShell><AchievementsPage /></MiniAppShell>} />
           <Route path="/orders" element={<MiniAppShell><OrdersPage /></MiniAppShell>} />
           <Route path="/orders/catalog" element={<MiniAppShell><OrderCatalogPage /></MiniAppShell>} />

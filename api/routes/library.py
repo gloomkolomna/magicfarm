@@ -62,7 +62,12 @@ def list_recipes(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    rows = db.query(Recipe).order_by(Recipe.level.asc(), Recipe.id.asc()).all()
+    rows = (
+        db.query(Recipe)
+        .filter(Recipe.source_product_id.is_(None))
+        .order_by(Recipe.level.asc(), Recipe.id.asc())
+        .all()
+    )
     return [_recipe_to_out(r, user.vk_id, db) for r in rows]
 
 
@@ -75,6 +80,12 @@ def start_study(
     r = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if r is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
+
+    if r.source_product_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Рецепты скотного двора не изучаются в библиотеке",
+        )
 
     from routes.settings import get_user_study_norm
 

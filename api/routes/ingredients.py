@@ -63,6 +63,13 @@ def get_apothecary(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from services.availability import location_lock_reason
+
+    if (
+        location_lock_reason("infirmary", user, db) is not None
+        and location_lock_reason("brewery", user, db) is not None
+    ):
+        return []
     rows = db.query(UserIngredient).join(
         Ingredient, UserIngredient.ingredient_id == Ingredient.id
     ).filter(
