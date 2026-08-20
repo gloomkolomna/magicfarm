@@ -161,6 +161,9 @@ def _process_context(report: "StitchReport", db: Session) -> None:
                 complete_brew(report.user_id, dev.id, db)
             else:
                 db.commit()
+    elif report.context_type == "forest_paid" and report.context_id is not None:
+        from routes.pets import complete_forest_paid
+        complete_forest_paid(report.user_id, report.context_id, report.amount, db)
 
 
 class StitchReportOut(BaseModel):
@@ -319,11 +322,28 @@ def create_report(
                 detail=f"Недостаточно крестиков. Норма забора: {w.required}, вы указали {amount}",
             )
 
+    if context_type == "forest_paid" and context_id is not None:
+        from models import PetForestTask
+        task = db.query(PetForestTask).filter(
+            PetForestTask.id == context_id, PetForestTask.user_id == user.vk_id
+        ).first()
+        if task is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Задание похода не найдено")
+        if task.status != "pending":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Задание уже выполнено")
+        remaining = (task.required or 0) - (task.accumulated or 0)
+        if amount < remaining:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Недостаточно крестиков. Норма похода: {remaining}, вы указали {amount}",
+            )
+
     if context_type is not None and context_type not in (
         "plant_grow", "recipe_study", "production",
         "animal_build", "barnyard_withdraw", "tent_build", "pet_settle",
         "house_material", "house_build",
         "infirmary_penalty", "remedy_device_install", "remedy_brew",
+        "forest_paid",
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

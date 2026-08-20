@@ -1184,3 +1184,20 @@ class PetActionLog(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "pet_id", "action", "date", name="uq_practionlog_user_pet_action_date"),
     )
+
+
+class PetForestTask(Base):
+    __tablename__ = "pet_forest_tasks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    pet_id = Column(Integer, ForeignKey("pets.id", ondelete="CASCADE"), nullable=False)
+    date = Column(String, nullable=False)
+    required = Column(Integer, nullable=False, default=200, server_default="200")
+    accumulated = Column(Integer, nullable=False, default=0, server_default="0")
+    status = Column(String, nullable=False, default="pending", server_default="pending")
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "pet_id", "date", name="uq_petforesttask_user_pet_date"),
+    )

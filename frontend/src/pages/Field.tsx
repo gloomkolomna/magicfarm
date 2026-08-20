@@ -524,7 +524,11 @@ export default function FieldPage() {
     setBusy(true); setMsg(null);
     try {
       const res = await api.petForest(otterInfo.pet_id, paid);
-      setMsg(`🦦 Выдра принесла из леса: ${res.ingredient_name} (на складе ×${res.apothecary_qty})` + (res.sleeping ? ' Теперь она спит 💤' : ''));
+      if (res.task_id) {
+        setMsg(`🦦 Выдра ждёт: вышейте ${res.required ?? 200} крестиков и отправьте фото-отчёт`);
+      } else {
+        setMsg(`🦦 Выдра принесла из леса: ${res.ingredient_name} (на складе ×${res.apothecary_qty})`);
+      }
       const pets = await api.userPets();
       const own = pets.find((p) => p.pet_id === otterInfo.pet_id);
       setOtterInfo(own && (own.code === 'vydra' || own.code === 'otter') ? own : null);
@@ -1912,13 +1916,28 @@ export default function FieldPage() {
                       💤 Выдра спит (оба похода сегодня использованы).
                       {otterInfo.forest.wake_at && <> Проснётся в {new Date(otterInfo.forest.wake_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} МСК.</>}
                     </div>
+                  ) : otterInfo.forest.paid_pending && otterInfo.forest.paid_task_id ? (
+                    <StitchReportForm
+                      contextType="forest_paid"
+                      contextId={otterInfo.forest.paid_task_id}
+                      required={Math.max(0, otterInfo.forest.paid_required - otterInfo.forest.paid_accumulated)}
+                      busy={busy}
+                      buttonText="Отправить фото-отчёт"
+                      onDone={async () => {
+                        setMsg('🦦 Выдра принесла ингредиент из леса!');
+                        const pets = await api.userPets();
+                        const own = pets.find((p) => p.pet_id === otterInfo.pet_id);
+                        setOtterInfo(own && (own.code === 'vydra' || own.code === 'otter') ? own : null);
+                        await refresh();
+                      }}
+                    />
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <button className="fm-btn fm-btn-sm" disabled={busy || otterInfo.forest.free_used_today} onClick={() => doOtterForest(false)}>
                         🦦 В лес (бесплатно, 1×/сутки){otterInfo.forest.free_used_today ? ' — уже ходила' : ''}
                       </button>
                       <button className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy || otterInfo.forest.paid_used_today || !otterInfo.forest.free_used_today} onClick={() => doOtterForest(true)}>
-                        🦦 Повторно за 200 ❆ (1×/сутки)
+                        🦦 Повторно за 200 ❆ (фото-отчёт)
                       </button>
                     </div>
                   )}

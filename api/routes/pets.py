@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user
-from models import Field, FieldPet, FOREST_PET_CODES, Pet, PetActionLog, User, UserPet
+from models import Field, FieldPet, FOREST_PET_CODES, Pet, PetActionLog, PetForestTask, User, UserPet
 from routes.admin_catalog import PetOut, _pet_out
 from services.card_draw import calculate_norm, cards_to_json, draw_cards
 from services.msk_time import next_midnight_msk, now_msk
@@ -136,6 +136,10 @@ class ForestActionsOut(BaseModel):
     paid_used_today: bool = False
     sleeping: bool = False
     wake_at: str | None = None
+    paid_pending: bool = False
+    paid_required: int = 200
+    paid_accumulated: int = 0
+    paid_task_id: int | None = None
 
 
 class UserPetOut(BaseModel):
@@ -162,11 +166,21 @@ def _forest_actions_out(user_id: int, pet: Pet, db: Session) -> ForestActionsOut
     free_used = FOREST_FREE_ACTION in logs
     paid_used = FOREST_PAID_ACTION in logs
     sleeping = free_used and paid_used
+    task = db.query(PetForestTask).filter(
+        PetForestTask.user_id == user_id,
+        PetForestTask.pet_id == pet.id,
+        PetForestTask.date == today,
+        PetForestTask.status == "pending",
+    ).first()
     return ForestActionsOut(
         free_used_today=free_used,
         paid_used_today=paid_used,
         sleeping=sleeping,
         wake_at=(next_midnight_msk().isoformat() if sleeping else None),
+        paid_pending=task is not None,
+        paid_required=task.required if task else FOREST_PAID_COST,
+        paid_accumulated=task.accumulated if task else 0,
+        paid_task_id=task.id if task else None,
     )
 
 
@@ -308,12 +322,15 @@ class ForestRequest(BaseModel):
 
 class ForestResult(BaseModel):
     pet_id: int
-    ingredient_id: int
-    ingredient_name: str
-    apothecary_qty: int
+    ingredient_id: int | None = None
+    ingredient_name: str | None = None
+    apothecary_qty: int | None = None
     paid: bool
     sleeping: bool
-    wake_at: str | None
+    wake_at: str | None = None
+    task_id: int | None = None
+    required: int | None = None
+    paid_pending: bool = False
 
 
 def _meadow_ingredient_pool(db: Session) -> list[int]:
@@ -330,6 +347,28 @@ def _meadow_ingredient_pool(db: Session) -> list[int]:
     return [r[0] for r in rows]
 
 
+def _pick_forest_ingredient(db: Session) -> int | None:
+    import random
+
+    pool = _meadow_ingredient_pool(db)
+    if not pool:
+        return None
+    return random.choice(pool)
+
+
+def _grant_forest_ingredient(user_id: int, ingredient_id: int, db: Session) -> int:
+    from models import UserIngredient
+
+    row = db.query(UserIngredient).filter(
+        UserIngredient.user_id == user_id, UserIngredient.ingredient_id == ingredient_id
+    ).first()
+    if row is None:
+        row = UserIngredient(user_id=user_id, ingredient_id=ingredient_id, qty=0)
+        db.add(row)
+    row.qty = (row.qty or 0) + 1
+    return row.qty or 0
+
+
 @router.post("/{pet_id}/forest", response_model=ForestResult)
 def send_pet_to_forest(
     pet_id: int,
@@ -337,9 +376,7 @@ def send_pet_to_forest(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    import random
-
-    from models import Ingredient, UserIngredient
+    from models import Ingredient
 
     up = db.query(UserPet).filter(
         UserPet.user_id == user.vk_id, UserPet.pet_id == pet_id
@@ -359,12 +396,6 @@ def send_pet_to_forest(
     }
     free_used = FOREST_FREE_ACTION in logs
     paid_used = FOREST_PAID_ACTION in logs
-    if free_used and paid_used:
-        wake_at = next_midnight_msk()
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Питомец спит. Проснётся в {wake_at.strftime('%H:%M')} МСК",
-        )
 
     if not req.paid:
         if free_used:
@@ -372,51 +403,79 @@ def send_pet_to_forest(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Бесплатный поход в лес сегодня уже использован. Можно послать повторно за 200 крестиков.",
             )
-        action = FOREST_FREE_ACTION
-    else:
-        if paid_used:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Платный поход в лес сегодня уже использован.",
-            )
-        if not free_used:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Сначала отправьте питомца в лес бесплатно",
-            )
-        if (user.crosses_balance or 0) < FOREST_PAID_COST:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Недостаточно крестиков (нужно {FOREST_PAID_COST})",
-            )
-        user.crosses_balance = (user.crosses_balance or 0) - FOREST_PAID_COST
-        action = FOREST_PAID_ACTION
+        picked_id = _pick_forest_ingredient(db)
+        if picked_id is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="В Лесной поляне нет ингредиентов")
+        qty = _grant_forest_ingredient(user.vk_id, picked_id, db)
+        db.add(PetActionLog(user_id=user.vk_id, pet_id=pet_id, action=FOREST_FREE_ACTION, date=today))
+        db.commit()
+        ingredient = db.query(Ingredient).filter(Ingredient.id == picked_id).first()
+        return ForestResult(
+            pet_id=pet_id,
+            ingredient_id=picked_id,
+            ingredient_name=ingredient.name if ingredient else "?",
+            apothecary_qty=qty,
+            paid=False,
+            sleeping=False,
+        )
 
-    pool = _meadow_ingredient_pool(db)
-    if not pool:
+    if paid_used:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Платный поход в лес сегодня уже использован.",
+        )
+    if not free_used:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Сначала отправьте питомца в лес бесплатно",
+        )
+    if _pick_forest_ingredient(db) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="В Лесной поляне нет ингредиентов")
 
-    picked_id = random.choice(pool)
-    row = db.query(UserIngredient).filter(
-        UserIngredient.user_id == user.vk_id, UserIngredient.ingredient_id == picked_id
+    task = db.query(PetForestTask).filter(
+        PetForestTask.user_id == user.vk_id,
+        PetForestTask.pet_id == pet_id,
+        PetForestTask.date == today,
     ).first()
-    if row is None:
-        row = UserIngredient(user_id=user.vk_id, ingredient_id=picked_id, qty=0)
-        db.add(row)
-    row.qty = (row.qty or 0) + 1
-
-    db.add(PetActionLog(user_id=user.vk_id, pet_id=pet_id, action=action, date=today))
+    if task is None:
+        task = PetForestTask(
+            user_id=user.vk_id, pet_id=pet_id, date=today,
+            required=FOREST_PAID_COST, accumulated=0, status="pending",
+        )
+        db.add(task)
     db.commit()
-
-    ingredient = db.query(Ingredient).filter(Ingredient.id == picked_id).first()
-    logs.add(action)
-    sleeping = FOREST_FREE_ACTION in logs and FOREST_PAID_ACTION in logs
     return ForestResult(
         pet_id=pet_id,
-        ingredient_id=picked_id,
-        ingredient_name=ingredient.name if ingredient else "?",
-        apothecary_qty=row.qty or 0,
-        paid=req.paid,
-        sleeping=sleeping,
-        wake_at=(next_midnight_msk().isoformat() if sleeping else None),
+        paid=True,
+        sleeping=False,
+        task_id=task.id,
+        required=task.required or FOREST_PAID_COST,
+        paid_pending=True,
     )
+
+
+def complete_forest_paid(user_id: int, task_id: int, amount: int, db: Session) -> None:
+    """Выполняет платный поход выдры после фото-отчёта на норму крестиков."""
+    task = db.query(PetForestTask).filter(
+        PetForestTask.id == task_id, PetForestTask.user_id == user_id
+    ).first()
+    if task is None or task.status != "pending":
+        return
+    task.accumulated = (task.accumulated or 0) + amount
+    if task.accumulated < (task.required or 0):
+        db.commit()
+        return
+    task.status = "done"
+    today = now_msk().date().isoformat()
+    paid_used = db.query(PetActionLog).filter(
+        PetActionLog.user_id == user_id,
+        PetActionLog.pet_id == task.pet_id,
+        PetActionLog.action == FOREST_PAID_ACTION,
+        PetActionLog.date == today,
+    ).first()
+    if paid_used is None:
+        picked_id = _pick_forest_ingredient(db)
+        if picked_id is not None:
+            _grant_forest_ingredient(user_id, picked_id, db)
+        db.add(PetActionLog(user_id=user_id, pet_id=task.pet_id, action=FOREST_PAID_ACTION, date=today))
+    db.commit()

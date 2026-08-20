@@ -1157,6 +1157,10 @@ export interface ForestActions {
   paid_used_today: boolean;
   sleeping: boolean;
   wake_at: string | null;
+  paid_pending: boolean;
+  paid_required: number;
+  paid_accumulated: number;
+  paid_task_id: number | null;
 }
 
 export interface UserPetInfo {
@@ -1173,12 +1177,15 @@ export interface UserPetInfo {
 
 export interface ForestResult {
   pet_id: number;
-  ingredient_id: number;
-  ingredient_name: string;
-  apothecary_qty: number;
+  ingredient_id: number | null;
+  ingredient_name: string | null;
+  apothecary_qty: number | null;
   paid: boolean;
   sleeping: boolean;
   wake_at: string | null;
+  task_id?: number | null;
+  required?: number | null;
+  paid_pending?: boolean;
 }
 
 export const api = {

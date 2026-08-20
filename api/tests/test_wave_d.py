@@ -346,10 +346,7 @@ def test_heal_otter_patient_grants_sixth_pet(admin_client):
         assert otter["forest"]["sleeping"] is False
 
 
-def test_otter_forest_actions_daily_limits(admin_client):
-    ing_id = _seed_meadow_with_ingredient("Роса")
-    pet_id, cell_id = _seed_otter_pet()
-
+def _seed_otter_owner(pet_id, cell_id, balance=1000):
     from models import User, UserPet
     s = TestingSessionLocal()
     try:
@@ -358,10 +355,16 @@ def test_otter_forest_actions_daily_limits(admin_client):
             u = User(vk_id=123, role="player")
             s.add(u)
         s.add(UserPet(user_id=123, pet_id=pet_id, cell_id=cell_id))
-        u.crosses_balance = 1000
+        u.crosses_balance = balance
         s.commit()
     finally:
         s.close()
+
+
+def test_otter_forest_actions_daily_limits(admin_client):
+    ing_id = _seed_meadow_with_ingredient("Роса")
+    pet_id, cell_id = _seed_otter_pet()
+    _seed_otter_owner(pet_id, cell_id)
 
     with make_user_client(123, "player") as c:
         paid_first = c.post(f"/api/pets/{pet_id}/forest", json={"paid": True})
@@ -378,39 +381,90 @@ def test_otter_forest_actions_daily_limits(admin_client):
 
         r2 = c.post(f"/api/pets/{pet_id}/forest", json={"paid": True})
         assert r2.status_code == 200
-        assert r2.json()["apothecary_qty"] == 2
-        assert r2.json()["sleeping"] is True
-        assert r2.json()["wake_at"] is not None
+        assert r2.json()["task_id"] is not None
+        assert r2.json()["required"] == 200
+        assert r2.json()["paid_pending"] is True
+        assert r2.json()["ingredient_id"] is None
+        assert r2.json()["sleeping"] is False
+
+        _report(c, 200, "forest_paid", r2.json()["task_id"])
 
         sleeping = c.post(f"/api/pets/{pet_id}/forest", json={"paid": False})
         assert sleeping.status_code == 429
 
         pets = c.get("/api/pets").json()
         otter = next(p for p in pets if p["pet_id"] == pet_id)
+        assert otter["forest"]["paid_used_today"] is True
+        assert otter["forest"]["paid_pending"] is False
         assert otter["forest"]["sleeping"] is True
+        assert otter["forest"]["wake_at"] is not None
 
 
-def test_otter_paid_requires_crosses(admin_client):
+def test_otter_paid_creates_task_without_deducting_crosses(admin_client):
     _seed_meadow_with_ingredient("Роса")
     pet_id, cell_id = _seed_otter_pet()
-
-    from models import User, UserPet
-    s = TestingSessionLocal()
-    try:
-        u = s.query(User).filter(User.vk_id == 123).first()
-        if u is None:
-            u = User(vk_id=123, role="player")
-            s.add(u)
-        s.add(UserPet(user_id=123, pet_id=pet_id, cell_id=cell_id))
-        u.crosses_balance = 10
-        s.commit()
-    finally:
-        s.close()
+    _seed_otter_owner(pet_id, cell_id, balance=10)
 
     with make_user_client(123, "player") as c:
         c.post(f"/api/pets/{pet_id}/forest", json={"paid": False})
         r = c.post(f"/api/pets/{pet_id}/forest", json={"paid": True})
-        assert r.status_code == 400
+        assert r.status_code == 200
+        assert r.json()["task_id"] is not None
+        assert r.json()["paid_pending"] is True
+
+        from models import User
+        s = TestingSessionLocal()
+        try:
+            u = s.query(User).filter(User.vk_id == 123).first()
+            assert u.crosses_balance == 10
+        finally:
+            s.close()
+
+
+def test_otter_paid_stitch_insufficient(admin_client):
+    _seed_meadow_with_ingredient("Роса")
+    pet_id, cell_id = _seed_otter_pet()
+    _seed_otter_owner(pet_id, cell_id)
+
+    with make_user_client(123, "player") as c:
+        c.post(f"/api/pets/{pet_id}/forest", json={"paid": False})
+        r = c.post(f"/api/pets/{pet_id}/forest", json={"paid": True})
+        task_id = r.json()["task_id"]
+        rr = c.post("/api/stitches/reports", data={
+            "amount": "100", "context_type": "forest_paid", "context_id": str(task_id),
+        }, files=[("photo_after", ("a.png", _img_bytes(), "image/png"))])
+        assert rr.status_code == 400
+        assert "200" in rr.json()["detail"]
+
+
+def test_otter_paid_stitch_after_done_conflict(admin_client):
+    _seed_meadow_with_ingredient("Роса")
+    pet_id, cell_id = _seed_otter_pet()
+    _seed_otter_owner(pet_id, cell_id)
+
+    with make_user_client(123, "player") as c:
+        c.post(f"/api/pets/{pet_id}/forest", json={"paid": False})
+        r = c.post(f"/api/pets/{pet_id}/forest", json={"paid": True})
+        task_id = r.json()["task_id"]
+        _report(c, 200, "forest_paid", task_id)
+
+        rr = c.post("/api/stitches/reports", data={
+            "amount": "200", "context_type": "forest_paid", "context_id": str(task_id),
+        }, files=[("photo_after", ("a.png", _img_bytes(), "image/png"))])
+        assert rr.status_code == 409
+
+
+def test_otter_paid_duplicate_returns_same_task(admin_client):
+    _seed_meadow_with_ingredient("Роса")
+    pet_id, cell_id = _seed_otter_pet()
+    _seed_otter_owner(pet_id, cell_id)
+
+    with make_user_client(123, "player") as c:
+        c.post(f"/api/pets/{pet_id}/forest", json={"paid": False})
+        r1 = c.post(f"/api/pets/{pet_id}/forest", json={"paid": True})
+        r2 = c.post(f"/api/pets/{pet_id}/forest", json={"paid": True})
+        assert r2.status_code == 200
+        assert r2.json()["task_id"] == r1.json()["task_id"]
 
 
 def test_forest_denied_for_regular_pet(admin_client):
