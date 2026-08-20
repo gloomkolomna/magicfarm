@@ -443,3 +443,33 @@ def test_admin_field_detail_and_cleanup_remedy_lab(admin_client):
     r = admin_client.post(f"/api/admin/fields/{fid}/cleanup")
     assert r.status_code == 200, r.text
     assert len(r.json()["device_cells"]) == 1
+
+
+def test_remedy_lab_book_zone(admin_client):
+    lab = admin_client.post("/api/admin/fields", json={
+        "name": "Лаборатория-книга", "cols": 4, "rows": 3, "field_kind": "remedy_lab",
+    }).json()
+    fid = lab["id"]
+    r = admin_client.post(f"/api/admin/fields/{fid}/infirmary-zones", json={
+        "zone_kind": "book", "col1": 0, "row1": 0, "col2": 1, "row2": 0,
+    })
+    assert r.status_code == 201, r.text
+    zid = r.json()["id"]
+
+    detail = admin_client.get(f"/api/admin/fields/{fid}")
+    assert any(z["id"] == zid for z in detail.json()["infirmary_zones"])
+
+    with make_user_client(123, "player") as c:
+        data = c.get(f"/api/remedy-lab/{fid}").json()
+    assert any(z["id"] == zid and z["zone_kind"] == "book" for z in data["infirmary_zones"])
+
+
+def test_book_zone_rejected_on_other_field_kind(admin_client):
+    f = admin_client.post("/api/admin/fields", json={
+        "name": "Поле-не-лаборатория", "cols": 3, "rows": 2, "field_kind": "meadow",
+    }).json()
+    rr = admin_client.post(f"/api/admin/fields/{f['id']}/infirmary-zones", json={
+        "zone_kind": "book", "col1": 0, "row1": 0, "col2": 0, "row2": 0,
+    })
+    assert rr.status_code == 400
+    assert "книги" in rr.json()["detail"]

@@ -767,7 +767,7 @@ def _detail(f: Field, db: Session) -> FieldDetailOut:
         gather_cells=[_gather_cell_out(gc) for gc in f.gather_cells] if f.field_kind == "meadow" else [],
         trade_cells=[_trade_cell_out(tc) for tc in f.trade_cells] if f.field_kind == "shop" else [],
         part_cells=[_part_cell_out(pc) for pc in f.part_cells] if f.field_kind == "infirmary" else [],
-        infirmary_zones=[_infirmary_zone_out(z) for z in f.infirmary_zones] if f.field_kind == "infirmary" else [],
+        infirmary_zones=[_infirmary_zone_out(z) for z in f.infirmary_zones] if f.field_kind in ("infirmary", "remedy_lab") else [],
         device_cells=[_device_cell_out(dc) for dc in db.query(RemedyDeviceCell).filter(RemedyDeviceCell.field_id == f.id).all()] if f.field_kind == "remedy_lab" else [],
         potion_recipes=[_recipe_out(fpr.recipe) for fpr in f.potion_recipes],
         potion_recipe_ids=[fpr.recipe_id for fpr in f.potion_recipes],
@@ -1478,8 +1478,8 @@ def create_infirmary_zone(
 ):
     f = _get_field_or_404(field_id, db)
     _ensure_grid(f, db)
-    if f.field_kind != "infirmary":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Зоны лечебницы размещаются только на локациях типа «Лесная лечебница»")
+    if f.field_kind not in ("infirmary", "remedy_lab"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Зоны книги размещаются только на локациях «Лесная лечебница» и «Лаборатория снадобий»")
     if req.zone_kind not in INFIRMARY_ZONE_KINDS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

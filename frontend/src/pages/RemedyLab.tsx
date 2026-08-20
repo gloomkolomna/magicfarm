@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, type BrewDeviceResult, type DeviceCell, type InstallDeviceResult, type RemedyCard, type RemedyLab as RemedyLabData } from '../api/endpoints';
+import { api, type BrewDeviceResult, type DeviceCell, type InfirmaryZone, type InstallDeviceResult, type RemedyCard, type RemedyLab as RemedyLabData } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import LocationMap from '../components/LocationMap';
 import StitchReportForm from '../components/StitchReportForm';
@@ -41,7 +41,9 @@ export default function RemedyLabPage() {
   const [installResult, setInstallResult] = useState<InstallDeviceResult | null>(null);
   const [showCards, setShowCards] = useState(false);
   const [showStock, setShowStock] = useState(false);
+  const [showBook, setShowBook] = useState(false);
   const [brewResult, setBrewResult] = useState<BrewDeviceResult | null>(null);
+  const [bookImgUrl, setBookImgUrl] = useState<string | null>(null);
 
   const fieldId = Number(id);
 
@@ -55,6 +57,11 @@ export default function RemedyLabPage() {
   }, [fieldId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    api.gameMediaByCode('infirmary_book')
+      .then((gm) => { if (gm.url) setBookImgUrl(mediaUrl(gm.url)); })
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     if (!msg) return;
     const t = setTimeout(() => setMsg(null), 4000);
@@ -103,6 +110,7 @@ export default function RemedyLabPage() {
   const cells = lab?.device_cells ?? [];
   const stock = lab?.remedies_stock ?? [];
   const cards = lab?.remedy_cards ?? [];
+  const bookZone = (lab?.infirmary_zones ?? []).find((z) => z.zone_kind === 'book') ?? null;
 
   return (
     <>
@@ -162,6 +170,20 @@ export default function RemedyLabPage() {
               );
             })}
           </div>
+        )}
+        {lab && bookZone && (
+          <ZoneRect cols={lab.cols} rows={lab.rows} zone={bookZone} border="rgba(160,120,220,0.55)">
+            <div
+              onClick={() => setShowBook(true)}
+              style={{ position: 'absolute', inset: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(20px, 7vw, 52px)', lineHeight: 1 }}
+            >
+              {bookImgUrl ? (
+                <img src={bookImgUrl} alt="" draggable={false} style={{ maxWidth: '92%', maxHeight: '92%', objectFit: 'contain', pointerEvents: 'none' }} />
+              ) : (
+                '📖'
+              )}
+            </div>
+          </ZoneRect>
         )}
       </LocationMap>
 
@@ -342,6 +364,52 @@ export default function RemedyLabPage() {
           )}
         </Modal>
       )}
+      {showBook && (
+        <Modal title="📖 Что нужно собрать" onClose={() => setShowBook(false)}>
+          {cards.length === 0 ? (
+            <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Актуальных рецептов нет — поставьте диагнозы в лечебнице.</div>
+          ) : (
+            cards.map((card) => {
+              const allIngredients = card.recipe_items.every((i) => i.have >= i.qty);
+              const remedyInStock = stock.some((s) => s.remedy_id === card.remedy_id && s.qty > 0);
+              return (
+                <div key={card.id} className="fm-card" style={{ fontSize: 13, marginBottom: 8 }}>
+                  <strong>{card.patient_name} → {card.remedy_name}</strong>
+                  {card.recipe_items.map((i, idx) => {
+                    const ok = i.have >= i.qty;
+                    return (
+                      <div key={idx} style={{ fontSize: 12, color: ok ? 'var(--success)' : 'var(--danger, #e08080)', marginTop: 2 }}>
+                        {ok ? '✓' : '✗'} {i.ingredient_name || i.plant_name}: {i.have}/{i.qty}
+                      </div>
+                    );
+                  })}
+                  <div style={{ fontSize: 12, marginTop: 4, color: remedyInStock ? 'var(--success)' : 'var(--danger, #e08080)' }}>
+                    {remedyInStock ? `✓ Лекарство «${card.remedy_name}» есть на складе` : `✗ Лекарство «${card.remedy_name}» нужно сварить`}
+                  </div>
+                  <div style={{ fontSize: 12, marginTop: 4, fontWeight: 600 }}>
+                    {allIngredients && remedyInStock ? '✅ Всё готово' : allIngredients ? 'Осталось сварить лекарство' : 'Не хватает ингредиентов'}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </Modal>
+      )}
     </>
+  );
+}
+
+function ZoneRect({ cols, rows, zone, border, children }: { cols: number; rows: number; zone: InfirmaryZone; border: string; children: React.ReactNode }) {
+  const spanCols = zone.col2 - zone.col1 + 1;
+  const spanRows = zone.row2 - zone.row1 + 1;
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)` }}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ pointerEvents: 'auto', gridColumn: `${zone.col1 + 1} / span ${spanCols}`, gridRow: `${zone.row1 + 1} / span ${spanRows}`, position: 'relative', border: `2px solid ${border}`, borderRadius: 6, overflow: 'hidden' }}
+      >
+        {children}
+      </div>
+    </div>
   );
 }

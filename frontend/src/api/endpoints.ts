@@ -981,6 +981,7 @@ export interface RemedyLab {
   apothecary: ApothecaryItem[];
   device_cells?: DeviceCell[];
   remedies_stock?: RemedyStockItem[];
+  infirmary_zones?: InfirmaryZone[];
 }
 
 export interface InstallDeviceResult {

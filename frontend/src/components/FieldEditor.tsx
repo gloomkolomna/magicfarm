@@ -753,9 +753,6 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           return (
             <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
               <BrushBtn active={brush === 'gather'} onClick={() => setBrush('gather')}>🌿 Добыча</BrushBtn>
-              {field?.field_kind === 'remedy_lab' && (
-                <BrushBtn active={brush === 'remedy_device'} onClick={() => setBrush('remedy_device')}>🔧 Прибор аптеки</BrushBtn>
-              )}
             </div>
           );
         }
@@ -771,6 +768,15 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
               <BrushBtn active={brush === 'body_part'} onClick={() => setBrush('body_part')}>🔍 Часть тела</BrushBtn>
               <BrushBtn active={brush === 'inf_book'} onClick={() => setBrush('inf_book')}>📖 Книга</BrushBtn>
+            </div>
+          );
+        }
+        if (kind === 'remedy_lab') {
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+              <BrushBtn active={brush === 'remedy_device'} onClick={() => setBrush('remedy_device')}>🔧 Прибор аптеки</BrushBtn>
+              <BrushBtn active={brush === 'inf_book'} onClick={() => setBrush('inf_book')}>📖 Книга</BrushBtn>
+              <BrushBtn active={brush === 'tent'} onClick={() => setBrush('tent')}>⛺ Производство</BrushBtn>
             </div>
           );
         }
@@ -794,6 +800,8 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           ? 'Тап по клетке открывает настройку бартера: список ингредиентов, доступных к обмену.'
           : brush === 'body_part'
           ? 'Тап по клетке открывает настройку части тела: выберите часть из списка и сохраните.'
+          : brush === 'remedy_device'
+          ? 'Тап по клетке открывает настройку прибора аптеки: карты на установку и список лекарств.'
           : brush === 'inf_book'
           ? 'Выделите клетки под книгу — при тапе игрок увидит таблицу симптомов и болезней.'
           : brush === 'bed' && field?.plant_category === 'orchard'

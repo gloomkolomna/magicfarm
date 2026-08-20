@@ -14,7 +14,7 @@ from models import (
     User, UserCard, UserIngredient, UserPatientState, UserRemedy, UserRemedyCard,
     UserRemedyDevice,
 )
-from routes.admin_fields import _get_field_or_404
+from routes.admin_fields import InfirmaryZoneOut, _get_field_or_404
 from routes.ingredients import ApothecaryItemOut, _apothecary_item_out
 from services.card_draw import calculate_norm, cards_to_json, draw_cards
 
@@ -92,6 +92,7 @@ class RemedyLabOut(BaseModel):
     apothecary: list[ApothecaryItemOut]
     device_cells: list[DeviceCellOut] = []
     remedies_stock: list[RemedyStockOut] = []
+    infirmary_zones: list[InfirmaryZoneOut] = []
 
 
 def _have_qty(user_id: int, item, db: Session) -> int:
@@ -219,6 +220,13 @@ def get_remedy_lab(
                 qty=s.qty or 0,
             )
             for s in stock
+        ],
+        infirmary_zones=[
+            InfirmaryZoneOut(
+                id=z.id, field_id=z.field_id, zone_kind=z.zone_kind,
+                col1=z.col1, row1=z.row1, col2=z.col2, row2=z.row2,
+            )
+            for z in f.infirmary_zones
         ],
     )
 
