@@ -264,6 +264,8 @@ export default function AdminPage() {
     { code: 'cauldron_silver', kind: 'image', label: '🍲 Котёл: серебряный (5 ингредиентов)' },
     { code: 'cauldron_gold', kind: 'image', label: '🍲 Котёл: золотой (6 ингредиентов)' },
     { code: 'potion_brew', kind: 'video', label: '🧪 Видео варки зелья' },
+    { code: 'infirmary_book', kind: 'image', label: '📖 Иконка книги лечебницы' },
+    { code: 'remedy_heal', kind: 'video', label: '💊 Видео лечения животного' },
   ];
 
   const [gameMedia, setGameMedia] = useState<GameMedia[]>([]);
@@ -421,6 +423,11 @@ export default function AdminPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function reloadPlayerDetail() {
+    if (!selectedPlayer) return;
+    try { setPlayerDetail(await api.adminPlayerDetail(selectedPlayer.vk_id)); } catch {}
   }
 
   async function reviewReport(id: number, action: 'accept' | 'reject') {
@@ -1933,8 +1940,25 @@ export default function AdminPage() {
                                 {plot.status === 'grown' ? '✅ Выращена' : '🌱 В процессе'}
                               </div>
                               <div style={{ fontSize: 12, marginTop: 2 }}>
-                                {plot.accumulated}/{plot.required} ❎
+                                {plot.accumulated}/{plot.required} ❎{plot.norm_per_unit != null ? <> · {plot.norm_per_unit}/шт</> : null}
                                 {plot.crystal_color && <> · {plot.crystal_color} ×{plot.crystal_count}</>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <h3 style={{ marginTop: 16 }}>❆ Цены 1 растения ({playerDetail.plant_norms?.length ?? 0})</h3>
+                      {(playerDetail.plant_norms ?? []).length === 0 ? (
+                        <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Игрок ещё ничего не сажал.</div>
+                      ) : (
+                        <div className="fm-grid">
+                          {(playerDetail.plant_norms ?? []).map((n) => (
+                            <div key={n.plant_id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
+                              <strong>{n.plant_emoji} {n.plant_name}</strong>
+                              <div style={{ color: 'var(--text-muted)', marginTop: 2, fontSize: 12 }}>Текущая цена: {n.norm_per_unit} ❎/шт</div>
+                              <div style={{ marginTop: 6 }}>
+                                <PlantNormEditor vkId={selectedPlayer.vk_id} plantId={n.plant_id} initial={n.norm_per_unit} onSaved={() => reloadPlayerDetail()} />
                               </div>
                             </div>
                           ))}
@@ -2647,6 +2671,39 @@ function SettingRow({
           OK
         </button>
       </div>
+    </div>
+  );
+}
+
+function PlantNormEditor({ vkId, plantId, initial, onSaved }: { vkId: number; plantId: number; initial: number; onSaved: () => void }) {
+  const [val, setVal] = useState(String(initial));
+  const [busy, setBusy] = useState(false);
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+      <input
+        className="fm-input"
+        type="number"
+        min={0}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        style={{ width: 80 }}
+        aria-label="Цена 1 растения"
+      />
+      <button
+        className="fm-btn fm-btn-sm"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            await api.adminSetPlantNorm(vkId, plantId, Math.max(0, Number(val) || 0));
+            onSaved();
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        💾
+      </button>
     </div>
   );
 }

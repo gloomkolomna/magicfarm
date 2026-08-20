@@ -5,6 +5,13 @@ import { mediaUrl } from '../api/media';
 import Toast from '../components/Toast';
 import SpritePedestal from '../components/SpritePedestal';
 
+const UNLOCK_TOAST: Record<string, string> = {
+  unlock_garden_l3: '🔓 Грядки 3 уровня открыты!',
+  unlock_orchard_l3: '🔓 Сады 3 уровня открыты!',
+  early_level_up: '🔓 Уровень маршрутного листа повышен!',
+  extra_barnyard_slot: '🔓 Открыт ещё один загон скотного двора!',
+};
+
 export default function BonusesPage() {
   const { refresh, loading: sessionLoading } = useSession();
   const [userPotions, setUserPotions] = useState<UserPotion[]>([]);
@@ -37,7 +44,8 @@ export default function BonusesPage() {
     setMsg(null);
     try {
       const p = await api.activatePotion(id);
-      setMsg(`✓ Бонус активирован! ${p.when_fires || 'Сработает автоматически при подходящем действии.'}`);
+      const unlockMsg = p.bonus_code ? UNLOCK_TOAST[p.bonus_code] : null;
+      setMsg(`✓ ${unlockMsg ? `${unlockMsg} ` : ''}${p.when_fires || 'Бонус активирован.'}`);
       const pots = await api.userPotions();
       setUserPotions(pots);
       setBonuses(await api.potionBonuses().catch(() => [] as BonusCatalogItem[]));
@@ -78,7 +86,7 @@ export default function BonusesPage() {
           <h2 style={{ fontSize: 16, marginBottom: 10 }}>Мои зелья</h2>
           {userPotions.length === 0 ? (
             <div className="fm-card" style={{ color: 'var(--text-muted)' }}>
-              Зелий пока нет. Сварите зелье на странице «Зелья».
+              Зелий пока нет. Сварите зелье в разделе «Зельеварение».
             </div>
           ) : (
             <div className="fm-grid" style={{ marginBottom: 16 }}>

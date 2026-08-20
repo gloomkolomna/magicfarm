@@ -1,4 +1,5 @@
 from __future__ import annotations
+import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -8,7 +9,7 @@ from db import get_db
 from deps import get_current_user
 from models import (
     ClinicPartCell, Disease, DiseaseSymptom, Field, InfirmaryZone, PatientAnimal, User,
-    UserCard, UserPatientState, UserRemedyCard,
+    UserCard, UserExamineLog, UserPatientState, UserRemedy, UserRemedyCard,
 )
 from routes.admin_fields import _get_field_or_404
 from services.achievements import check_and_award
@@ -16,6 +17,7 @@ from services.achievements import check_and_award
 router = APIRouter(prefix="/api/infirmary", tags=["infirmary"])
 
 DIAGNOSE_PENALTY = 200
+EXAMINE_PENALTY = 100
 
 
 def _healed_patient_ids(user_id: int, db: Session) -> set[int]:
@@ -51,6 +53,7 @@ class InfirmaryOut(BaseModel):
     levels: list[InfirmaryLevelOut]
     current: InfirmaryCurrentOut | None = None
     locations: list[InfirmaryLocationOut] = []
+    memories: list[InfirmaryMemoryOut] = []
 
 
 class PartCellOut(BaseModel):
@@ -90,7 +93,16 @@ class InfirmaryCurrentOut(BaseModel):
     current_field_id: int | None
     remedy_lab_field_id: int | None = None
     card_image_url: str | None
+    penalty_due: int = 0
     scenes: list[InfirmarySceneOut]
+
+
+class InfirmaryMemoryOut(BaseModel):
+    patient_id: int
+    name: str
+    level: int
+    healthy_image_url: str | None
+    healed: bool
 
 
 class InfirmaryLocationOut(BaseModel):
@@ -118,6 +130,8 @@ class InfirmaryDetailOut(BaseModel):
     remedy_name: str | None
     healed: bool
     card_earned: bool
+    penalty_due: int = 0
+    examined_parts: list[str] = []
     part_cells: list[PartCellOut]
     infirmary_zones: list[InfirmaryZoneOut]
     patient_scenes: list[InfirmarySceneOut] = []
@@ -152,6 +166,8 @@ class ExamineRequest(BaseModel):
 class ExamineOut(BaseModel):
     part_code: str
     symptoms: list[str]
+    first_time: bool = True
+    penalty_due: int = 0
 
 
 class RecipeItemOut(BaseModel):
@@ -165,6 +181,7 @@ class RecipeItemOut(BaseModel):
 class DiagnoseOut(BaseModel):
     correct: bool
     crosses_balance: int
+    penalty_due: int = 0
     remedy_card_id: int | None = None
     remedy_id: int | None = None
     remedy_name: str | None = None
@@ -263,6 +280,7 @@ def get_infirmary(
                 current_field_id=current_field_id,
                 remedy_lab_field_id=lab.id if lab else None,
                 card_image_url=p.card_image_url,
+                penalty_due=(state.penalty_due or 0) if state else 0,
                 scenes=scenes,
             )
             break
@@ -281,7 +299,16 @@ def get_infirmary(
                 field_id=f.id, name=f.name, field_kind=f.field_kind, map_url=f.map_url,
             ))
 
-    return InfirmaryOut(levels=levels, current=current, locations=locations)
+    memories = []
+    for p in patients:
+        healthy = next((s for s in p.scenes if s.clinic_stage == "healthy"), None)
+        memories.append(InfirmaryMemoryOut(
+            patient_id=p.id, name=p.name, level=p.level,
+            healthy_image_url=healthy.map_url if healthy else None,
+            healed=p.id in healed,
+        ))
+
+    return InfirmaryOut(levels=levels, current=current, locations=locations, memories=memories)
 
 
 # ── Справочник ──
@@ -337,6 +364,14 @@ def get_infirmary_detail(
     patient_id = patient.id if patient else None
     status_ = _patient_status(user.vk_id, patient.id, db) if patient else None
 
+    state = _get_state(user.vk_id, patient.id, db) if patient else None
+    penalty_due = (state.penalty_due or 0) if state else 0
+    examined_parts = [
+        log.part_code for log in db.query(UserExamineLog).filter(
+            UserExamineLog.user_id == user.vk_id, UserExamineLog.patient_id == patient.id
+        ).all()
+    ] if patient else []
+
     zones = db.query(InfirmaryZone).filter(
         InfirmaryZone.field_id == f.id
     ).order_by(InfirmaryZone.id.asc()).all()
@@ -357,10 +392,12 @@ def get_infirmary_detail(
         remedy_name=(patient.disease.remedy.name if patient and patient.disease and patient.disease.remedy else None),
         healed=(status_ in ("treated", "released")) if status_ else False,
         card_earned=(patient_id in collection) if patient_id else False,
-        patient_scenes=_patient_scenes_out(patient) if patient else [],
-        remedy_lab_field_id=lab.id if lab else None,
+        penalty_due=penalty_due,
+        examined_parts=examined_parts,
         part_cells=[PartCellOut(id=pc.id, col=pc.col, row=pc.row, part_code=pc.part_code) for pc in part_cells],
         infirmary_zones=[InfirmaryZoneOut(id=z.id, zone_kind=z.zone_kind, col1=z.col1, row1=z.row1, col2=z.col2, row2=z.row2) for z in zones],
+        patient_scenes=_patient_scenes_out(patient) if patient else [],
+        remedy_lab_field_id=lab.id if lab else None,
     )
 
 
@@ -384,11 +421,35 @@ def examine_patient(
     if not part_code or part_code not in parts:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестная часть тела")
 
+    state = db.query(UserPatientState).filter(
+        UserPatientState.user_id == user.vk_id, UserPatientState.patient_id == patient.id
+    ).first()
+    if state is None:
+        state = UserPatientState(user_id=user.vk_id, patient_id=patient.id, status="sick")
+        db.add(state)
+
+    log = db.query(UserExamineLog).filter(
+        UserExamineLog.user_id == user.vk_id,
+        UserExamineLog.patient_id == patient.id,
+        UserExamineLog.part_code == part_code,
+    ).first()
+    first_time = log is None
+    if first_time:
+        db.add(UserExamineLog(user_id=user.vk_id, patient_id=patient.id, part_code=part_code))
+    else:
+        state.penalty_due = (state.penalty_due or 0) + EXAMINE_PENALTY
+    db.commit()
+
     symptoms = db.query(DiseaseSymptom).filter(
         DiseaseSymptom.disease_id == patient.disease_id,
         DiseaseSymptom.part_code == part_code,
     ).all()
-    return ExamineOut(part_code=part_code, symptoms=[s.text for s in symptoms])
+    return ExamineOut(
+        part_code=part_code,
+        symptoms=[s.text for s in symptoms],
+        first_time=first_time,
+        penalty_due=state.penalty_due or 0,
+    )
 
 
 # ── Диагноз ──
@@ -416,17 +477,23 @@ def diagnose_patient(
     if existing_card is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Диагноз уже поставлен")
 
+    if ((state.penalty_due or 0) if state else 0) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Сначала отшейте штраф: {state.penalty_due} крестиков",
+        )
+
     if req.disease_id != patient.disease_id:
-        db_user = db.query(User).filter(User.vk_id == user.vk_id).first()
-        balance = db_user.crosses_balance or 0
-        if balance < DIAGNOSE_PENALTY:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Недостаточно крестиков для диагностики (нужно {DIAGNOSE_PENALTY})",
-            )
-        db_user.crosses_balance = balance - DIAGNOSE_PENALTY
+        if state is None:
+            state = UserPatientState(user_id=user.vk_id, patient_id=patient.id, status="sick")
+            db.add(state)
+        state.penalty_due = (state.penalty_due or 0) + DIAGNOSE_PENALTY
         db.commit()
-        return DiagnoseOut(correct=False, crosses_balance=db_user.crosses_balance)
+        return DiagnoseOut(
+            correct=False,
+            crosses_balance=user.crosses_balance or 0,
+            penalty_due=state.penalty_due or 0,
+        )
 
     remedy = patient.disease.remedy if patient.disease else None
     if remedy is None:
@@ -460,6 +527,70 @@ def diagnose_patient(
         remedy_description=remedy.description,
         remedy_image_url=remedy.image_url,
         recipe_items=recipe_items,
+    )
+
+
+# ── Дать лекарство ──
+
+class GiveRemedyOut(BaseModel):
+    patient_id: int
+    patient_name: str
+    status: str
+    remedy_name: str | None
+    otter_granted: bool = False
+
+
+@router.post("/patients/{patient_id}/give-remedy", response_model=GiveRemedyOut)
+def give_remedy(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    patient = db.query(PatientAnimal).filter(PatientAnimal.id == patient_id).first()
+    if patient is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
+
+    state = db.query(UserPatientState).filter(
+        UserPatientState.user_id == user.vk_id, UserPatientState.patient_id == patient.id
+    ).first()
+    if state is not None and state.status in ("treated", "released"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пациент уже вылечен")
+    if state is None or state.status not in ("diagnosed",):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Сначала поставьте диагноз")
+
+    card = db.query(UserRemedyCard).filter(
+        UserRemedyCard.user_id == user.vk_id, UserRemedyCard.patient_id == patient.id
+    ).first()
+    if card is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Сначала поставьте диагноз")
+
+    stock = db.query(UserRemedy).filter(
+        UserRemedy.user_id == user.vk_id, UserRemedy.remedy_id == card.remedy_id
+    ).first()
+    if stock is None or (stock.qty or 0) < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Лекарства нет на складе — сварите его в Лесной аптеке",
+        )
+
+    stock.qty = (stock.qty or 0) - 1
+    state.status = "treated"
+    state.healed_at = datetime.datetime.utcnow()
+
+    otter_granted = False
+    name_low = (patient.name or "").lower()
+    type_low = (patient.animal_type.name if patient.animal_type else "") or ""
+    if "выдр" in name_low or "выдр" in type_low.lower():
+        from routes.pets import grant_forest_pet_if_absent
+        otter_granted = grant_forest_pet_if_absent(user.vk_id, db)
+
+    db.commit()
+    return GiveRemedyOut(
+        patient_id=patient.id,
+        patient_name=patient.name,
+        status="treated",
+        remedy_name=card.remedy.name if card.remedy else None,
+        otter_granted=otter_granted,
     )
 
 

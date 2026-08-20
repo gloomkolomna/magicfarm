@@ -128,6 +128,39 @@ def _process_context(report: "StitchReport", db: Session) -> None:
             db.add(UserPet(user_id=report.user_id, pet_id=report.context_id, cell_id=report.cell_id))
             db.commit()
             check_and_award(report.user_id, "pets_count", db)
+    elif report.context_type == "infirmary_penalty" and report.context_id is not None:
+        from models import UserPatientState
+        state = db.query(UserPatientState).filter(
+            UserPatientState.user_id == report.user_id,
+            UserPatientState.patient_id == report.context_id,
+        ).first()
+        if state is not None and (state.penalty_due or 0) > 0:
+            state.penalty_due = max(0, (state.penalty_due or 0) - report.amount)
+            db.commit()
+    elif report.context_type == "remedy_device_install" and report.context_id is not None:
+        from models import UserRemedyDevice
+        dev = db.query(UserRemedyDevice).filter(
+            UserRemedyDevice.user_id == report.user_id,
+            UserRemedyDevice.cell_id == report.context_id,
+        ).first()
+        if dev is not None and dev.build_status == "building":
+            dev.accumulated = (dev.accumulated or 0) + report.amount
+            if dev.accumulated >= (dev.required or 0):
+                dev.build_status = "built"
+            db.commit()
+    elif report.context_type == "remedy_brew" and report.context_id is not None:
+        from routes.remedy_lab import complete_brew
+        from models import UserRemedyDevice
+        dev = db.query(UserRemedyDevice).filter(
+            UserRemedyDevice.id == report.context_id,
+            UserRemedyDevice.user_id == report.user_id,
+        ).first()
+        if dev is not None and dev.brew_card_id is not None:
+            dev.brew_accumulated = (dev.brew_accumulated or 0) + report.amount
+            if dev.brew_accumulated >= (dev.brew_required or 0):
+                complete_brew(report.user_id, dev.id, db)
+            else:
+                db.commit()
 
 
 class StitchReportOut(BaseModel):
@@ -290,6 +323,7 @@ def create_report(
         "plant_grow", "recipe_study", "production",
         "animal_build", "barnyard_withdraw", "tent_build", "pet_settle",
         "house_material", "house_build",
+        "infirmary_penalty", "remedy_device_install", "remedy_brew",
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

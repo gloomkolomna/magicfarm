@@ -1,4 +1,6 @@
 from __future__ import annotations
+import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -6,7 +8,7 @@ from sqlalchemy import func
 
 from db import get_db
 from deps import require_role
-from models import Field, FieldCell, FieldPlant, Inventory, Plot, Production, StitchReport, Tent, TentBuild, User
+from models import Field, FieldCell, FieldPlant, Inventory, Plant, Plot, Production, StitchReport, Tent, TentBuild, User, UserPlantNorm
 from services.vk_names import resolve_vk_names
 
 router = APIRouter(prefix="/api/admin/players", tags=["admin-players"])
@@ -83,11 +85,19 @@ class PlayerPlotOut(BaseModel):
     status: str
     accumulated: int
     required: int
+    norm_per_unit: int | None = None
     crystal_color: str | None
     crystal_count: int | None
     cell_id: int | None
     created_at: str | None
     completed_at: str | None
+
+
+class PlayerPlantNormOut(BaseModel):
+    plant_id: int
+    plant_name: str
+    plant_emoji: str | None
+    norm_per_unit: int
 
 
 class PlayerProductionOut(BaseModel):
@@ -122,6 +132,7 @@ class PlayerDetailOut(BaseModel):
     plots: list[PlayerPlotOut]
     productions: list[PlayerProductionOut]
     inventory: list[PlayerInventoryOut]
+    plant_norms: list[PlayerPlantNormOut] = []
 
 
 @router.get("/{vk_id}", response_model=PlayerDetailOut)
@@ -142,6 +153,13 @@ def get_player_detail(
     plots = db.query(Plot).filter(Plot.user_id == vk_id).order_by(Plot.created_at.desc()).all()
     productions = db.query(Production).filter(Production.user_id == vk_id).order_by(Production.created_at.desc()).all()
     inventory = db.query(Inventory).filter(Inventory.user_id == vk_id, Inventory.product_id.isnot(None)).all()
+    plant_norms = (
+        db.query(UserPlantNorm, Plant)
+        .join(Plant, Plant.id == UserPlantNorm.plant_id)
+        .filter(UserPlantNorm.user_id == vk_id)
+        .order_by(Plant.name.asc())
+        .all()
+    )
 
     return PlayerDetailOut(
         vk_id=player.vk_id,
@@ -159,6 +177,7 @@ def get_player_detail(
                 id=p.id, plant_id=p.plant_id, plant_name=p.plant.name,
                 plant_emoji=p.plant.emoji, qty=p.qty or 0, status=p.status,
                 accumulated=p.accumulated or 0, required=p.required or 0,
+                norm_per_unit=(round((p.required or 0) / p.qty) if p.qty else (p.required or 0)),
                 crystal_color=p.crystal_color, crystal_count=p.crystal_count,
                 cell_id=p.cell_id,
                 created_at=p.created_at.isoformat() if p.created_at else None,
@@ -178,6 +197,13 @@ def get_player_detail(
                 product_name=inv.product.name, product_emoji=inv.product.emoji,
                 qty=inv.qty or 0,
             ) for inv in inventory
+        ],
+        plant_norms=[
+            PlayerPlantNormOut(
+                plant_id=n.plant_id, plant_name=pl.name,
+                plant_emoji=pl.emoji,
+                norm_per_unit=n.norm_per_unit or 0,
+            ) for n, pl in plant_norms
         ],
     )
 
@@ -396,6 +422,74 @@ def reset_plot_norm(
 
     from routes.farm import _plot_to_out
     return _plot_to_out(plot)
+
+
+class PlantNormSetRequest(BaseModel):
+    norm_per_unit: int
+
+
+class PlantNormSetOut(BaseModel):
+    plant_id: int
+    plant_name: str
+    norm_per_unit: int
+    plots: list[PlayerPlotOut]
+
+
+@router.put("/{vk_id}/plant-norms/{plant_id}", response_model=PlantNormSetOut)
+def set_player_plant_norm(
+    vk_id: int,
+    plant_id: int,
+    req: PlantNormSetRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    if req.norm_per_unit < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Цена не может быть отрицательной")
+    player = db.query(User).filter(User.vk_id == vk_id).first()
+    if player is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    plant = db.query(Plant).filter(Plant.id == plant_id).first()
+    if plant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Растение не найдено")
+
+    cached = db.query(UserPlantNorm).filter(
+        UserPlantNorm.user_id == vk_id, UserPlantNorm.plant_id == plant_id
+    ).first()
+    if cached is None:
+        cached = UserPlantNorm(user_id=vk_id, plant_id=plant_id, norm_per_unit=req.norm_per_unit)
+        db.add(cached)
+    else:
+        cached.norm_per_unit = req.norm_per_unit
+
+    plots = db.query(Plot).filter(
+        Plot.user_id == vk_id, Plot.plant_id == plant_id, Plot.status == "planted"
+    ).all()
+    for p in plots:
+        p.required = req.norm_per_unit * (p.qty or 1)
+        p.norm_revealed = True
+        if (p.accumulated or 0) >= p.required:
+            p.status = "grown"
+            p.completed_at = datetime.datetime.utcnow()
+
+    db.commit()
+
+    return PlantNormSetOut(
+        plant_id=plant.id,
+        plant_name=plant.name,
+        norm_per_unit=req.norm_per_unit,
+        plots=[
+            PlayerPlotOut(
+                id=p.id, plant_id=p.plant_id, plant_name=p.plant.name,
+                plant_emoji=p.plant.emoji, qty=p.qty or 0, status=p.status,
+                accumulated=p.accumulated or 0, required=p.required or 0,
+                norm_per_unit=(round((p.required or 0) / p.qty) if p.qty else (p.required or 0)),
+                crystal_color=p.crystal_color, crystal_count=p.crystal_count,
+                cell_id=p.cell_id,
+                created_at=p.created_at.isoformat() if p.created_at else None,
+                completed_at=p.completed_at.isoformat() if p.completed_at else None,
+            ) for p in plots
+        ],
+    )
 
 
 @router.post("/{vk_id}/restart", response_model=PlayerOut)

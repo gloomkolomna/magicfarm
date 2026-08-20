@@ -12,6 +12,8 @@ export interface MeUser {
   coins: number;
   round: number;
   level: number;
+  unlocked_plot_level: number;
+  unlocked_garden_level: number;
   onboarding_done: boolean;
   plots_placed: number;
 }

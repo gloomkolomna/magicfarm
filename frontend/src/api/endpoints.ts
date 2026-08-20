@@ -387,10 +387,18 @@ export interface AdminRecipeCreate {
   level: number;
 }
 
+export interface PlayerPlantNorm {
+  plant_id: number;
+  plant_name: string;
+  plant_emoji: string | null;
+  norm_per_unit: number;
+}
+
 export interface PlayerDetail extends Player {
   plots: Plot[];
   productions: Production[];
   inventory: InventoryItem[];
+  plant_norms?: PlayerPlantNorm[];
 }
 
 export interface Player {
@@ -816,6 +824,15 @@ export interface Infirmary {
   levels: InfirmaryLevel[];
   current: InfirmaryCurrent | null;
   locations: InfirmaryLocation[];
+  memories?: InfirmaryMemory[];
+}
+
+export interface InfirmaryMemory {
+  patient_id: number;
+  name: string;
+  level: number;
+  healthy_image_url: string | null;
+  healed: boolean;
 }
 
 export interface InfirmaryPartCell {
@@ -852,6 +869,8 @@ export interface InfirmaryDetail {
   remedy_name: string | null;
   healed: boolean;
   card_earned: boolean;
+  penalty_due?: number;
+  examined_parts?: string[];
   part_cells: InfirmaryPartCell[];
   infirmary_zones: InfirmaryZone[];
   patient_scenes: InfirmaryScene[];
@@ -873,11 +892,14 @@ export interface HandbookDisease {
 export interface ExamineResult {
   part_code: string;
   symptoms: string[];
+  first_time?: boolean;
+  penalty_due?: number;
 }
 
 export interface DiagnoseResult {
   correct: boolean;
   crosses_balance: number;
+  penalty_due?: number;
   remedy_card_id: number | null;
   remedy_id: number | null;
   remedy_name: string | null;
@@ -897,6 +919,42 @@ export interface RemedyCard {
   recipe_items: RemedyRecipeItemHave[];
 }
 
+export interface DeviceRemedy {
+  remedy_id: number;
+  remedy_name: string;
+  remedy_image_url: string | null;
+}
+
+export interface DeviceState {
+  id: number;
+  build_status: string;
+  accumulated: number;
+  required: number;
+  drawn_cards_json: string | null;
+  brew_card_id: number | null;
+  brew_patient_name: string | null;
+  brew_remedy_name: string | null;
+  brew_required: number | null;
+  brew_accumulated: number;
+  brew_dice: number[];
+}
+
+export interface DeviceCell {
+  id: number;
+  col: number;
+  row: number;
+  install_cards: number;
+  remedies: DeviceRemedy[];
+  device: DeviceState | null;
+}
+
+export interface RemedyStockItem {
+  remedy_id: number;
+  remedy_name: string;
+  remedy_image_url: string | null;
+  qty: number;
+}
+
 export interface RemedyLab {
   field_id: number;
   name: string;
@@ -905,14 +963,30 @@ export interface RemedyLab {
   rows: number;
   remedy_cards: RemedyCard[];
   apothecary: ApothecaryItem[];
+  device_cells?: DeviceCell[];
+  remedies_stock?: RemedyStockItem[];
 }
 
-export interface BrewResult {
-  card_id: number;
+export interface InstallDeviceResult {
+  device: DeviceState;
+  cards: { color: string; value: number; is_treasure: boolean }[];
+  required: number;
+}
+
+export interface BrewDeviceResult {
+  device: DeviceState;
+  dice: number[];
+  required: number;
+  remedy_name: string;
+  patient_name: string;
+}
+
+export interface GiveRemedyResult {
   patient_id: number;
   patient_name: string;
-  remedy_name: string;
   status: string;
+  remedy_name: string | null;
+  otter_granted: boolean;
 }
 
 export interface ReleaseResult {
@@ -940,6 +1014,14 @@ export interface Collection {
   levels: CollectionLevel[];
 }
 
+export interface AdminDeviceCell {
+  id: number;
+  col: number;
+  row: number;
+  install_cards: number;
+  remedies: { remedy_id: number; remedy_name: string; remedy_image_url: string | null }[];
+}
+
 export interface FieldDetail extends FieldInfo {
   cells: FieldCellDetail[];
   plants: Plant[];
@@ -953,6 +1035,7 @@ export interface FieldDetail extends FieldInfo {
   trade_cells?: TradeCell[];
   part_cells?: ClinicPartCell[];
   infirmary_zones?: InfirmaryZone[];
+  device_cells?: AdminDeviceCell[];
   potion_recipes?: PotionRecipe[];
   active_cauldron?: Cauldron | null;
 }
@@ -1068,6 +1151,35 @@ export interface LogsQuery {
   offset?: number;
 }
 
+export interface ForestActions {
+  free_used_today: boolean;
+  paid_used_today: boolean;
+  sleeping: boolean;
+  wake_at: string | null;
+}
+
+export interface UserPetInfo {
+  id: number;
+  pet_id: number;
+  pet_name: string;
+  pet_emoji: string | null;
+  bonus_description: string | null;
+  acquired_at: string | null;
+  cell_id: number | null;
+  code?: string | null;
+  forest?: ForestActions | null;
+}
+
+export interface ForestResult {
+  pet_id: number;
+  ingredient_id: number;
+  ingredient_name: string;
+  apothecary_qty: number;
+  paid: boolean;
+  sleeping: boolean;
+  wake_at: string | null;
+}
+
 export const api = {
   // ── Производства / склад ──
   investPlot: (plot_id: number, amount: number) =>
@@ -1181,7 +1293,9 @@ export const api = {
     }).then((r) => r.data),
 
   // ── Питомцы ──
-  userPets: () => client.get<any[]>('/pets').then(r => r.data),
+  userPets: () => client.get<UserPetInfo[]>('/pets').then(r => r.data),
+  petForest: (petId: number, paid: boolean) =>
+    client.post<ForestResult>(`/pets/${petId}/forest`, { paid }).then(r => r.data),
   settlePetOnCell: (cellId: number, petId: number) =>
     client.post(`/pets/cells/${cellId}/settle`, { pet_id: petId }).then(r => r.data),
   petsCatalog: () => client.get<Pet[]>('/pets/catalog').then((r) => r.data),
@@ -1405,6 +1519,8 @@ export const api = {
     client.get<FieldDetail>(`/admin/players/${vkId}/fields/${fieldId}`).then((r) => r.data),
   adminResetPlotNorm: (vkId: number, plotId: number) =>
     client.post<any>(`/admin/players/${vkId}/plots/${plotId}/reset-norm`).then((r) => r.data),
+  adminSetPlantNorm: (vkId: number, plantId: number, normPerUnit: number) =>
+    client.put<any>(`/admin/players/${vkId}/plant-norms/${plantId}`, { norm_per_unit: normPerUnit }).then((r) => r.data),
   adminRestartPlayer: (vkId: number) =>
     client.post<Player>(`/admin/players/${vkId}/restart`).then((r) => r.data),
   adminDeletePlayerPlot: (vkId: number, plotId: number) =>
@@ -1657,6 +1773,12 @@ export const api = {
   // ── Админ: клетки поляны и лавки ──
   adminCreateGatherCell: (fieldId: number, data: { col: number; row: number; window: string; ingredient_ids: number[] }) =>
     client.post<GatherCell>(`/admin/fields/${fieldId}/gather-cells`, data).then((r) => r.data),
+  adminCreateRemedyDeviceCell: (fieldId: number, data: { col: number; row: number; install_cards: number; remedy_ids: number[] }) =>
+    client.post<AdminDeviceCell>(`/admin/fields/${fieldId}/remedy-device-cells`, data).then((r) => r.data),
+  adminUpdateRemedyDeviceCell: (fieldId: number, id: number, data: { install_cards?: number; remedy_ids?: number[] }) =>
+    client.put<AdminDeviceCell>(`/admin/fields/${fieldId}/remedy-device-cells/${id}`, data).then((r) => r.data),
+  adminDeleteRemedyDeviceCell: (fieldId: number, id: number) =>
+    client.delete(`/admin/fields/${fieldId}/remedy-device-cells/${id}`).then((r) => r.data),
   adminUpdateGatherCell: (fieldId: number, id: number, data: { window?: string; ingredient_ids?: number[] }) =>
     client.put<GatherCell>(`/admin/fields/${fieldId}/gather-cells/${id}`, data).then((r) => r.data),
   adminDeleteGatherCell: (fieldId: number, id: number) =>
@@ -1681,10 +1803,14 @@ export const api = {
     client.post<DiagnoseResult>(`/infirmary/patients/${patientId}/diagnose`, { disease_id: diseaseId }).then((r) => r.data),
   releasePatient: (patientId: number) =>
     client.post<ReleaseResult>(`/infirmary/patients/${patientId}/release`).then((r) => r.data),
+  giveRemedy: (patientId: number) =>
+    client.post<GiveRemedyResult>(`/infirmary/patients/${patientId}/give-remedy`).then((r) => r.data),
   remedyLab: (fieldId: number) =>
     client.get<RemedyLab>(`/remedy-lab/${fieldId}`).then((r) => r.data),
-  brewRemedy: (cardId: number) =>
-    client.post<BrewResult>(`/remedy-cards/${cardId}/brew`).then((r) => r.data),
+  installRemedyDevice: (cellId: number) =>
+    client.post<InstallDeviceResult>(`/remedy-lab/cells/${cellId}/install`).then((r) => r.data),
+  brewRemedy: (cardId: number, cellId: number) =>
+    client.post<BrewDeviceResult>(`/remedy-cards/${cardId}/brew`, { cell_id: cellId }).then((r) => r.data),
   collection: () =>
     client.get<Collection>('/collection').then((r) => r.data),
 

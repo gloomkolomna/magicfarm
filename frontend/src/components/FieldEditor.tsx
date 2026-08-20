@@ -3,7 +3,7 @@ import { api, BODY_PARTS, type Animal, type BreweryZone, type FieldCell, type Fi
 import { mediaUrl } from '../api/media';
 import { confirmDialog } from './Confirm';
 
-type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house' | 'brew_cauldron' | 'brew_jar' | 'brew_ingredient' | 'brew_card' | 'gather' | 'trade' | 'body_part' | 'inf_book';
+type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house' | 'brew_cauldron' | 'brew_jar' | 'brew_ingredient' | 'brew_card' | 'gather' | 'trade' | 'body_part' | 'inf_book' | 'remedy_device';
 
 function isTentBrush(b: Brush) {
   return b === 'tent' || b === 'house';
@@ -43,6 +43,7 @@ const KIND_FILL: Record<string, string> = {
   pet: 'rgba(200,130,220,0.30)',
   barnyard: 'rgba(220,180,120,0.30)',
   gather: 'rgba(120,200,110,0.30)',
+  remedy_device: 'rgba(160,120,220,0.30)',
   trade: 'rgba(110,170,220,0.30)',
   body_part: 'rgba(220,150,120,0.30)',
 };
@@ -81,20 +82,22 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const [allPotionRecipes, setAllPotionRecipes] = useState<PotionRecipe[]>([]);
   const [brewImage, setBrewImage] = useState<File | null>(null);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
+  const [allRemedies, setAllRemedies] = useState<{ id: number; name: string; image_url: string | null }[]>([]);
   const [cellModal, setCellModal] = useState<{
-    kind: 'gather' | 'trade' | 'body_part';
+    kind: 'gather' | 'trade' | 'body_part' | 'remedy_device';
     col: number;
     row: number;
     window: string;
     ids: number[];
     partCode: string;
+    installCards: string;
     existingId: number | null;
   } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [fd, pl, pts, an, pt, pr, ing] = await Promise.all([api.adminCleanupField(fieldId), api.plants(), api.adminProductionTemplates(), api.adminAnimals(), api.adminPets(), api.adminPotionRecipes(), api.adminIngredients()]);
+      const [fd, pl, pts, an, pt, pr, ing, rem] = await Promise.all([api.adminCleanupField(fieldId), api.plants(), api.adminProductionTemplates(), api.adminAnimals(), api.adminPets(), api.adminPotionRecipes(), api.adminIngredients(), api.adminRemedies().catch(() => [])]);
       setField(fd);
       setAllPlants(pl);
       setProdTemplates(pts);
@@ -102,6 +105,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       setAllPets(pt);
       setAllPotionRecipes(pr);
       setAllIngredients(ing);
+      setAllRemedies(rem);
       setMultiDraft(new Set());
       setCols(String(fd.cols));
       setRows(String(fd.rows));
@@ -162,6 +166,21 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         window: existing && 'window' in existing ? (existing as any).window : 'always',
         ids: existing ? existing.ingredient_ids : [],
         partCode: '',
+        installCards: '10',
+        existingId: existing?.id ?? null,
+      });
+      return;
+    }
+    if (brush === 'remedy_device') {
+      const existing = (field?.device_cells ?? []).find((dc) => dc.col === c && dc.row === r);
+      setCellModal({
+        kind: 'remedy_device',
+        col: c,
+        row: r,
+        window: 'always',
+        ids: existing ? existing.remedies.map((r2) => r2.remedy_id) : [],
+        partCode: '',
+        installCards: String(existing?.install_cards ?? 10),
         existingId: existing?.id ?? null,
       });
       return;
@@ -175,6 +194,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         window: 'always',
         ids: [],
         partCode: existing?.part_code ?? '',
+        installCards: '10',
         existingId: existing?.id ?? null,
       });
       return;
@@ -354,6 +374,14 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           await api.adminCreateTradeCell(fieldId, { col: cellModal.col, row: cellModal.row, ingredient_ids: cellModal.ids });
         }
         setMsg('✓ Клетка бартера настроена');
+      } else if (cellModal.kind === 'remedy_device') {
+        const payload = { install_cards: Math.max(1, Number(cellModal.installCards) || 10), remedy_ids: cellModal.ids };
+        if (cellModal.existingId != null) {
+          await api.adminUpdateRemedyDeviceCell(fieldId, cellModal.existingId, payload);
+        } else {
+          await api.adminCreateRemedyDeviceCell(fieldId, { col: cellModal.col, row: cellModal.row, install_cards: payload.install_cards, remedy_ids: payload.remedy_ids });
+        }
+        setMsg('✓ Прибор аптеки настроен');
       } else {
         if (cellModal.existingId != null) {
           await api.adminUpdatePartCell(fieldId, cellModal.existingId, { part_code: cellModal.partCode });
@@ -392,6 +420,21 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       await api.adminDeleteTradeCell(fieldId, id);
       await load();
       setMsg('✓ Клетка бартера удалена');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteRemedyDeviceCell(id: number) {
+    if (!(await confirmDialog('Удалить прибор аптеки?'))) return;
+    setBusy(true);
+    try {
+      await api.adminDeleteRemedyDeviceCell(fieldId, id);
+      await load();
+      setCellModal(null);
+      setMsg('✓ Прибор удалён');
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally {
@@ -710,6 +753,9 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           return (
             <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
               <BrushBtn active={brush === 'gather'} onClick={() => setBrush('gather')}>🌿 Добыча</BrushBtn>
+              {field?.field_kind === 'remedy_lab' && (
+                <BrushBtn active={brush === 'remedy_device'} onClick={() => setBrush('remedy_device')}>🔧 Прибор аптеки</BrushBtn>
+              )}
             </div>
           );
         }
@@ -910,6 +956,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             else if (c.kind === 'pet') icon = '🐾';
             else if (c.kind === 'barnyard') icon = '🐄';
             else if (c.kind === 'gather') icon = '🌿';
+            else if (c.kind === 'remedy_device') icon = '🔧';
             else if (c.kind === 'trade') icon = '🛒';
             else if (c.kind === 'body_part') icon = '🔍';
             if (!icon) return null;
@@ -1082,7 +1129,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     disabled={busy}
                     onClick={() => setCellModal({
                       kind: 'gather', col: gc.col, row: gc.row,
-                      window: gc.window, ids: gc.ingredient_ids, partCode: '', existingId: gc.id,
+                      window: gc.window, ids: gc.ingredient_ids, partCode: '', installCards: '10', existingId: gc.id,
                     })}
                   >
                     ✏️
@@ -1126,7 +1173,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     disabled={busy}
                     onClick={() => setCellModal({
                       kind: 'trade', col: tc.col, row: tc.row,
-                      window: 'always', ids: tc.ingredient_ids, partCode: '', existingId: tc.id,
+                      window: 'always', ids: tc.ingredient_ids, partCode: '', installCards: '10', existingId: tc.id,
                     })}
                   >
                     ✏️
@@ -1170,7 +1217,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     disabled={busy}
                     onClick={() => setCellModal({
                       kind: 'body_part', col: pc.col, row: pc.row,
-                      window: 'always', ids: [], partCode: pc.part_code, existingId: pc.id,
+                      window: 'always', ids: [], partCode: pc.part_code, installCards: '10', existingId: pc.id,
                     })}
                   >
                     ✏️
@@ -1318,7 +1365,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'calc(var(--shell-max-width) * 0.7)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <h3 style={{ margin: 0 }}>
-                {cellModal.kind === 'gather' ? '🌿 Клетка добычи' : cellModal.kind === 'trade' ? '🛒 Клетка бартера' : '🔍 Часть тела'} [{cellModal.col},{cellModal.row}]
+                {cellModal.kind === 'gather' ? '🌿 Клетка добычи' : cellModal.kind === 'trade' ? '🛒 Клетка бартера' : cellModal.kind === 'remedy_device' ? '🔧 Прибор аптеки' : '🔍 Часть тела'} [{cellModal.col},{cellModal.row}]
               </h3>
               <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setCellModal(null)}>✕</button>
             </div>
@@ -1337,7 +1384,42 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 </select>
               </>
             )}
-            {cellModal.kind === 'body_part' ? (
+            {cellModal.kind === 'remedy_device' ? (
+              <>
+                <label style={lbl}>Карт для нормы на установку (1–30)</label>
+                <input
+                  className="fm-input"
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={cellModal.installCards}
+                  onChange={(e) => setCellModal({ ...cellModal, installCards: e.target.value })}
+                />
+                <label style={{ ...lbl, marginTop: 10 }}>Лекарства, производимые на приборе</label>
+                <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 8 }}>
+                  {allRemedies.length === 0 ? (
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                      Сначала создайте лекарства в разделе «Лечебница → Лекарства».
+                    </div>
+                  ) : allRemedies.map((rem) => (
+                    <label key={rem.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px', fontSize: 14, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={cellModal.ids.includes(rem.id)}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...cellModal.ids, rem.id]
+                            : cellModal.ids.filter((x) => x !== rem.id);
+                          setCellModal({ ...cellModal, ids: next });
+                        }}
+                      />
+                      {rem.image_url && <img src={mediaUrl(rem.image_url)} alt="" style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 4 }} />}
+                      {rem.name}
+                    </label>
+                  ))}
+                </div>
+              </>
+            ) : cellModal.kind === 'body_part' ? (
               <>
                 <label style={lbl}>Часть тела</label>
                 <select
@@ -1383,11 +1465,21 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             <button
               className="fm-btn"
               style={{ width: '100%', marginTop: 14 }}
-              disabled={busy || (cellModal.kind === 'gather' && cellModal.ids.length === 0 && cellModal.existingId == null) || (cellModal.kind === 'body_part' && !cellModal.partCode.trim())}
+              disabled={busy || (cellModal.kind === 'gather' && cellModal.ids.length === 0 && cellModal.existingId == null) || (cellModal.kind === 'body_part' && !cellModal.partCode.trim()) || (cellModal.kind === 'remedy_device' && (!(Number(cellModal.installCards) >= 1) || cellModal.ids.length === 0))}
               onClick={saveCellConfig}
             >
               Сохранить
             </button>
+            {cellModal.kind === 'remedy_device' && cellModal.existingId != null && (
+              <button
+                className="fm-btn fm-btn-outline"
+                style={{ width: '100%', marginTop: 8 }}
+                disabled={busy}
+                onClick={() => deleteRemedyDeviceCell(cellModal.existingId!)}
+              >
+                🗑 Удалить прибор
+              </button>
+            )}
           </div>
         </div>
       )}

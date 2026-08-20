@@ -12,7 +12,8 @@ from models import (
     BREWERY_MAX_INGREDIENT_CELLS, BREWERY_ZONE_KINDS, INFIRMARY_ZONE_KINDS, Animal, BreweryZone,
     ClinicPartCell, Field, FieldAnimal, FieldCell, FieldPet, FieldPlant, FieldPotionRecipe,
     GATHER_WINDOW_KINDS, GatherCell, GatherCellIngredient, Ingredient, InfirmaryZone, KASSA_KIND,
-    Pet, PetZone, Plant, PlantBed, PotionRecipe, ProductionTemplate, Tent, TradeCell,
+    Pet, PetZone, Plant, PlantBed, PotionRecipe, ProductionTemplate, REMEDY_DEVICE_LIMIT,
+    Remedy, RemedyDeviceCell, RemedyDeviceRemedy, Tent, TradeCell,
     TradeCellIngredient, User, WITCH_HOUSE_KIND,
 )
 from services.uploads import remove_upload, save_upload
@@ -286,6 +287,7 @@ class FieldDetailOut(FieldOut):
     trade_cells: list[TradeCellOut] = []
     part_cells: list[ClinicPartCellOut] = []
     infirmary_zones: list[InfirmaryZoneOut] = []
+    device_cells: list[RemedyDeviceCellOut] = []
     potion_recipes: list = []
     potion_recipe_ids: list[int] = []
 
@@ -766,6 +768,7 @@ def _detail(f: Field) -> FieldDetailOut:
         trade_cells=[_trade_cell_out(tc) for tc in f.trade_cells] if f.field_kind == "shop" else [],
         part_cells=[_part_cell_out(pc) for pc in f.part_cells] if f.field_kind == "infirmary" else [],
         infirmary_zones=[_infirmary_zone_out(z) for z in f.infirmary_zones] if f.field_kind == "infirmary" else [],
+        device_cells=[_device_cell_out(dc) for dc in db.query(RemedyDeviceCell).filter(RemedyDeviceCell.field_id == f.id).all()] if f.field_kind == "remedy_lab" else [],
         potion_recipes=[_recipe_out(fpr.recipe) for fpr in f.potion_recipes],
         potion_recipe_ids=[fpr.recipe_id for fpr in f.potion_recipes],
     )
@@ -1504,5 +1507,149 @@ def delete_infirmary_zone(
     if z is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Зона лечебницы не найдена")
     db.delete(z)
+    db.commit()
+    return None
+
+
+# ── Приборы Лесной аптеки ──
+
+class DeviceRemedyItemOut(BaseModel):
+    remedy_id: int
+    remedy_name: str
+    remedy_image_url: str | None
+
+
+class RemedyDeviceCellOut(BaseModel):
+    id: int
+    col: int
+    row: int
+    install_cards: int
+    remedies: list[DeviceRemedyItemOut]
+
+
+def _check_remedy_lab_field(f: Field) -> None:
+    if f.field_kind != "remedy_lab":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Приборы размещаются только на локациях типа «Лесная аптека»",
+        )
+
+
+def _device_cell_out(cell: RemedyDeviceCell) -> RemedyDeviceCellOut:
+    return RemedyDeviceCellOut(
+        id=cell.id, col=cell.col, row=cell.row,
+        install_cards=cell.install_cards or 10,
+        remedies=[
+            DeviceRemedyItemOut(
+                remedy_id=r.remedy_id,
+                remedy_name=r.remedy.name if r.remedy else "?",
+                remedy_image_url=r.remedy.image_url if r.remedy else None,
+            )
+            for r in cell.remedies
+        ],
+    )
+
+
+class RemedyDeviceCellCreate(BaseModel):
+    col: int
+    row: int
+    install_cards: int = 10
+    remedy_ids: list[int] = []
+
+
+class RemedyDeviceCellUpdate(BaseModel):
+    install_cards: int | None = None
+    remedy_ids: list[int] | None = None
+
+
+def _apply_remedy_ids(cell: RemedyDeviceCell, remedy_ids: list[int], db: Session) -> None:
+    remedies = db.query(Remedy).filter(Remedy.id.in_(remedy_ids)).all() if remedy_ids else []
+    if len(remedies) != len(set(remedy_ids)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некоторые лекарства не найдены")
+    db.query(RemedyDeviceRemedy).filter(RemedyDeviceRemedy.cell_id == cell.id).delete(
+        synchronize_session=False
+    )
+    for rid in remedy_ids:
+        db.add(RemedyDeviceRemedy(cell_id=cell.id, remedy_id=rid))
+
+
+@router.post("/{field_id}/remedy-device-cells", response_model=RemedyDeviceCellOut, status_code=status.HTTP_201_CREATED)
+def create_remedy_device_cell(
+    field_id: int,
+    req: RemedyDeviceCellCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    _ensure_grid(f, db)
+    _check_remedy_lab_field(f)
+    if req.col < 0 or req.row < 0 or req.col >= f.cols or req.row >= f.rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Клетка вне поля")
+    if req.install_cards < 1 or req.install_cards > 30:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Карт на установку: от 1 до 30")
+    existing_pos = db.query(RemedyDeviceCell).filter(
+        RemedyDeviceCell.field_id == f.id, RemedyDeviceCell.col == req.col, RemedyDeviceCell.row == req.row
+    ).first()
+    if existing_pos is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="На этой клетке уже стоит прибор")
+    count = db.query(RemedyDeviceCell).filter(RemedyDeviceCell.field_id == f.id).count()
+    if count >= REMEDY_DEVICE_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Максимум {REMEDY_DEVICE_LIMIT} приборов в аптеке",
+        )
+
+    cell = RemedyDeviceCell(field_id=f.id, col=req.col, row=req.row, install_cards=req.install_cards)
+    db.add(cell)
+    db.flush()
+    _apply_remedy_ids(cell, req.remedy_ids, db)
+    _mark_cell_kind(f.id, req.col, req.row, "remedy_device", db)
+    db.commit()
+    db.refresh(cell)
+    return _device_cell_out(cell)
+
+
+@router.put("/{field_id}/remedy-device-cells/{cell_id}", response_model=RemedyDeviceCellOut)
+def update_remedy_device_cell(
+    field_id: int,
+    cell_id: int,
+    req: RemedyDeviceCellUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    cell = db.query(RemedyDeviceCell).filter(
+        RemedyDeviceCell.id == cell_id, RemedyDeviceCell.field_id == field_id
+    ).first()
+    if cell is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Прибор не найден")
+    if req.install_cards is not None:
+        if req.install_cards < 1 or req.install_cards > 30:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Карт на установку: от 1 до 30")
+        cell.install_cards = req.install_cards
+    if req.remedy_ids is not None:
+        _apply_remedy_ids(cell, req.remedy_ids, db)
+    db.commit()
+    db.refresh(cell)
+    return _device_cell_out(cell)
+
+
+@router.delete("/{field_id}/remedy-device-cells/{cell_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_remedy_device_cell(
+    field_id: int,
+    cell_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    cell = db.query(RemedyDeviceCell).filter(
+        RemedyDeviceCell.id == cell_id, RemedyDeviceCell.field_id == field_id
+    ).first()
+    if cell is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Прибор не найден")
+    c = db.query(FieldCell).filter(
+        FieldCell.field_id == cell.field_id, FieldCell.col == cell.col, FieldCell.row == cell.row
+    ).first()
+    if c is not None and c.kind == "remedy_device":
+        c.kind = "empty"
+    db.delete(cell)
     db.commit()
     return None

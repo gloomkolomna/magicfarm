@@ -1042,11 +1042,26 @@ class UserPatientState(Base):
     status = Column(String, nullable=False, default="sick", server_default="sick")
     current_field_id = Column(Integer, ForeignKey("fields.id", ondelete="SET NULL"), nullable=True)
     healed_at = Column(DateTime, nullable=True)
+    penalty_due = Column(Integer, nullable=False, default=0, server_default="0")
 
     patient = relationship("PatientAnimal")
 
     __table_args__ = (
         UniqueConstraint("user_id", "patient_id", name="uq_userpatientstate_user_patient"),
+    )
+
+
+class UserExamineLog(Base):
+    __tablename__ = "user_examine_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patient_animals.id", ondelete="CASCADE"), nullable=False)
+    part_code = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "patient_id", "part_code", name="uq_userexaminelog_user_patient_part"),
     )
 
 
@@ -1078,4 +1093,94 @@ class UserCard(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "patient_id", name="uq_usercard_user_patient"),
+    )
+
+
+REMEDY_DEVICE_LIMIT = 5
+
+
+class RemedyDeviceCell(Base):
+    __tablename__ = "remedy_device_cells"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False)
+    col = Column(Integer, nullable=False)
+    row = Column(Integer, nullable=False)
+    install_cards = Column(Integer, nullable=False, default=10, server_default="10")
+
+    field = relationship("Field")
+    remedies = relationship("RemedyDeviceRemedy", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("field_id", "col", "row", name="uq_remedydevicecell_field_col_row"),
+    )
+
+
+class RemedyDeviceRemedy(Base):
+    __tablename__ = "remedy_device_remedies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cell_id = Column(Integer, ForeignKey("remedy_device_cells.id", ondelete="CASCADE"), nullable=False)
+    remedy_id = Column(Integer, ForeignKey("remedies.id", ondelete="CASCADE"), nullable=False)
+
+    remedy = relationship("Remedy")
+
+    __table_args__ = (
+        UniqueConstraint("cell_id", "remedy_id", name="uq_remedydeviceremedy_cell_remedy"),
+    )
+
+
+class UserRemedyDevice(Base):
+    __tablename__ = "user_remedy_devices"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    cell_id = Column(Integer, ForeignKey("remedy_device_cells.id", ondelete="CASCADE"), nullable=False)
+    build_status = Column(String, nullable=False, default="building", server_default="building")
+    accumulated = Column(Integer, nullable=False, default=0, server_default="0")
+    required = Column(Integer, nullable=False, default=0, server_default="0")
+    drawn_cards_json = Column(Text, nullable=True)
+    brew_card_id = Column(Integer, ForeignKey("user_remedy_cards.id", ondelete="SET NULL"), nullable=True)
+    brew_required = Column(Integer, nullable=True)
+    brew_accumulated = Column(Integer, nullable=False, default=0, server_default="0")
+    brew_dice_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    cell = relationship("RemedyDeviceCell")
+    brew_card = relationship("UserRemedyCard")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "cell_id", name="uq_userremedydevice_user_cell"),
+    )
+
+
+class UserRemedy(Base):
+    __tablename__ = "user_remedies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    remedy_id = Column(Integer, ForeignKey("remedies.id", ondelete="CASCADE"), nullable=False)
+    qty = Column(Integer, nullable=False, default=0, server_default="0")
+
+    remedy = relationship("Remedy")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "remedy_id", name="uq_userremedy_user_remedy"),
+    )
+
+
+FOREST_PET_CODES = ("vydra", "otter")
+
+
+class PetActionLog(Base):
+    __tablename__ = "pet_action_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    pet_id = Column(Integer, ForeignKey("pets.id", ondelete="CASCADE"), nullable=False)
+    action = Column(String, nullable=False)
+    date = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "pet_id", "action", "date", name="uq_practionlog_user_pet_action_date"),
     )

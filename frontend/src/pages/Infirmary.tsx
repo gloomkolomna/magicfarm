@@ -5,8 +5,10 @@ import type { Swiper as SwiperInstance } from 'swiper';
 import 'swiper/css';
 import { api, BODY_PART_LABELS, type DiagnoseResult, type HandbookDisease, type Infirmary, type InfirmaryDetail, type InfirmaryZone } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import HeartsBurst from '../components/HeartsBurst';
 import InfirmaryBackground from '../components/InfirmaryBackground';
 import LocationMap from '../components/LocationMap';
+import StitchReportForm from '../components/StitchReportForm';
 import Toast from '../components/Toast';
 
 const LOCATION_META: Record<string, { emoji: string; route: string }> = {
@@ -144,6 +146,27 @@ export default function InfirmaryHubPage() {
           </div>
         </div>
       ))}
+
+      <h2 style={{ fontSize: 16, margin: '16px 0 8px' }}>💭 Воспоминания</h2>
+      {(hub?.memories ?? []).length === 0 ? (
+        <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Пока никого не вылечили.</div>
+      ) : (
+        <div className="fm-grid">
+          {(hub?.memories ?? []).map((m) => (
+            <div key={m.patient_id} className="fm-card fm-rise" style={{ textAlign: 'center', opacity: m.healed ? 1 : 0.55 }}>
+              {m.healed && m.healthy_image_url ? (
+                <img src={mediaUrl(m.healthy_image_url)} alt="" style={{ width: '100%', maxHeight: 120, objectFit: 'contain', marginBottom: 6, borderRadius: 8 }} />
+              ) : (
+                <div style={{ fontSize: 40, lineHeight: '120px', color: 'var(--text-muted)' }}>{m.healed ? '🐾' : '❓'}</div>
+              )}
+              <strong style={{ display: 'block', fontSize: 13 }}>{m.name}</strong>
+              <div style={{ fontSize: 12, color: m.healed ? 'var(--success)' : 'var(--text-muted)' }}>
+                {m.healed ? 'Здорово ✅' : 'Ещё лечится'}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       </div>
     </>
   );
@@ -158,11 +181,16 @@ export function InfirmaryScenePage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const [symptoms, setSymptoms] = useState<{ part_code: string; symptoms: string[] } | null>(null);
+  const [symptoms, setSymptoms] = useState<{ part_code: string; symptoms: string[]; first_time?: boolean; penalty_due?: number } | null>(null);
   const [showHandbook, setShowHandbook] = useState(false);
   const [result, setResult] = useState<DiagnoseResult | null>(null);
   const [showWellbeing, setShowWellbeing] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [hearts, setHearts] = useState<{ x: number; y: number; k: number } | null>(null);
+  const [healVideoUrl, setHealVideoUrl] = useState<string | null>(null);
+  const [healVideoOpen, setHealVideoOpen] = useState(false);
+  const [healDoneMsg, setHealDoneMsg] = useState<string | null>(null);
+  const [bookImgUrl, setBookImgUrl] = useState<string | null>(null);
   const [previewScale, setPreviewScale] = useState(1);
   const [previewPan, setPreviewPan] = useState({ x: 0, y: 0 });
   const previewBoxRef = useRef<HTMLDivElement | null>(null);
@@ -189,6 +217,14 @@ export function InfirmaryScenePage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
+    api.gameMediaByCode('remedy_heal')
+      .then((gm) => { if (gm.url) setHealVideoUrl(mediaUrl(gm.url)); })
+      .catch(() => {});
+    api.gameMediaByCode('infirmary_book')
+      .then((gm) => { if (gm.url) setBookImgUrl(mediaUrl(gm.url)); })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
     if (!msg) return;
     const t = setTimeout(() => setMsg(null), 4000);
     return () => clearTimeout(t);
@@ -202,6 +238,7 @@ export function InfirmaryScenePage() {
     try {
       const res = await api.examinePatient(detail.patient_id, partCode);
       setSymptoms(res);
+      await load();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally {
@@ -239,9 +276,40 @@ export function InfirmaryScenePage() {
     }
   }
 
-  function doPet() {
+  function doPet(e: React.MouseEvent<HTMLButtonElement>) {
     if (!detail?.patient_name) return;
     setMsg(`🤚 Вы погладили ${detail.patient_name}.`);
+    setHearts({ x: e.clientX, y: e.clientY, k: Date.now() });
+  }
+
+  async function doGiveRemedy() {
+    if (!detail?.patient_id) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await api.giveRemedy(detail.patient_id);
+      const doneMsg = `💊 ${res.patient_name}: лекарство дано, животное здорово!`
+        + (res.otter_granted ? ' 🦦 Выдра стала вашим шестым волшебным питомцем — смотрите Лужайку питомцев!' : '');
+      await load();
+      if (healVideoUrl) {
+        setHealDoneMsg(doneMsg);
+        setHealVideoOpen(true);
+      } else {
+        setMsg(doneMsg);
+      }
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function endHealVideo() {
+    setHealVideoOpen(false);
+    if (healDoneMsg) {
+      setMsg(healDoneMsg);
+      setHealDoneMsg(null);
+    }
   }
 
   if (loading && !detail) {
@@ -274,6 +342,7 @@ export function InfirmaryScenePage() {
               Array.from({ length: detail.cols }).map((__, c) => {
                 const pc = (detail.part_cells ?? []).find((x) => x.col === c && x.row === r);
                 if (!pc) return <div key={`empty-${c}-${r}`} />;
+                const examined = (detail.examined_parts ?? []).includes(pc.part_code);
                 return (
                   <div
                     key={`part-${pc.id}`}
@@ -288,9 +357,15 @@ export function InfirmaryScenePage() {
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 'clamp(16px, 5vw, 38px)', lineHeight: 1,
                       opacity: canExamine ? 0.55 : 0.9,
+                      position: 'relative',
                     }}
                   >
                     🔍
+                    {examined && (
+                      <span style={{ position: 'absolute', top: 2, right: 3, fontSize: 'clamp(8px,2vw,11px)', fontWeight: 700, color: '#ffd9a0', background: 'rgba(10,16,8,0.6)', borderRadius: 5, padding: '0 3px', pointerEvents: 'none' }}>
+                        ❆100
+                      </span>
+                    )}
                   </div>
                 );
               }),
@@ -304,14 +379,36 @@ export function InfirmaryScenePage() {
               onClick={() => setShowHandbook(true)}
               style={{ position: 'absolute', inset: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(20px, 7vw, 52px)', lineHeight: 1 }}
             >
-              📖
+              {bookImgUrl ? (
+                <img src={bookImgUrl} alt="" draggable={false} style={{ maxWidth: '92%', maxHeight: '92%', objectFit: 'contain', pointerEvents: 'none' }} />
+              ) : (
+                '📖'
+              )}
             </div>
           </ZoneRect>
         )}
       </LocationMap>
 
       {detail && active && (
-        <div style={{ position: 'fixed', left: 12, right: 76, bottom: 'calc(12px + var(--vk-inset-bottom, 0px))', zIndex: 30, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <>
+          {(detail.penalty_due ?? 0) > 0 && detail.patient_id != null && (
+            <div style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(64px + var(--vk-inset-bottom, 0px))', zIndex: 30, maxWidth: 560, margin: '0 auto' }}>
+              <div className="fm-card" style={{ background: 'rgba(200,90,90,0.16)', border: '1px solid #c66', padding: 10 }}>
+                <strong style={{ display: 'block', fontSize: 14, color: '#ffb3b3', marginBottom: 4 }}>
+                  ⚠️ Штраф: {detail.penalty_due} ❆ — отшейте его отчётом, чтобы поставить диагноз
+                </strong>
+                <StitchReportForm
+                  contextType="infirmary_penalty"
+                  contextId={detail.patient_id}
+                  required={detail.penalty_due ?? 0}
+                  busy={busy}
+                  onDone={async () => { setMsg('✓ Штраф отшит!'); await load(); }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div style={{ position: 'fixed', left: 12, right: 76, bottom: 'calc(12px + var(--vk-inset-bottom, 0px))', zIndex: 30, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
           {detail.status === 'sick' && (
             isSickScene ? (
               <button
@@ -322,12 +419,20 @@ export function InfirmaryScenePage() {
                 🔍 Приступить к осмотру
               </button>
             ) : (
-              <button className="fm-btn" onClick={() => { setResult(null); setShowHandbook(true); }}>🩺 Поставить диагноз</button>
+              <button
+                className="fm-btn"
+                disabled={(detail.penalty_due ?? 0) > 0}
+                title={(detail.penalty_due ?? 0) > 0 ? `Сначала отшейте штраф ${detail.penalty_due} ❆` : ''}
+                onClick={() => { setResult(null); setShowHandbook(true); }}
+              >
+                🩺 Поставить диагноз
+              </button>
             )
           )}
           {detail.status === 'diagnosed' && (
             <>
               <button className="fm-btn fm-btn-outline" title="Погладить" aria-label="Погладить" onClick={doPet}>🤚</button>
+              <button className="fm-btn" disabled={busy} onClick={doGiveRemedy}>💊 Дать лекарство</button>
               {detail.remedy_lab_field_id != null && (
                 <button className="fm-btn" onClick={() => nav(`/remedy-lab/${detail.remedy_lab_field_id}`)}>⚗️ Сварить лекарство</button>
               )}
@@ -342,6 +447,24 @@ export function InfirmaryScenePage() {
           )}
           <button className="fm-btn fm-btn-outline" onClick={() => { setResult(null); setShowHandbook(true); }}>📖 Книга болезней</button>
         </div>
+        </>
+      )}
+
+      {healVideoOpen && healVideoUrl && (
+        <Modal title="💊 Лечение животного" onClose={endHealVideo}>
+          <video
+            src={healVideoUrl}
+            autoPlay
+            muted
+            playsInline
+            style={{ width: '100%', maxHeight: '55vh', borderRadius: 8 }}
+            onEnded={endHealVideo}
+            onError={endHealVideo}
+          />
+          <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ marginTop: 6 }} onClick={endHealVideo}>
+            Пропустить
+          </button>
+        </Modal>
       )}
 
       {detail && !active && (
@@ -353,9 +476,15 @@ export function InfirmaryScenePage() {
       )}
 
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
+      {hearts && <HeartsBurst key={hearts.k} x={hearts.x} y={hearts.y} />}
 
       {symptoms && (
         <Modal title={`🔍 Осмотр «${BODY_PART_LABELS[symptoms.part_code] || symptoms.part_code}»`} onClose={() => setSymptoms(null)}>
+          {symptoms.first_time === false && (
+            <div className="fm-card" style={{ background: 'rgba(200,90,90,0.14)', border: '1px solid #c66', fontSize: 13, marginBottom: 8 }}>
+              ⚠️ Повторный осмотр: +100 ❆ в долг (всего {symptoms.penalty_due ?? 0}). Перед диагнозом долг нужно отшить.
+            </div>
+          )}
           {symptoms.symptoms.length === 0 ? (
             <div style={{ color: 'var(--text-muted)' }}>В этой части тела всё спокойно.</div>
           ) : (

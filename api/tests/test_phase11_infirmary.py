@@ -107,6 +107,55 @@ def _seed_part_cell(field_id: int, col: int, row: int, part_code: str) -> int:
         s.close()
 
 
+def _img_bytes():
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (10, 10), (50, 100, 150)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _seed_lab_device(admin_client, remedy_id: int) -> tuple[int, int]:
+    lab_r = admin_client.post("/api/admin/fields", json={
+        "name": "Лесная аптека", "cols": 5, "rows": 3, "field_kind": "remedy_lab",
+    })
+    assert lab_r.status_code == 201, lab_r.text
+    lab = lab_r.json()["id"]
+    r = admin_client.post(f"/api/admin/fields/{lab}/remedy-device-cells", json={
+        "col": 0, "row": 0, "install_cards": 1, "remedy_ids": [remedy_id],
+    })
+    assert r.status_code == 201, r.text
+    return lab, r.json()["id"]
+
+
+_BREW_SEQ = 0
+
+
+def _brew_remedy(c, cell_id: int, card_id: int) -> int:
+    global _BREW_SEQ
+    _BREW_SEQ += 1
+    install_amount = 90000 + _BREW_SEQ
+    r = c.post(f"/api/remedy-lab/cells/{cell_id}/install")
+    assert r.status_code == 200, r.text
+    device_id = r.json()["device"]["id"]
+    c.post("/api/stitches/reports", data={
+        "amount": str(install_amount),
+        "context_type": "remedy_device_install",
+        "context_id": str(cell_id),
+    }, files=[("photo_after", ("a.png", _img_bytes(), "image/png"))])
+
+    r2 = c.post(f"/api/remedy-cards/{card_id}/brew", json={"cell_id": cell_id})
+    assert r2.status_code == 200, r2.text
+    brew_required = r2.json()["device"]["brew_required"]
+    assert r2.json()["dice"] and len(r2.json()["dice"]) == 2
+
+    c.post("/api/stitches/reports", data={
+        "amount": str(brew_required),
+        "context_type": "remedy_brew",
+        "context_id": str(device_id),
+    }, files=[("photo_after", ("a.png", _img_bytes(), "image/png"))])
+    return device_id
+
+
 def _set_crosses(vk_id: int, amount: int) -> None:
     from models import User
     s = TestingSessionLocal()
@@ -361,12 +410,14 @@ def test_infirmary_hub_after_release_shows_next(admin_client):
     pid1, _ = _seed_patient("Лис 1", did, 1)
     pid2, _ = _seed_patient("Сова 2", did, 1)
     _seed_user_ingredient(123, ing, 5)
+    _, cell_id = _seed_lab_device(admin_client, rid)
 
     with make_user_client(123, "player") as c:
         assert c.get("/api/infirmary").json()["current"]["id"] == pid1
         d = c.post(f"/api/infirmary/patients/{pid1}/diagnose", json={"disease_id": did})
         card_id = d.json()["remedy_card_id"]
-        assert c.post(f"/api/remedy-cards/{card_id}/brew").status_code == 200
+        _brew_remedy(c, cell_id, card_id)
+        assert c.post(f"/api/infirmary/patients/{pid1}/give-remedy").status_code == 200
         assert c.post(f"/api/infirmary/patients/{pid1}/release").status_code == 200
         hub = c.get("/api/infirmary").json()
         assert hub["current"]["id"] == pid2
@@ -514,7 +565,7 @@ def test_diagnose_correct_gives_card(admin_client):
         assert data["remedy_id"] == rid
 
 
-def test_diagnose_wrong_deducts_200(admin_client):
+def test_diagnose_wrong_adds_debt_200(admin_client):
     did = _seed_disease("Кашель", None, {})
     other = _seed_disease("Хромота", None, {})
     pid, scenes = _seed_patient("Лис", did, 1)
@@ -523,17 +574,21 @@ def test_diagnose_wrong_deducts_200(admin_client):
         r = c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": other})
         assert r.status_code == 200
         assert r.json()["correct"] is False
-        assert r.json()["crosses_balance"] == 300
+        assert r.json()["penalty_due"] == 200
+        assert r.json()["crosses_balance"] == 500
 
 
-def test_diagnose_wrong_blocked_when_balance_low(admin_client):
+def test_diagnose_blocked_while_debt_unpaid(admin_client):
     did = _seed_disease("Кашель", None, {})
     other = _seed_disease("Хромота", None, {})
+    rid = _seed_remedy("Мазь", [])
     pid, scenes = _seed_patient("Лис", did, 1)
     _set_crosses(123, 100)
     with make_user_client(123, "player") as c:
-        r = c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": other})
+        c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": other})
+        r = c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": did})
         assert r.status_code == 400
+        assert "штраф" in r.json()["detail"]
 
 
 def test_diagnose_repeat_after_correct_400(admin_client):
@@ -677,6 +732,7 @@ def test_infirmary_status_progression_scenes(admin_client):
     pid, scenes = _seed_patient("Лис", did, 1)
     _seed_part_cell(scenes["sick"], 0, 0, "nose")
     _seed_user_ingredient(123, ing, 5)
+    _, cell_id = _seed_lab_device(admin_client, rid)
 
     with make_user_client(123, "player") as c:
         d = c.get(f"/api/infirmary/{scenes['sick']}").json()
@@ -691,7 +747,11 @@ def test_infirmary_status_progression_scenes(admin_client):
         assert d["remedy_name"] == "Мазь"
 
         card_id = r.json()["remedy_card_id"]
-        assert c.post(f"/api/remedy-cards/{card_id}/brew").status_code == 200
+        _brew_remedy(c, cell_id, card_id)
+        d = c.get(f"/api/infirmary/{scenes['healthy']}").json()
+        assert d["status"] == "diagnosed"
+
+        assert c.post(f"/api/infirmary/patients/{pid}/give-remedy").status_code == 200
         d = c.get(f"/api/infirmary/{scenes['healthy']}").json()
         assert d["status"] == "treated"
 

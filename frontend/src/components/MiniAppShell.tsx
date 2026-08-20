@@ -17,7 +17,7 @@ const BASE_TABS: Tab[] = [
   { path: '/', label: '🗺️ Поля' },
   { path: '/infirmary', label: '🌲 Лечебница' },
   { path: '/library', label: '📖 Библиотека' },
-  { path: '/potions', label: '🧪 Зелья' },
+  { path: '/brewery', label: '🧪 Зельеварение' },
   { path: '/bonuses', label: '⚡ Бонусы' },
   { path: '/inventory', label: '📦 Склад' },
   { path: '/orders', label: '🧺 Заказы' },
