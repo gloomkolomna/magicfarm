@@ -305,9 +305,8 @@ def test_hub_memories_healthy_images(admin_client):
 
     with make_user_client(123, "player") as c:
         hub = c.get("/api/infirmary").json()
-        mem = next(m for m in hub["memories"] if m["patient_id"] == pid)
-        assert mem["healed"] is False
-        assert "healthy_image_url" in mem
+        assert all(m["patient_id"] != pid for m in hub["memories"])
+        assert hub["memories"] == []
 
         d = c.post(f"/api/infirmary/patients/{pid}/diagnose", json={"disease_id": did})
         _brew_remedy(c, cell_id, d.json()["remedy_card_id"])
@@ -316,6 +315,7 @@ def test_hub_memories_healthy_images(admin_client):
         hub = c.get("/api/infirmary").json()
         mem = next(m for m in hub["memories"] if m["patient_id"] == pid)
         assert mem["healed"] is True
+        assert "healthy_image_url" in mem
 
 
 # ── W-7b: выдра ──

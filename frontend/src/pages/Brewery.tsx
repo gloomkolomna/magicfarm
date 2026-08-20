@@ -31,22 +31,42 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 
 export default function BreweryHubPage() {
   const nav = useNavigate();
-  const { loading: sessionLoading } = useSession();
+  const { user, loading: sessionLoading } = useSession();
   const [fields, setFields] = useState<FieldInfo[]>([]);
+  const [inactivePotions, setInactivePotions] = useState(0);
   const [loading, setLoading] = useState(true);
+  const userLevel = user?.level ?? 0;
 
   useEffect(() => {
     if (sessionLoading) return;
     setLoading(true);
-    api.fields()
-      .then((all) => setFields(all.filter((f) => f.field_kind === 'brewery')))
-      .catch(() => setFields([]))
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.fields().catch(() => [] as FieldInfo[]),
+      api.userPotions().catch(() => []),
+    ]).then(([all, pots]) => {
+      setFields((all as FieldInfo[]).filter((f) => f.field_kind === 'brewery'));
+      setInactivePotions(pots.filter((p) => !p.activated && !p.used).length);
+    }).finally(() => setLoading(false));
   }, [sessionLoading]);
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>🧪 Зельеварение</h1>
+
+      {inactivePotions > 0 && (
+        <button
+          className="fm-card fm-rise"
+          style={{ width: '100%', textAlign: 'left', marginBottom: 14, cursor: 'pointer', background: 'rgba(200,150,90,0.16)', border: '1px solid #c9a05a', padding: 10 }}
+          onClick={() => nav('/bonuses')}
+        >
+          <strong style={{ display: 'block', fontSize: 14, color: '#ffd9a0' }}>
+            ⚠️ У вас {inactivePotions} неактивированн{inactivePotions === 1 ? 'ое' : 'ых'} зель{inactivePotions === 1 ? 'е' : 'я'}
+          </strong>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            Сваренное зелье не действует, пока не нажать «Активировать». Перейти в «Мои зелья» →
+          </span>
+        </button>
+      )}
 
       <h2 style={{ fontSize: 16, marginBottom: 10 }}>Зельеварни</h2>
       {loading ? (
@@ -55,12 +75,23 @@ export default function BreweryHubPage() {
         <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Зельеварен пока нет.</div>
       ) : (
         <div className="fm-grid" style={{ marginBottom: 16 }}>
-          {fields.map((f) => (
-            <button key={f.id} className="fm-card fm-rise" style={{ fontSize: 13, textAlign: 'left', cursor: 'pointer' }} onClick={() => nav(`/brewery/${f.id}`)}>
-              <strong>🧪 {f.name}</strong>
-              <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{f.cols}×{f.rows} клеток</div>
-            </button>
-          ))}
+          {fields.map((f) => {
+            const locked = f.min_level > 0 && f.min_level > userLevel;
+            if (locked) {
+              return (
+                <div key={f.id} className="fm-card" style={{ opacity: 0.5, textAlign: 'left' }}>
+                  <strong style={{ fontSize: 13 }}>🔒 {f.name}</strong>
+                  <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>Откроется на уровне {f.min_level}</div>
+                </div>
+              );
+            }
+            return (
+              <button key={f.id} className="fm-card fm-rise" style={{ fontSize: 13, textAlign: 'left', cursor: 'pointer' }} onClick={() => nav(`/brewery/${f.id}`)}>
+                <strong>🧪 {f.name}</strong>
+                <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{f.cols}×{f.rows} клеток</div>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -81,6 +112,11 @@ const LEVEL_LABELS: Record<string, string> = {
   green: '🟢 Простые',
   blue: '🔵 Средние',
   violet: '🟣 Сложные',
+};
+
+const LEVEL_LOCK_HINTS: Record<string, string> = {
+  blue: 'Сварите все 🟢 простые зелья, чтобы открыть средние',
+  violet: 'Сварите все 🔵 средние зелья, чтобы открыть сложные',
 };
 
 const CAULDRON_STATUS: Record<string, { label: string; color: string }> = {
@@ -158,6 +194,9 @@ function PotionsCatalog() {
   const totalLevelPages = sortedLevels.length;
   const safeLevelPage = Math.max(0, Math.min(levelPage, Math.max(0, totalLevelPages - 1)));
   const currentLevel = sortedLevels[safeLevelPage];
+  const levelUnlocked = currentLevel
+    ? groupedByLevel[currentLevel].every((r) => r.unlocked)
+    : false;
 
   const cauldronStatus = cauldron ? CAULDRON_STATUS[cauldron.status] || { label: cauldron.status, color: 'var(--text-muted)' } : null;
 
@@ -239,7 +278,7 @@ function PotionsCatalog() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, background: 'linear-gradient(180deg, var(--leaf) 0%, var(--grass) 100%)', border: '1px solid var(--grass-deep)', borderRadius: 'var(--radius-md)', padding: '8px 10px', color: '#1a2414' }}>
               <button disabled={safeLevelPage === 0} onClick={() => setLevelPage(safeLevelPage - 1)} style={{ cursor: safeLevelPage === 0 ? 'default' : 'pointer', opacity: safeLevelPage === 0 ? 0.4 : 1, padding: '6px 14px', fontSize: 18, background: 'transparent', border: 'none', color: 'inherit' }}>◀</button>
               <span style={{ fontWeight: 600 }}>
-                {LEVEL_LABELS[currentLevel] || currentLevel}
+                {levelUnlocked ? '' : '🔒 '}{LEVEL_LABELS[currentLevel] || currentLevel}
               </span>
               <button disabled={safeLevelPage >= totalLevelPages - 1} onClick={() => setLevelPage(safeLevelPage + 1)} style={{ cursor: safeLevelPage >= totalLevelPages - 1 ? 'default' : 'pointer', opacity: safeLevelPage >= totalLevelPages - 1 ? 0.4 : 1, padding: '6px 14px', fontSize: 18, background: 'transparent', border: 'none', color: 'inherit' }}>▶</button>
             </div>
@@ -249,9 +288,14 @@ function PotionsCatalog() {
             <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет доступных рецептов.</div>
           ) : currentLevel ? (
             <div style={{ marginBottom: 14 }}>
+              {!levelUnlocked && (
+                <div className="fm-card" style={{ marginBottom: 10, fontSize: 13, color: 'var(--accent-warm)' }}>
+                  🔒 {LEVEL_LOCK_HINTS[currentLevel] || 'Сварите все зелья предыдущего уровня, чтобы открыть этот.'}
+                </div>
+              )}
               <div className="fm-grid">
                 {groupedByLevel[currentLevel].map((r) => (
-                  <div key={r.id} className="fm-card fm-rise" style={{ textAlign: 'center' }}>
+                  <div key={r.id} className="fm-card fm-rise" style={{ textAlign: 'center', opacity: levelUnlocked ? 1 : 0.55 }}>
                     {r.image_url && (
                       <SpritePedestal url={mediaUrl(r.image_url)} height={120} onZoom={setZoomedImg} />
                     )}
@@ -310,7 +354,7 @@ function PotionsCatalog() {
                     <button
                       className="fm-btn fm-btn-sm fm-btn-wrap"
                       style={{ width: '100%', marginTop: 10 }}
-                      disabled={busy || !!cauldron}
+                      disabled={busy || !!cauldron || !levelUnlocked}
                       onClick={() => createCauldron(r.id)}
                     >
                       Установить котёл
@@ -764,13 +808,26 @@ export function BreweryScenePage() {
             <div className="fm-card" style={{ color: 'var(--text-muted)' }}>В этой зельеварне нет привязанных зелий.</div>
           ) : (
             <div className="fm-grid">
-              {(field.potion_recipes ?? []).map((r) => (
-                <div key={r.id} className="fm-card fm-rise" style={{ textAlign: 'center', cursor: activeCauldron ? 'default' : 'pointer', opacity: activeCauldron ? 0.6 : 1 }} onClick={() => { if (!activeCauldron) installBrewCauldron(r.id); }}>
-                  {r.image_url && <img src={mediaUrl(r.image_url)} alt="" style={{ height: 72, maxWidth: '100%', objectFit: 'contain', marginBottom: 6 }} />}
-                  <strong style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>{r.name}</strong>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{r.ingredient_slots.length} ингр. · 🪙 {r.reward_coins}</div>
-                </div>
-              ))}
+              {(field.potion_recipes ?? []).map((r) => {
+                const lockedRecipe = !r.unlocked;
+                return (
+                  <div
+                    key={r.id}
+                    className="fm-card fm-rise"
+                    style={{ textAlign: 'center', cursor: activeCauldron || lockedRecipe ? 'default' : 'pointer', opacity: activeCauldron ? 0.6 : lockedRecipe ? 0.5 : 1 }}
+                    onClick={() => { if (!activeCauldron && !lockedRecipe) installBrewCauldron(r.id); }}
+                  >
+                    {r.image_url && <img src={mediaUrl(r.image_url)} alt="" style={{ height: 72, maxWidth: '100%', objectFit: 'contain', marginBottom: 6 }} />}
+                    <strong style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>{lockedRecipe ? '🔒 ' : ''}{r.name}</strong>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{r.ingredient_slots.length} ингр. · 🪙 {r.reward_coins}</div>
+                    {lockedRecipe && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                        {LEVEL_LOCK_HINTS[r.level] || 'Сварите все зелья предыдущего уровня'}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </Modal>

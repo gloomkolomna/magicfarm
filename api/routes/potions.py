@@ -75,15 +75,39 @@ class PotionRecipeOut(BaseModel):
     description: str | None
     image_url: str | None
     card_image_url: str | None = None
+    unlocked: bool = True
 
 
-def _recipe_out(r: PotionRecipe) -> PotionRecipeOut:
+RECIPE_LEVEL_ORDER = ("green", "blue", "violet")
+
+
+def _unlocked_levels(db: Session, user: User) -> set[str]:
+    brewed = {
+        up.potion_recipe_id
+        for up in db.query(UserPotion).filter(UserPotion.user_id == user.vk_id).all()
+    }
+    by_level: dict[str, list[PotionRecipe]] = {}
+    for r in db.query(PotionRecipe).all():
+        by_level.setdefault(r.level, []).append(r)
+    unlocked: set[str] = set()
+    for i, lv in enumerate(RECIPE_LEVEL_ORDER):
+        if i == 0:
+            unlocked.add(lv)
+            continue
+        prev_recipes = by_level.get(RECIPE_LEVEL_ORDER[i - 1], [])
+        if prev_recipes and all(r.id in brewed for r in prev_recipes):
+            unlocked.add(lv)
+    return unlocked
+
+
+def _recipe_out(r: PotionRecipe, unlocked: bool = True) -> PotionRecipeOut:
     slots = json.loads(r.ingredient_slots) if r.ingredient_slots else []
     return PotionRecipeOut(
         id=r.id, code=r.code, name=r.name, level=r.level,
         ingredient_slots=slots, bonus_code=r.bonus_code,
         reward_coins=r.reward_coins, description=r.description, image_url=r.image_url,
         card_image_url=r.card_image_url,
+        unlocked=unlocked,
     )
 
 
@@ -123,7 +147,8 @@ def list_recipes(
     q = db.query(PotionRecipe).order_by(PotionRecipe.id.asc())
     if level is not None:
         q = q.filter(PotionRecipe.level == level)
-    return [_recipe_out(r) for r in q.limit(100).all()]
+    unlocked = _unlocked_levels(db, user)
+    return [_recipe_out(r, r.level in unlocked) for r in q.limit(100).all()]
 
 
 # ── Cauldrons ──
@@ -141,6 +166,12 @@ def create_cauldron(
     recipe = db.query(PotionRecipe).filter(PotionRecipe.id == req.recipe_id).first()
     if recipe is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
+
+    if recipe.level not in _unlocked_levels(db, user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Рецепты этого уровня ещё не открыты. Сварите все зелья предыдущего уровня.",
+        )
 
     existing = db.query(Cauldron).filter(
         Cauldron.user_id == user.vk_id, Cauldron.status != "done"
@@ -515,8 +546,13 @@ def _apply_instant_bonus(user: User, code: str, db: Session) -> None:
         return
     if code == "free_pet":
         from models import Pet, UserPet
-        owned = {up.pet_id for up in db.query(UserPet).filter(UserPet.user_id == user.vk_id).all()}
         pets = db.query(Pet).order_by(Pet.id.asc()).all()
+        if not pets:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Каталог питомцев пуст — бонус временно недоступен, обратитесь к админу",
+            )
+        owned = {up.pet_id for up in db.query(UserPet).filter(UserPet.user_id == user.vk_id).all()}
         free = next((p for p in pets if p.id not in owned), None)
         if free is not None:
             db.add(UserPet(user_id=user.vk_id, pet_id=free.id))
@@ -526,6 +562,11 @@ def _apply_instant_bonus(user: User, code: str, db: Session) -> None:
         u.level = (u.level or 0) + 1
         if u.round < u.level:
             u.round = u.level
+        from models import LevelGate
+        from services.leveling import _apply_unlock
+        gate = db.query(LevelGate).filter(LevelGate.level == u.level).first()
+        if gate is not None and gate.unlock_type:
+            _apply_unlock(u, gate.unlock_type)
     elif code == "extra_barnyard_slot":
         u.unlocked_barnyard = (u.unlocked_barnyard or 0) + 1
     elif code == "unlock_garden_l3":

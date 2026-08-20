@@ -133,7 +133,9 @@ export default function FieldsPage() {
           )}
           <div className="fm-grid">
             {current.items.map((f) => {
-              const locked = f.min_level > 0 && f.min_level > userLevel;
+              const bonusOpen = (f.field_kind === 'garden_beds' && (user?.unlocked_plot_level ?? 1) >= 3)
+                || (f.field_kind === 'orchard' && (user?.unlocked_garden_level ?? 0) >= 3);
+              const locked = f.min_level > 0 && f.min_level > userLevel && !bonusOpen;
               if (locked) {
                 return (
                   <div key={f.id} className="fm-card" style={{ opacity: 0.5, textAlign: 'left' }}>

@@ -153,16 +153,14 @@ export default function InfirmaryHubPage() {
       ) : (
         <div className="fm-grid">
           {(hub?.memories ?? []).map((m) => (
-            <div key={m.patient_id} className="fm-card fm-rise" style={{ textAlign: 'center', opacity: m.healed ? 1 : 0.55 }}>
-              {m.healed && m.healthy_image_url ? (
+            <div key={m.patient_id} className="fm-card fm-rise" style={{ textAlign: 'center' }}>
+              {m.healthy_image_url ? (
                 <img src={mediaUrl(m.healthy_image_url)} alt="" style={{ width: '100%', maxHeight: 120, objectFit: 'contain', marginBottom: 6, borderRadius: 8 }} />
               ) : (
-                <div style={{ fontSize: 40, lineHeight: '120px', color: 'var(--text-muted)' }}>{m.healed ? '🐾' : '❓'}</div>
+                <div style={{ fontSize: 40, lineHeight: '120px' }}>🐾</div>
               )}
               <strong style={{ display: 'block', fontSize: 13 }}>{m.name}</strong>
-              <div style={{ fontSize: 12, color: m.healed ? 'var(--success)' : 'var(--text-muted)' }}>
-                {m.healed ? 'Здорово ✅' : 'Ещё лечится'}
-              </div>
+              <div style={{ fontSize: 12, color: 'var(--success)' }}>Здорово ✅</div>
             </div>
           ))}
         </div>
@@ -330,7 +328,7 @@ export function InfirmaryScenePage() {
     <>
       <InfirmaryBackground />
       <LocationMap mapUrl={detail?.map_url ?? null} name={detail?.name ?? ''} emoji="🌲" onBack={() => nav('/infirmary')}>
-        {detail && (
+        {detail && detail.status === 'sick' && (
           <div
             style={{
               position: 'absolute', inset: 0, display: 'grid',

@@ -38,6 +38,16 @@ def product_lock_reason(product, user, db: Session) -> str | None:
         .all()
     )
     suitable = [f for f in fields if f.plant_category is None or f.plant_category == plant.category]
-    if suitable and all((f.min_level or 0) > (user.level or 0) for f in suitable):
+
+    def _blocked_by_level(f) -> bool:
+        if (f.min_level or 0) <= (user.level or 0):
+            return False
+        if f.field_kind == "garden_beds" and (user.unlocked_plot_level or 1) >= 3:
+            return False
+        if f.field_kind == "orchard" and (user.unlocked_garden_level or 0) >= 3:
+            return False
+        return True
+
+    if suitable and all(_blocked_by_level(f) for f in suitable):
         return f"Локация откроется на {min(f.min_level for f in suitable)} уровне"
     return None

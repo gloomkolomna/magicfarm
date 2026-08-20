@@ -54,6 +54,7 @@ export interface PotionRecipe {
   description: string | null;
   image_url: string | null;
   card_image_url?: string | null;
+  unlocked: boolean;
 }
 
 export const POTION_BONUS_LABELS: Record<string, string> = {

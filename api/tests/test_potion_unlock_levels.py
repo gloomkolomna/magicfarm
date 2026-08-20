@@ -66,6 +66,71 @@ def test_me_returns_unlock_levels(admin_client):
     assert me["unlocked_garden_level"] >= 0
 
 
+def test_free_pet_grants_pet_when_catalog_has_free(admin_client):
+    from models import Pet
+    s = TestingSessionLocal()
+    try:
+        if s.query(Pet).count() == 0:
+            s.add(Pet(code="wolf", name="Волк"))
+            s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as c:
+        before = c.get("/api/pets").json()
+        _activate(c, "free_pet")
+        after = c.get("/api/pets").json()
+    assert len(after) == len(before) + 1
+
+
+def test_free_pet_empty_catalog_400_and_potion_kept(admin_client):
+    from models import Pet
+    s = TestingSessionLocal()
+    try:
+        s.query(Pet).delete(synchronize_session=False)
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as c:
+        _give_potion(123, "free_pet")
+        potion_id = c.get("/api/potions").json()[0]["id"]
+        r = c.post(f"/api/potions/{potion_id}/activate")
+        assert r.status_code == 400
+        assert "Каталог питомцев пуст" in r.json()["detail"]
+        pot = next(p for p in c.get("/api/potions").json() if p["id"] == potion_id)
+        assert pot["activated"] is False
+        assert pot["used"] is False
+
+
+def test_free_pet_all_owned_raises_slot(admin_client):
+    from models import Pet, User, UserPet
+    s = TestingSessionLocal()
+    try:
+        pets = s.query(Pet).all()
+        if not pets:
+            pets = [Pet(code="wolf2", name="Волк 2")]
+            s.add(pets[0])
+            s.flush()
+        for p in pets:
+            s.add(UserPet(user_id=123, pet_id=p.id))
+        u = s.query(User).filter(User.vk_id == 123).first()
+        if u is None:
+            u = User(vk_id=123, role="player", unlocked_pets=5)
+            s.add(u)
+        else:
+            u.unlocked_pets = 5
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as c:
+        before = c.get("/api/me").json()["unlocked_pets"]
+        _activate(c, "free_pet")
+        after = c.get("/api/me").json()["unlocked_pets"]
+    assert after == before + 1
+
+
 def test_unlock_garden_l3_potion_opens_beds(admin_client):
     fid = _make_bed_field(admin_client)
     pid = _make_plant(admin_client, "garden_beds", 3, "Трёхуровневый корешок")

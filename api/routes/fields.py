@@ -14,7 +14,7 @@ from routes.admin_fields import (
     _field_to_out, _get_field_or_404, _plant_to_out,
 )
 from routes.farm import PlotOut, _plot_to_out
-from routes.potions import CauldronOut, _cauldron_detail, _recipe_out
+from routes.potions import CauldronOut, _cauldron_detail, _recipe_out, _unlocked_levels
 from routes.settings import CRYSTAL_COLORS, crystal_norm, get_production_required
 from services.achievements import check_and_award
 from services.card_draw import calculate_norm, cards_to_json, draw_cards, plant_unit_norm
@@ -26,6 +26,15 @@ router = APIRouter(prefix="/api/fields", tags=["fields"])
 
 class FieldListItem(FieldOut):
     pass
+
+
+def _bonus_opens_field(f: Field, user: User) -> bool:
+    """Бонус «Грядки/Сады 3 уровня» открывает локацию раньше маршрутного листа."""
+    if f.field_kind == "garden_beds" and (user.unlocked_plot_level or 1) >= 3:
+        return True
+    if f.field_kind == "orchard" and (user.unlocked_garden_level or 0) >= 3:
+        return True
+    return False
 
 
 class BarnyardCellOut(BaseModel):
@@ -255,6 +264,12 @@ def get_field(
 ):
     f = _get_field_or_404(field_id, db)
 
+    if f.field_kind == "brewery" and f.min_level is not None and (user.level or 0) < f.min_level:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Эта локация пока недоступна",
+        )
+
     cell_ids = [c.id for c in f.cells if c.kind == "bed"]
     cell_plots: dict[int, Plot] = {}
     if cell_ids:
@@ -332,6 +347,7 @@ def get_field(
     potion_recipes = []
     active_cauldron = None
     if f.field_kind == "brewery":
+        unlocked_levels = _unlocked_levels(db, user)
         for z in f.brewery_zones:
             r = z.recipe
             brewery_zones.append(BreweryZonePublic(
@@ -342,7 +358,7 @@ def get_field(
                 recipe_image=r.image_url if r else None,
                 recipe_card_image=r.card_image_url if r else None,
             ))
-        potion_recipes = [_recipe_out(fpr.recipe) for fpr in f.potion_recipes]
+        potion_recipes = [_recipe_out(fpr.recipe, fpr.recipe.level in unlocked_levels) for fpr in f.potion_recipes]
         c = db.query(Cauldron).filter(
             Cauldron.user_id == user.vk_id, Cauldron.status != "done"
         ).first()
@@ -408,7 +424,7 @@ def plant_on_cell(
             detail="Это растение недоступно в данной локации",
         )
 
-    if f.min_level is not None and (user.level or 0) < f.min_level:
+    if f.min_level is not None and (user.level or 0) < f.min_level and not _bonus_opens_field(f, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Эта локация пока недоступна",
@@ -640,7 +656,7 @@ def plant_on_bed(
             detail="Этот слот уже занят деревом",
         )
 
-    if f.min_level is not None and (user.level or 0) < f.min_level:
+    if f.min_level is not None and (user.level or 0) < f.min_level and not _bonus_opens_field(f, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Эта локация пока недоступна",

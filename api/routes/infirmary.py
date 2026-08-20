@@ -301,11 +301,13 @@ def get_infirmary(
 
     memories = []
     for p in patients:
+        if p.id not in healed:
+            continue
         healthy = next((s for s in p.scenes if s.clinic_stage == "healthy"), None)
         memories.append(InfirmaryMemoryOut(
             patient_id=p.id, name=p.name, level=p.level,
             healthy_image_url=healthy.map_url if healthy else None,
-            healed=p.id in healed,
+            healed=True,
         ))
 
     return InfirmaryOut(levels=levels, current=current, locations=locations, memories=memories)
