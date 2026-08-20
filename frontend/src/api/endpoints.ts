@@ -972,8 +972,10 @@ export interface DeviceState {
 
 export interface DeviceCell {
   id: number;
-  col: number;
-  row: number;
+  col1: number;
+  row1: number;
+  col2: number;
+  row2: number;
   install_cards: number;
   remedies: DeviceRemedy[];
   device: DeviceState | null;
@@ -1048,8 +1050,10 @@ export interface Collection {
 
 export interface AdminDeviceCell {
   id: number;
-  col: number;
-  row: number;
+  col1: number;
+  row1: number;
+  col2: number;
+  row2: number;
   install_cards: number;
   remedies: { remedy_id: number; remedy_name: string; remedy_image_url: string | null }[];
 }
@@ -1836,7 +1840,7 @@ export const api = {
   // ── Админ: клетки поляны и лавки ──
   adminCreateGatherCell: (fieldId: number, data: { col: number; row: number; window: string; ingredient_ids: number[] }) =>
     client.post<GatherCell>(`/admin/fields/${fieldId}/gather-cells`, data).then((r) => r.data),
-  adminCreateRemedyDeviceCell: (fieldId: number, data: { col: number; row: number; install_cards: number; remedy_ids: number[] }) =>
+  adminCreateRemedyDeviceCell: (fieldId: number, data: { col1: number; row1: number; col2: number; row2: number; install_cards: number; remedy_ids: number[] }) =>
     client.post<AdminDeviceCell>(`/admin/fields/${fieldId}/remedy-device-cells`, data).then((r) => r.data),
   adminUpdateRemedyDeviceCell: (fieldId: number, id: number, data: { install_cards?: number; remedy_ids?: number[] }) =>
     client.put<AdminDeviceCell>(`/admin/fields/${fieldId}/remedy-device-cells/${id}`, data).then((r) => r.data),

@@ -73,7 +73,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const [name, setName] = useState('');
   const [minLevel, setMinLevel] = useState('');
 
-  const [multiModal, setMultiModal] = useState<{ c1: number; r1: number; c2: number; r2: number } | null>(null);
+  const [multiModal, setMultiModal] = useState<{ c1: number; r1: number; c2: number; r2: number; installCards: string; ids: number[] } | null>(null);
   const [tentName, setTentName] = useState('');
   const [tentKind, setTentKind] = useState('alchemy');
   const [tentIsKassa, setTentIsKassa] = useState(false);
@@ -172,16 +172,10 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       return;
     }
     if (brush === 'remedy_device') {
-      const existing = (field?.device_cells ?? []).find((dc) => dc.col === c && dc.row === r);
-      setCellModal({
-        kind: 'remedy_device',
-        col: c,
-        row: r,
-        window: 'always',
-        ids: existing ? existing.remedies.map((r2) => r2.remedy_id) : [],
-        partCode: '',
-        installCards: String(existing?.install_cards ?? 10),
-        existingId: existing?.id ?? null,
+      setMultiDraft((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        return next;
       });
       return;
     }
@@ -296,6 +290,12 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         return;
       }
     }
+    for (const d of field?.device_cells ?? []) {
+      if (!(c2 < d.col1 || c1 > d.col2 || r2 < d.row1 || r1 > d.row2)) {
+        setMsg('✗ Пересекается с прибором аптеки');
+        return;
+      }
+    }
     if (isInfirmaryZoneBrush(brush)) {
       setTentName('');
     } else if (brush === 'house') {
@@ -308,7 +308,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     setTentImage(null);
     setBrewImage(null);
     setTentIsKassa(false);
-    setMultiModal({ c1, r1, c2, r2 });
+    setMultiModal({ c1, r1, c2, r2, installCards: '10', ids: [] });
   }
 
   async function saveMulti() {
@@ -337,6 +337,13 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2,
         });
         setMsg('✓ Зона книги размещена');
+      } else if (brush === 'remedy_device') {
+        await api.adminCreateRemedyDeviceCell(fieldId, {
+          col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2,
+          install_cards: Math.max(1, Number(multiModal.installCards) || 10),
+          remedy_ids: multiModal.ids,
+        });
+        setMsg('✓ Прибор аптеки размещён');
       } else {
         await api.adminCreateTent(
           fieldId,
@@ -375,13 +382,15 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         }
         setMsg('✓ Клетка бартера настроена');
       } else if (cellModal.kind === 'remedy_device') {
-        const payload = { install_cards: Math.max(1, Number(cellModal.installCards) || 10), remedy_ids: cellModal.ids };
-        if (cellModal.existingId != null) {
-          await api.adminUpdateRemedyDeviceCell(fieldId, cellModal.existingId, payload);
-        } else {
-          await api.adminCreateRemedyDeviceCell(fieldId, { col: cellModal.col, row: cellModal.row, install_cards: payload.install_cards, remedy_ids: payload.remedy_ids });
+        if (cellModal.existingId == null) {
+          setMsg('✗ Размещайте приборы кистью «Прибор аптеки» мультивыбором');
+          return;
         }
-        setMsg('✓ Прибор аптеки настроен');
+        await api.adminUpdateRemedyDeviceCell(fieldId, cellModal.existingId, {
+          install_cards: Math.max(1, Number(cellModal.installCards) || 10),
+          remedy_ids: cellModal.ids,
+        });
+        setMsg('✓ Прибор аптеки обновлён');
       } else {
         if (cellModal.existingId != null) {
           await api.adminUpdatePartCell(fieldId, cellModal.existingId, { part_code: cellModal.partCode });
@@ -801,7 +810,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           : brush === 'body_part'
           ? 'Тап по клетке открывает настройку части тела: выберите часть из списка и сохраните.'
           : brush === 'remedy_device'
-          ? 'Тап по клетке открывает настройку прибора аптеки: карты на установку и список лекарств.'
+          ? 'Тапайте по клеткам под прибор аптеки, затем «Разместить прибор»: карты на установку и список лекарств.'
           : brush === 'inf_book'
           ? 'Выделите клетки под книгу — при тапе игрок увидит таблицу симптомов и болезней.'
           : brush === 'bed' && field?.plant_category === 'orchard'
@@ -836,7 +845,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             if (c.kind === 'tent') {
               fill = KIND_FILL.tent;
             } else {
-              const isMultiCell = (isTentBrush(brush) || isBrewMultiBrush(brush) || isInfirmaryZoneBrush(brush) || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && multiDraft.has(key);
+              const isMultiCell = (isTentBrush(brush) || isBrewMultiBrush(brush) || isInfirmaryZoneBrush(brush) || brush === 'remedy_device' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && multiDraft.has(key);
               if (isMultiCell) fill = KIND_FILL.tent;
               else fill = KIND_FILL[c.kind] ?? 'transparent';
             }
@@ -955,6 +964,35 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
               </g>
             );
           })}
+          {/* Зоны приборов аптеки */}
+          {field.device_cells?.map((z) => {
+            const zw = (z.col2 - z.col1 + 1) * sz;
+            const zh = (z.row2 - z.row1 + 1) * sz;
+            return (
+              <g key={`dv-${z.id}`} style={{ pointerEvents: 'none' }}>
+                <rect
+                  x={z.col1 * sz}
+                  y={z.row1 * sz}
+                  width={zw}
+                  height={zh}
+                  fill="rgba(160,120,220,0.18)"
+                  stroke="rgba(160,120,220,0.7)"
+                  strokeDasharray="4 3"
+                  strokeWidth={1}
+                />
+                <text
+                  x={z.col1 * sz + zw / 2}
+                  y={z.row1 * sz + zh / 2 + 4}
+                  fill="#fff"
+                  fontSize={11}
+                  textAnchor="middle"
+                  style={{ textShadow: '0 1px 2px #000' }}
+                >
+                  🔧 Прибор
+                </text>
+              </g>
+            );
+          })}
           {/* Иконки клеток по итоговому состоянию (драфт) */}
           {field.cells.map((c) => {
             const key = `${c.col},${c.row}`;
@@ -964,7 +1002,6 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             else if (c.kind === 'pet') icon = '🐾';
             else if (c.kind === 'barnyard') icon = '🐄';
             else if (c.kind === 'gather') icon = '🌿';
-            else if (c.kind === 'remedy_device') icon = '🔧';
             else if (c.kind === 'trade') icon = '🛒';
             else if (c.kind === 'body_part') icon = '🔍';
             if (!icon) return null;
@@ -992,7 +1029,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 width={sz}
                 height={sz}
                 fill="transparent"
-                style={{ cursor: (isTentBrush(brush) || isBrewMultiBrush(brush) || isInfirmaryZoneBrush(brush) || brush === 'brew_ingredient' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) ? 'crosshair' : 'pointer' }}
+                style={{ cursor: (isTentBrush(brush) || isBrewMultiBrush(brush) || isInfirmaryZoneBrush(brush) || brush === 'remedy_device' || brush === 'brew_ingredient' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) ? 'crosshair' : 'pointer' }}
                 onClick={() => onCellClick(c, r)}
               />
             )),
@@ -1000,9 +1037,9 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         </svg>
       </div>
 
-      {(isTentBrush(brush) || isBrewMultiBrush(brush) || isInfirmaryZoneBrush(brush) || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && (
+      {(isTentBrush(brush) || isBrewMultiBrush(brush) || isInfirmaryZoneBrush(brush) || brush === 'remedy_device' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && (
         <button className="fm-btn fm-btn-sm" style={{ marginBottom: 10 }} disabled={busy || multiDraft.size === 0} onClick={openMultiModal}>
-          {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону' : brush === 'brew_cauldron' ? '🍲 Разместить место котла' : brush === 'brew_jar' ? '🧪 Разместить банку' : brush === 'brew_card' ? '🃏 Разместить карточку' : '📖 Разместить книгу'} ({multiDraft.size})
+          {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону' : brush === 'brew_cauldron' ? '🍲 Разместить место котла' : brush === 'brew_jar' ? '🧪 Разместить банку' : brush === 'brew_card' ? '🃏 Разместить карточку' : brush === 'remedy_device' ? '🔧 Разместить прибор' : '📖 Разместить книгу'} ({multiDraft.size})
         </button>
       )}
 
@@ -1274,6 +1311,54 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         </>
       )}
 
+      {/* Приборы аптеки (лаборатория снадобий) */}
+      {field?.field_kind === 'remedy_lab' && (
+        <>
+          <h3>🔧 Приборы аптеки</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Кистью «Прибор аптеки» выделите прямоугольник — один прибор на всю зону. Карты на установку и лекарства задаются при размещении.
+          </p>
+          <div className="fm-grid" style={{ marginBottom: 14 }}>
+            {(field.device_cells ?? []).map((d) => (
+              <div key={d.id} className="fm-card">
+                <strong>🔧 Прибор</strong>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {d.col2 - d.col1 + 1}×{d.row2 - d.row1 + 1} · [{d.col1},{d.row1}]
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {d.remedies.map((r) => r.remedy_name).join(', ') || '—'}
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  <button
+                    className="fm-btn fm-btn-sm fm-btn-outline"
+                    style={{ flex: 1 }}
+                    disabled={busy}
+                    onClick={() => setCellModal({
+                      kind: 'remedy_device', col: d.col1, row: d.row1,
+                      window: 'always', ids: d.remedies.map((r2) => r2.remedy_id),
+                      partCode: '', installCards: String(d.install_cards), existingId: d.id,
+                    })}
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    className="fm-btn fm-btn-sm fm-btn-danger"
+                    style={{ flex: 1 }}
+                    disabled={busy}
+                    onClick={() => deleteRemedyDeviceCell(d.id)}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            ))}
+            {(field.device_cells ?? []).length === 0 && (
+              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Приборов пока нет — разместите кистью выше.</div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* Привязка объектов локации */}
       {field?.field_kind === 'barnyard' ? (
         <>
@@ -1498,7 +1583,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'calc(var(--shell-max-width) * 0.7)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <h3 style={{ margin: 0 }}>
-                {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом ведьмы' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону питомца' : brush === 'brew_cauldron' ? '🍲 Место котла' : brush === 'brew_jar' ? '🧪 Банка зелья' : brush === 'brew_card' ? '🃏 Карточка рецепта' : '📖 Зона книги'}
+                {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом ведьмы' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону питомца' : brush === 'brew_cauldron' ? '🍲 Место котла' : brush === 'brew_jar' ? '🧪 Банка зелья' : brush === 'brew_card' ? '🃏 Карточка рецепта' : brush === 'remedy_device' ? '🔧 Прибор аптеки' : '📖 Зона книги'}
               </h3>
               <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setMultiModal(null)}>✕</button>
             </div>
@@ -1548,12 +1633,47 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
               <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                 Тап по этим клеткам откроет таблицу симптомов и болезней.
               </p>
+            ) : brush === 'remedy_device' ? (
+              <>
+                <label style={lbl}>Карт для нормы на установку (1–30)</label>
+                <input
+                  className="fm-input"
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={multiModal.installCards}
+                  onChange={(e) => setMultiModal({ ...multiModal, installCards: e.target.value })}
+                />
+                <label style={{ ...lbl, marginTop: 10 }}>Лекарства, производимые на приборе</label>
+                <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 8 }}>
+                  {allRemedies.length === 0 ? (
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                      Сначала создайте лекарства в разделе «Лечебница → Лекарства».
+                    </div>
+                  ) : allRemedies.map((rem) => (
+                    <label key={rem.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px', fontSize: 14, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={multiModal.ids.includes(rem.id)}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...multiModal.ids, rem.id]
+                            : multiModal.ids.filter((x) => x !== rem.id);
+                          setMultiModal({ ...multiModal, ids: next });
+                        }}
+                      />
+                      {rem.image_url && <img src={mediaUrl(rem.image_url)} alt="" style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 4 }} />}
+                      {rem.name}
+                    </label>
+                  ))}
+                </div>
+              </>
             ) : (
               <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                 {brush === 'bed' ? 'Слот садового дерева: игрок сажает сюда 1 дерево (на весь прямоугольник).' : 'Мульти-клеточная зона для питомца.'}
               </p>
             )}
-            <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || (isTentBrush(brush) && !tentName.trim())} onClick={saveMulti}>
+            <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || (isTentBrush(brush) && !tentName.trim()) || (brush === 'remedy_device' && multiModal.ids.length === 0)} onClick={saveMulti}>
               Разместить
             </button>
           </div>

@@ -1554,8 +1554,10 @@ class DeviceRemedyItemOut(BaseModel):
 
 class RemedyDeviceCellOut(BaseModel):
     id: int
-    col: int
-    row: int
+    col1: int
+    row1: int
+    col2: int
+    row2: int
     install_cards: int
     remedies: list[DeviceRemedyItemOut]
 
@@ -1570,7 +1572,9 @@ def _check_remedy_lab_field(f: Field) -> None:
 
 def _device_cell_out(cell: RemedyDeviceCell) -> RemedyDeviceCellOut:
     return RemedyDeviceCellOut(
-        id=cell.id, col=cell.col, row=cell.row,
+        id=cell.id, col1=cell.col, row1=cell.row,
+        col2=cell.col2 if cell.col2 is not None else cell.col,
+        row2=cell.row2 if cell.row2 is not None else cell.row,
         install_cards=cell.install_cards or 10,
         remedies=[
             DeviceRemedyItemOut(
@@ -1584,8 +1588,10 @@ def _device_cell_out(cell: RemedyDeviceCell) -> RemedyDeviceCellOut:
 
 
 class RemedyDeviceCellCreate(BaseModel):
-    col: int
-    row: int
+    col1: int
+    row1: int
+    col2: int
+    row2: int
     install_cards: int = 10
     remedy_ids: list[int] = []
 
@@ -1616,15 +1622,17 @@ def create_remedy_device_cell(
     f = _get_field_or_404(field_id, db)
     _ensure_grid(f, db)
     _check_remedy_lab_field(f)
-    if req.col < 0 or req.row < 0 or req.col >= f.cols or req.row >= f.rows:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Клетка вне поля")
+    c1, r1, c2, r2 = _normalize_rect(req.col1, req.row1, req.col2, req.row2)
+    if c1 < 0 or r1 < 0 or c2 >= f.cols or r2 >= f.rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Прямоугольник выходит за пределы поля")
     if req.install_cards < 1 or req.install_cards > 30:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Карт на установку: от 1 до 30")
-    existing_pos = db.query(RemedyDeviceCell).filter(
-        RemedyDeviceCell.field_id == f.id, RemedyDeviceCell.col == req.col, RemedyDeviceCell.row == req.row
-    ).first()
-    if existing_pos is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="На этой клетке уже стоит прибор")
+    for d in db.query(RemedyDeviceCell).filter(RemedyDeviceCell.field_id == f.id).all():
+        if not (c2 < d.col or c1 > (d.col2 or d.col) or r2 < d.row or r1 > (d.row2 or d.row)):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Зона прибора пересекается с уже установленным прибором",
+            )
     count = db.query(RemedyDeviceCell).filter(RemedyDeviceCell.field_id == f.id).count()
     if count >= REMEDY_DEVICE_LIMIT:
         raise HTTPException(
@@ -1632,11 +1640,13 @@ def create_remedy_device_cell(
             detail=f"Максимум {REMEDY_DEVICE_LIMIT} приборов в аптеке",
         )
 
-    cell = RemedyDeviceCell(field_id=f.id, col=req.col, row=req.row, install_cards=req.install_cards)
+    cell = RemedyDeviceCell(field_id=f.id, col=c1, row=r1, col2=c2, row2=r2, install_cards=req.install_cards)
     db.add(cell)
     db.flush()
     _apply_remedy_ids(cell, req.remedy_ids, db)
-    _mark_cell_kind(f.id, req.col, req.row, "remedy_device", db)
+    for rr in range(r1, r2 + 1):
+        for cc in range(c1, c2 + 1):
+            _mark_cell_kind(f.id, cc, rr, "remedy_device", db)
     db.commit()
     db.refresh(cell)
     return _device_cell_out(cell)
@@ -1678,11 +1688,9 @@ def delete_remedy_device_cell(
     ).first()
     if cell is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Прибор не найден")
-    c = db.query(FieldCell).filter(
-        FieldCell.field_id == cell.field_id, FieldCell.col == cell.col, FieldCell.row == cell.row
-    ).first()
-    if c is not None and c.kind == "remedy_device":
-        c.kind = "empty"
+    for rr in range(cell.row, (cell.row2 or cell.row) + 1):
+        for cc in range(cell.col, (cell.col2 or cell.col) + 1):
+            _reset_cell_to_empty(cell.field_id, cc, rr, db)
     db.delete(cell)
     db.commit()
     return None

@@ -121,7 +121,7 @@ def _seed_lab_device(admin_client, remedy_id: int) -> tuple[int, int]:
     assert lab_r.status_code == 201, lab_r.text
     lab = lab_r.json()["id"]
     r = admin_client.post(f"/api/admin/fields/{lab}/remedy-device-cells", json={
-        "col": 0, "row": 0, "install_cards": 1, "remedy_ids": [remedy_id],
+        "col1": 0, "row1": 0, "col2": 0, "row2": 0, "install_cards": 1, "remedy_ids": [remedy_id],
     })
     assert r.status_code == 201, r.text
     return lab, r.json()["id"]

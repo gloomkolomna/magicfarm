@@ -114,7 +114,7 @@ def _seed_achievement(kind: str, value: int = 1, production_code: str | None = N
 
 def _seed_device(admin_client, lab_id: int, remedy_id: int, col: int = 0) -> int:
     r = admin_client.post(f"/api/admin/fields/{lab_id}/remedy-device-cells", json={
-        "col": col, "row": 0, "install_cards": 1, "remedy_ids": [remedy_id],
+        "col1": col, "row1": 0, "col2": col, "row2": 0, "install_cards": 1, "remedy_ids": [remedy_id],
     })
     assert r.status_code == 201, r.text
     return r.json()["id"]
@@ -473,3 +473,82 @@ def test_book_zone_rejected_on_other_field_kind(admin_client):
     })
     assert rr.status_code == 400
     assert "книги" in rr.json()["detail"]
+
+
+def test_device_zone_multicell_marks_cells_and_shows_in_player(admin_client):
+    ing = _seed_ingredient("Роса")
+    rid = _seed_remedy("Мазь", [(ing, 1)])
+    lab = admin_client.post("/api/admin/fields", json={
+        "name": "Лаборатория-зона", "cols": 4, "rows": 3, "field_kind": "remedy_lab",
+    }).json()
+    fid = lab["id"]
+    r = admin_client.post(f"/api/admin/fields/{fid}/remedy-device-cells", json={
+        "col1": 1, "row1": 1, "col2": 2, "row2": 2, "install_cards": 3, "remedy_ids": [rid],
+    })
+    assert r.status_code == 201, r.text
+    dev = r.json()
+    assert (dev["col1"], dev["row1"], dev["col2"], dev["row2"]) == (1, 1, 2, 2)
+    assert dev["install_cards"] == 3
+
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    kinds = {(c["col"], c["row"]): c["kind"] for c in detail["cells"]}
+    for c in range(1, 3):
+        for rr in range(1, 3):
+            assert kinds[(c, rr)] == "remedy_device"
+
+    with make_user_client(123, "player") as c:
+        data = c.get(f"/api/remedy-lab/{fid}").json()
+    assert len(data["device_cells"]) == 1
+    assert (data["device_cells"][0]["col1"], data["device_cells"][0]["col2"]) == (1, 2)
+    assert (data["device_cells"][0]["row1"], data["device_cells"][0]["row2"]) == (1, 2)
+
+
+def test_device_zone_overlap_409(admin_client):
+    rid = _seed_remedy("Мазь", [])
+    lab = admin_client.post("/api/admin/fields", json={
+        "name": "Лаборатория-пересечение", "cols": 4, "rows": 3, "field_kind": "remedy_lab",
+    }).json()
+    fid = lab["id"]
+    ok = admin_client.post(f"/api/admin/fields/{fid}/remedy-device-cells", json={
+        "col1": 0, "row1": 0, "col2": 2, "row2": 1, "install_cards": 1, "remedy_ids": [rid],
+    })
+    assert ok.status_code == 201
+    over = admin_client.post(f"/api/admin/fields/{fid}/remedy-device-cells", json={
+        "col1": 2, "row1": 1, "col2": 3, "row2": 2, "install_cards": 1, "remedy_ids": [rid],
+    })
+    assert over.status_code == 409
+    assert "пересекается" in over.json()["detail"]
+
+
+def test_device_zone_outside_field_400(admin_client):
+    rid = _seed_remedy("Мазь", [])
+    lab = admin_client.post("/api/admin/fields", json={
+        "name": "Лаборатория-граница", "cols": 3, "rows": 2, "field_kind": "remedy_lab",
+    }).json()
+    fid = lab["id"]
+    r = admin_client.post(f"/api/admin/fields/{fid}/remedy-device-cells", json={
+        "col1": 2, "row1": 0, "col2": 3, "row2": 1, "install_cards": 1, "remedy_ids": [rid],
+    })
+    assert r.status_code == 400
+    assert "пределы" in r.json()["detail"]
+
+
+def test_device_zone_delete_resets_cells(admin_client):
+    rid = _seed_remedy("Мазь", [])
+    lab = admin_client.post("/api/admin/fields", json={
+        "name": "Лаборатория-удаление", "cols": 4, "rows": 3, "field_kind": "remedy_lab",
+    }).json()
+    fid = lab["id"]
+    dev = admin_client.post(f"/api/admin/fields/{fid}/remedy-device-cells", json={
+        "col1": 0, "row1": 0, "col2": 1, "row2": 1, "install_cards": 1, "remedy_ids": [rid],
+    }).json()
+
+    r = admin_client.delete(f"/api/admin/fields/{fid}/remedy-device-cells/{dev['id']}")
+    assert r.status_code == 204
+
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    assert len(detail["device_cells"]) == 0
+    kinds = {(c["col"], c["row"]): c["kind"] for c in detail["cells"]}
+    for c in range(0, 2):
+        for rr in range(0, 2):
+            assert kinds[(c, rr)] == "empty"

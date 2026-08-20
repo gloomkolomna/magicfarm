@@ -131,8 +131,8 @@ export default function RemedyLabPage() {
                   key={`dev-${cell.id}`}
                   onClick={() => { setInstallResult(null); setDeviceModal(cell); }}
                   style={{
-                    gridColumn: `${cell.col + 1} / span 1`,
-                    gridRow: `${cell.row + 1} / span 1`,
+                    gridColumn: `${cell.col1 + 1} / span ${cell.col2 - cell.col1 + 1}`,
+                    gridRow: `${cell.row1 + 1} / span ${cell.row2 - cell.row1 + 1}`,
                     position: 'relative', display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center',
                     borderRadius: 6, overflow: 'hidden', padding: 2,

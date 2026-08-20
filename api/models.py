@@ -1133,6 +1133,8 @@ class RemedyDeviceCell(Base):
     field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False)
     col = Column(Integer, nullable=False)
     row = Column(Integer, nullable=False)
+    col2 = Column(Integer, nullable=False, default=0, server_default="0")
+    row2 = Column(Integer, nullable=False, default=0, server_default="0")
     install_cards = Column(Integer, nullable=False, default=10, server_default="10")
 
     field = relationship("Field")

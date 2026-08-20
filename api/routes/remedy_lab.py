@@ -68,8 +68,10 @@ class DeviceStateOut(BaseModel):
 
 class DeviceCellOut(BaseModel):
     id: int
-    col: int
-    row: int
+    col1: int
+    row1: int
+    col2: int
+    row2: int
     install_cards: int
     remedies: list[DeviceRemedyOut]
     device: DeviceStateOut | None
@@ -161,8 +163,10 @@ def _device_cell_out(cell: RemedyDeviceCell, user_id: int, db: Session) -> Devic
     ).first()
     return DeviceCellOut(
         id=cell.id,
-        col=cell.col,
-        row=cell.row,
+        col1=cell.col,
+        row1=cell.row,
+        col2=cell.col2 if cell.col2 is not None else cell.col,
+        row2=cell.row2 if cell.row2 is not None else cell.row,
         install_cards=cell.install_cards or 10,
         remedies=[
             DeviceRemedyOut(

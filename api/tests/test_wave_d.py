@@ -129,24 +129,24 @@ def test_admin_remedy_device_cells_crud_and_limits(admin_client):
     assert cell_id > 0
 
     dup = admin_client.post(f"/api/admin/fields/{lab}/remedy-device-cells", json={
-        "col": 0, "row": 0, "install_cards": 5, "remedy_ids": [rid],
+        "col1": 0, "row1": 0, "col2": 0, "row2": 0, "install_cards": 5, "remedy_ids": [rid],
     })
     assert dup.status_code == 409
 
     for pos in range(1, 5):
         r = admin_client.post(f"/api/admin/fields/{lab}/remedy-device-cells", json={
-            "col": pos, "row": 0, "install_cards": 5, "remedy_ids": [rid],
+            "col1": pos, "row1": 0, "col2": pos, "row2": 0, "install_cards": 5, "remedy_ids": [rid],
         })
         assert r.status_code == 201
 
     over = admin_client.post(f"/api/admin/fields/{lab}/remedy-device-cells", json={
-        "col": 0, "row": 1, "install_cards": 5, "remedy_ids": [rid],
+        "col1": 0, "row1": 1, "col2": 0, "row2": 1, "install_cards": 5, "remedy_ids": [rid],
     })
     assert over.status_code == 409
 
     wrong_field = admin_client.post("/api/admin/fields", json={"name": "Огород", "cols": 3, "rows": 2})
     wrong = admin_client.post(f"/api/admin/fields/{wrong_field.json()['id']}/remedy-device-cells", json={
-        "col": 0, "row": 0, "install_cards": 5, "remedy_ids": [],
+        "col1": 0, "row1": 0, "col2": 0, "row2": 0, "install_cards": 5, "remedy_ids": [],
     })
     assert wrong.status_code == 400
 
@@ -213,7 +213,7 @@ def test_brew_wrong_device_rejected(admin_client):
         "name": "Аптека 2", "cols": 5, "rows": 3, "field_kind": "remedy_lab",
     }).json()["id"]
     cell2 = admin_client.post(f"/api/admin/fields/{lab2}/remedy-device-cells", json={
-        "col": 0, "row": 0, "install_cards": 1, "remedy_ids": [],
+        "col1": 0, "row1": 0, "col2": 0, "row2": 0, "install_cards": 1, "remedy_ids": [],
     }).json()["id"]
 
     with make_user_client(123, "player") as c:
