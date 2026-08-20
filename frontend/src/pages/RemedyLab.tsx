@@ -284,7 +284,7 @@ export default function RemedyLabPage() {
           {cards.length === 0 ? (
             <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Актуальных рецептов нет — поставьте диагнозы в лечебнице.</div>
           ) : (
-            <div className="fm-grid">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
               {cards.map((card) => {
                 const ready = card.recipe_items.every((i) => i.have >= i.qty);
                 return (
@@ -297,7 +297,7 @@ export default function RemedyLabPage() {
                       </div>
                     ))}
                     <button
-                      className="fm-btn fm-btn-sm"
+                      className="fm-btn fm-btn-sm fm-btn-wrap"
                       style={{ width: '100%', marginTop: 8 }}
                       disabled={busy || !ready}
                       onClick={() => { setShowCards(false); doBrew(card); }}

@@ -433,3 +433,149 @@ def test_forest_denied_for_regular_pet(admin_client):
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/pets/{pet_id}/forest", json={"paid": False})
         assert r.status_code == 400
+
+
+# ── Бэкфилл выдры для игроков, вылечивших выдру до внедрения ──
+
+def _seed_lawn_pet_cell():
+    from models import Field, FieldCell
+    s = TestingSessionLocal()
+    try:
+        lawn = Field(code="lawn_backfill", name="Лужайка питомцев", cols=3, rows=2,
+                     field_kind="lawn", min_level=0)
+        s.add(lawn)
+        s.flush()
+        cell = FieldCell(field_id=lawn.id, col=0, row=0, kind="pet")
+        s.add(cell)
+        s.commit()
+        s.refresh(cell)
+        return cell.id
+    finally:
+        s.close()
+
+
+def _seed_released_state(vk_id: int, patient_id: int):
+    from models import UserPatientState
+    s = TestingSessionLocal()
+    try:
+        s.add(UserPatientState(user_id=vk_id, patient_id=patient_id, status="released"))
+        s.commit()
+    finally:
+        s.close()
+
+
+def _seed_otter_patient() -> int:
+    rid = _seed_remedy("Мазь", [])
+    did = _seed_disease("Простуда", rid, {})
+    pid, _ = _seed_patient("Выдра Поля", did, 1)
+    return pid
+
+
+def test_backfill_grants_otter_to_released_players(admin_client):
+    from routes.pets import backfill_forest_pets
+    pid = _seed_otter_patient()
+    cell_id = _seed_lawn_pet_cell()
+
+    with make_user_client(123, "player") as c:
+        c.get("/api/me")
+    _seed_released_state(123, pid)
+
+    s = TestingSessionLocal()
+    try:
+        granted = backfill_forest_pets(s)
+        s.commit()
+    finally:
+        s.close()
+    assert granted == 1
+
+    from models import Pet, User, UserPet
+    s = TestingSessionLocal()
+    try:
+        pet = s.query(Pet).filter(Pet.code == "vydra").first()
+        assert pet is not None
+        up = s.query(UserPet).filter(UserPet.user_id == 123, UserPet.pet_id == pet.id).first()
+        assert up is not None
+        assert up.cell_id == cell_id
+        u = s.query(User).filter(User.vk_id == 123).first()
+        assert u.unlocked_pets >= 6
+    finally:
+        s.close()
+
+
+def test_backfill_skips_players_who_did_not_heal_otter(admin_client):
+    from routes.pets import backfill_forest_pets
+    pid = _seed_otter_patient()
+    _seed_lawn_pet_cell()
+
+    with make_user_client(123, "player") as c:
+        c.get("/api/me")
+    from models import UserPatientState
+    s = TestingSessionLocal()
+    try:
+        s.add(UserPatientState(user_id=123, patient_id=pid, status="sick"))
+        s.commit()
+        granted = backfill_forest_pets(s)
+        s.commit()
+    finally:
+        s.close()
+    assert granted == 0
+
+
+def test_backfill_does_not_duplicate_otter(admin_client):
+    from routes.pets import backfill_forest_pets
+    pid = _seed_otter_patient()
+    pet_id, cell_id = _seed_otter_pet()
+
+    with make_user_client(123, "player") as c:
+        c.get("/api/me")
+    _seed_released_state(123, pid)
+
+    from models import UserPet
+    s = TestingSessionLocal()
+    try:
+        s.add(UserPet(user_id=123, pet_id=pet_id, cell_id=cell_id))
+        s.commit()
+        granted = backfill_forest_pets(s)
+        s.commit()
+    finally:
+        s.close()
+    assert granted == 0
+
+
+def test_list_pets_backfills_otter(admin_client):
+    pid = _seed_otter_patient()
+    cell_id = _seed_lawn_pet_cell()
+
+    with make_user_client(123, "player") as c:
+        c.get("/api/me")
+        _seed_released_state(123, pid)
+        pets = c.get("/api/pets").json()
+        otter = next((p for p in pets if p["code"] == "vydra"), None)
+        assert otter is not None
+        assert otter["cell_id"] == cell_id
+        assert otter["forest"] is not None
+
+
+def test_grant_forest_pet_creates_otter_when_catalog_missing(admin_client):
+    from routes.pets import grant_forest_pet_if_absent
+    _seed_lawn_pet_cell()
+
+    with make_user_client(123, "player") as c:
+        c.get("/api/me")
+
+    s = TestingSessionLocal()
+    try:
+        granted = grant_forest_pet_if_absent(123, s)
+        s.commit()
+    finally:
+        s.close()
+    assert granted is True
+
+    from models import Pet, UserPet
+    s = TestingSessionLocal()
+    try:
+        pet = s.query(Pet).filter(Pet.code == "vydra").first()
+        assert pet is not None
+        assert s.query(UserPet).filter(UserPet.user_id == 123, UserPet.pet_id == pet.id).first() is not None
+    finally:
+        s.close()

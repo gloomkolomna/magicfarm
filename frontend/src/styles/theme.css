@@ -141,6 +141,19 @@ button.fm-card {
   }
 }
 
+/* ── Сетка статов профиля ── */
+.fm-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (min-width: 481px) {
+  .fm-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 /* ── Поля ввода ── */
 .fm-input {
   width: 100%;

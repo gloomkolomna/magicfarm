@@ -388,7 +388,7 @@ def update_field(
         _ensure_grid(f, db)
     db.commit()
     db.refresh(f)
-    return _detail(f)
+    return _detail(f, db)
 
 
 @router.put("/{field_id}/map", response_model=FieldOut)
@@ -462,7 +462,7 @@ def set_blocked_cells(
             cell.kind = "empty"
     db.commit()
     db.refresh(f)
-    return _detail(f)
+    return _detail(f, db)
 
 
 class CellKindRequest(BaseModel):
@@ -738,7 +738,7 @@ def update_tent(
     return _tent_to_out(t)
 
 
-def _detail(f: Field) -> FieldDetailOut:
+def _detail(f: Field, db: Session) -> FieldDetailOut:
     return FieldDetailOut(
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
@@ -780,7 +780,7 @@ def get_field_detail(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
-    return _detail(_get_field_or_404(field_id, db))
+    return _detail(_get_field_or_404(field_id, db), db)
 
 
 @router.post("/{field_id}/cleanup", response_model=FieldDetailOut)
@@ -794,7 +794,7 @@ def cleanup_field(
     _ensure_grid(f, db)
     db.commit()
     db.refresh(f)
-    return _detail(f)
+    return _detail(f, db)
 
 
 @router.post("/{field_id}/plant-beds", response_model=PlantBedOut, status_code=status.HTTP_201_CREATED)

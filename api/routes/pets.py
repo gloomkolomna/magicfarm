@@ -22,13 +22,49 @@ def _is_forest_pet(pet: Pet) -> bool:
     return (pet.code or "").lower() in FOREST_PET_CODES
 
 
-def grant_forest_pet_if_absent(user_id: int, db: Session) -> bool:
-    """Выдаёт питомца-выдру (шестого волшебного) и заселяет в свободную клетку Лужайки."""
-    from models import FieldCell
+def _ensure_forest_pet_catalog(db: Session) -> Pet | None:
+    """Находит или создаёт питомца-выдру и привязывает его к Лужайке питомцев."""
+    from models import Field, FieldPet
 
     pet = db.query(Pet).filter(Pet.code.in_(FOREST_PET_CODES)).first()
     if pet is None:
         pet = db.query(Pet).filter(Pet.name.ilike("%выдр%")).first()
+    if pet is None:
+        pet = Pet(code="vydra", name="Выдра", emoji="🦦")
+        db.add(pet)
+        db.flush()
+    lawn = db.query(Field).filter(Field.field_kind == "lawn").order_by(Field.id.asc()).first()
+    if lawn is not None:
+        bound = db.query(FieldPet).filter(
+            FieldPet.field_id == lawn.id, FieldPet.pet_id == pet.id
+        ).first()
+        if bound is None:
+            db.add(FieldPet(field_id=lawn.id, pet_id=pet.id))
+    return pet
+
+
+def _free_lawn_pet_cell(user_id: int, db: Session) -> int | None:
+    from models import FieldCell
+
+    occupied = {
+        up.cell_id
+        for up in db.query(UserPet).filter(UserPet.user_id == user_id, UserPet.cell_id.isnot(None)).all()
+    }
+    return next(
+        (
+            c.id
+            for c in db.query(FieldCell).join(Field, Field.id == FieldCell.field_id)
+            .filter(Field.field_kind == "lawn", FieldCell.kind == "pet")
+            .order_by(FieldCell.id.asc()).all()
+            if c.id not in occupied
+        ),
+        None,
+    )
+
+
+def grant_forest_pet_if_absent(user_id: int, db: Session) -> bool:
+    """Выдаёт питомца-выдру (шестого волшебного) и заселяет в свободную клетку Лужайки."""
+    pet = _ensure_forest_pet_catalog(db)
     if pet is None:
         return False
     exists = db.query(UserPet).filter(
@@ -41,20 +77,44 @@ def grant_forest_pet_if_absent(user_id: int, db: Session) -> bool:
     if u is not None:
         u.unlocked_pets = max(u.unlocked_pets or 0, 6)
 
-    ups = db.query(UserPet).filter(UserPet.user_id == user_id).all()
-    occupied = {up.cell_id for up in ups if up.cell_id is not None}
-    free_cell = next(
-        (
-            c.id for c in db.query(FieldCell).join(Field, Field.id == FieldCell.field_id)
-            .filter(Field.field_kind == "lawn", FieldCell.kind == "pet")
-            .order_by(FieldCell.id.asc()).all()
-            if c.id not in occupied
-        ),
-        None,
-    )
-    db.add(UserPet(user_id=user_id, pet_id=pet.id, cell_id=free_cell))
+    db.add(UserPet(user_id=user_id, pet_id=pet.id, cell_id=_free_lawn_pet_cell(user_id, db)))
     db.flush()
     return True
+
+
+def backfill_forest_pets(db: Session) -> int:
+    """Выдаёт выдру игрокам, уже вылечившим выдру до внедрения фичи."""
+    from models import ClinicAnimalType, PatientAnimal, UserPatientState
+
+    pet = _ensure_forest_pet_catalog(db)
+    if pet is None:
+        return 0
+    rows = (
+        db.query(UserPatientState.user_id, PatientAnimal.name, ClinicAnimalType.name)
+        .join(PatientAnimal, PatientAnimal.id == UserPatientState.patient_id)
+        .outerjoin(ClinicAnimalType, ClinicAnimalType.id == PatientAnimal.animal_type_id)
+        .filter(UserPatientState.status.in_(["treated", "released"]))
+        .all()
+    )
+    user_ids = {
+        uid
+        for uid, patient_name, type_name in rows
+        if "выдр" in (patient_name or "").lower() or "выдр" in (type_name or "").lower()
+    }
+    granted = 0
+    for uid in user_ids:
+        exists = db.query(UserPet).filter(
+            UserPet.user_id == uid, UserPet.pet_id == pet.id
+        ).first()
+        if exists is not None:
+            continue
+        u = db.query(User).filter(User.vk_id == uid).first()
+        if u is not None:
+            u.unlocked_pets = max(u.unlocked_pets or 0, 6)
+        db.add(UserPet(user_id=uid, pet_id=pet.id, cell_id=_free_lawn_pet_cell(uid, db)))
+        granted += 1
+    db.flush()
+    return granted
 
 
 @router.get("/catalog", response_model=list[PetOut])
@@ -164,7 +224,9 @@ def list_pets(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    backfill_forest_pets(db)
     _repair_pet_cells(user, db)
+    db.commit()
     rows = db.query(UserPet).filter(UserPet.user_id == user.vk_id).all()
     return [_up_out(up, db) for up in rows]
 

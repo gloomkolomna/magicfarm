@@ -40,7 +40,7 @@ export default function ProfilePage() {
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <div className="fm-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 14 }}>
+      <div className="fm-stats" style={{ marginBottom: 14 }}>
         <div className="fm-card" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 24 }}>🧵</div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>{user.crosses_total}</div>

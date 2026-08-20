@@ -425,3 +425,21 @@ def test_remedy_card_ingredients_show_have(admin_client):
         assert item["have"] == 2
         assert item["qty"] == 3
         assert item["ingredient_id"] == ing
+
+
+def test_admin_field_detail_and_cleanup_remedy_lab(admin_client):
+    lab = admin_client.post("/api/admin/fields", json={
+        "name": "Лаборатория-деталь", "cols": 3, "rows": 2, "field_kind": "remedy_lab",
+    }).json()
+    fid = lab["id"]
+    ing = _seed_ingredient("Роса")
+    rid = _seed_remedy("Мазь", [(ing, 3)])
+    _seed_device(admin_client, fid, rid)
+
+    detail = admin_client.get(f"/api/admin/fields/{fid}")
+    assert detail.status_code == 200, detail.text
+    assert len(detail.json()["device_cells"]) == 1
+
+    r = admin_client.post(f"/api/admin/fields/{fid}/cleanup")
+    assert r.status_code == 200, r.text
+    assert len(r.json()["device_cells"]) == 1
