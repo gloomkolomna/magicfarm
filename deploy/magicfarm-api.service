@@ -12,6 +12,7 @@ ExecStart=/opt/magicfarm/api/venv/bin/gunicorn \
     --bind 127.0.0.1:8003 \
     --access-logfile /var/log/magicfarm/api-access.log \
     --error-logfile /var/log/magicfarm/api-error.log \
+    --log-level warning \
     --timeout 120 \
     main:app
 Restart=always

@@ -101,7 +101,7 @@ if (-not $NoBackend) {
     $env:DEV_LOGIN_ENABLED = "true"
 
     $apiProc = Start-Process -FilePath $venvPython `
-        -ArgumentList "-m uvicorn main:app --host 127.0.0.1 --port 8003 --reload" `
+        -ArgumentList "-m uvicorn main:app --host 127.0.0.1 --port 8003 --reload --log-level warning" `
         -WorkingDirectory $apiDir -NoNewWindow -PassThru
     $procs += $apiProc
     Write-OK "Backend (pid $($apiProc.Id))"
