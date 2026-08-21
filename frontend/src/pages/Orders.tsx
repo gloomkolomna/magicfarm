@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { api, type Order, type UserPotion } from '../api/endpoints';
@@ -47,6 +47,16 @@ export default function OrdersPage() {
     return inventory[o.product_id ?? -1] || 0;
   }
 
+  function readinessTier(o: Order): number {
+    const have = haveFor(o);
+    return have >= o.qty ? 2 : have > 0 ? 1 : 0;
+  }
+
+  const openOrders = useMemo(
+    () => orders.filter((o) => o.status === 'open').sort((a, b) => readinessTier(b) - readinessTier(a)),
+    [orders, inventory, potions],
+  );
+
   async function act(fn: () => Promise<unknown>, okMsg: string): Promise<boolean> {
     setBusy(true);
     setMsg(null);
@@ -63,8 +73,6 @@ export default function OrdersPage() {
       setBusy(false);
     }
   }
-
-  const openOrders = orders.filter((o) => o.status === 'open');
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
@@ -117,9 +125,9 @@ export default function OrdersPage() {
                         </div>
                       )}
                       <div style={{ minWidth: 0 }}>
-                        <strong style={{ display: 'block', fontSize: 15 }}>{o.customer || 'Заказчик не указан'}</strong>
+                        <strong style={{ display: 'block', fontSize: 15, overflowWrap: 'anywhere' }}>{o.customer || 'Заказчик не указан'}</strong>
                         {o.customer_phrase && (
-                          <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--text-secondary)', marginTop: 2 }}>
+                          <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--text-secondary)', marginTop: 2, overflowWrap: 'anywhere' }}>
                             «{o.customer_phrase}»
                           </div>
                         )}
@@ -218,9 +226,9 @@ export default function OrdersPage() {
               </div>
             )}
             <div style={{ minWidth: 0 }}>
-              <strong style={{ display: 'block' }}>{detailOrder.customer || 'Заказчик не указан'}</strong>
+              <strong style={{ display: 'block', overflowWrap: 'anywhere' }}>{detailOrder.customer || 'Заказчик не указан'}</strong>
               {detailOrder.customer_phrase && (
-                <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--text-secondary)' }}>
+                <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>
                   «{detailOrder.customer_phrase}»
                 </div>
               )}

@@ -1559,6 +1559,7 @@ class RemedyDeviceCellOut(BaseModel):
     col2: int
     row2: int
     install_cards: int
+    image_url: str | None
     remedies: list[DeviceRemedyItemOut]
 
 
@@ -1576,6 +1577,7 @@ def _device_cell_out(cell: RemedyDeviceCell) -> RemedyDeviceCellOut:
         col2=cell.col2 if cell.col2 is not None else cell.col,
         row2=cell.row2 if cell.row2 is not None else cell.row,
         install_cards=cell.install_cards or 10,
+        image_url=cell.image_url,
         remedies=[
             DeviceRemedyItemOut(
                 remedy_id=r.remedy_id,
@@ -1676,6 +1678,28 @@ def update_remedy_device_cell(
     return _device_cell_out(cell)
 
 
+@router.put("/{field_id}/remedy-device-cells/{cell_id}/image", response_model=RemedyDeviceCellOut)
+def upload_remedy_device_cell_image(
+    field_id: int,
+    cell_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    cell = db.query(RemedyDeviceCell).filter(
+        RemedyDeviceCell.id == cell_id, RemedyDeviceCell.field_id == f.id
+    ).first()
+    if cell is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Прибор не найден")
+    new_url = save_upload(image, f"remedy_device_{f.id}_{cell.id}", max_size=512)
+    remove_upload(cell.image_url)
+    cell.image_url = new_url
+    db.commit()
+    db.refresh(cell)
+    return _device_cell_out(cell)
+
+
 @router.delete("/{field_id}/remedy-device-cells/{cell_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_remedy_device_cell(
     field_id: int,
@@ -1688,6 +1712,7 @@ def delete_remedy_device_cell(
     ).first()
     if cell is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Прибор не найден")
+    remove_upload(cell.image_url)
     for rr in range(cell.row, (cell.row2 or cell.row) + 1):
         for cc in range(cell.col, (cell.col2 or cell.col) + 1):
             _reset_cell_to_empty(cell.field_id, cc, rr, db)

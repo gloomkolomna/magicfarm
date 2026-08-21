@@ -83,6 +83,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const [brewImage, setBrewImage] = useState<File | null>(null);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
   const [allRemedies, setAllRemedies] = useState<{ id: number; name: string; image_url: string | null }[]>([]);
+  const [deviceImage, setDeviceImage] = useState<File | null>(null);
   const [cellModal, setCellModal] = useState<{
     kind: 'gather' | 'trade' | 'body_part' | 'remedy_device';
     col: number;
@@ -92,6 +93,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     partCode: string;
     installCards: string;
     existingId: number | null;
+    image: File | null;
   } | null>(null);
 
   const load = useCallback(async () => {
@@ -168,6 +170,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         partCode: '',
         installCards: '10',
         existingId: existing?.id ?? null,
+        image: null,
       });
       return;
     }
@@ -190,6 +193,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         partCode: existing?.part_code ?? '',
         installCards: '10',
         existingId: existing?.id ?? null,
+        image: null,
       });
       return;
     }
@@ -307,6 +311,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     }
     setTentImage(null);
     setBrewImage(null);
+    setDeviceImage(null);
     setTentIsKassa(false);
     setMultiModal({ c1, r1, c2, r2, installCards: '10', ids: [] });
   }
@@ -338,11 +343,14 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         });
         setMsg('✓ Зона книги размещена');
       } else if (brush === 'remedy_device') {
-        await api.adminCreateRemedyDeviceCell(fieldId, {
+        const created = await api.adminCreateRemedyDeviceCell(fieldId, {
           col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2,
           install_cards: Math.max(1, Number(multiModal.installCards) || 10),
           remedy_ids: multiModal.ids,
         });
+        if (deviceImage) {
+          await api.adminUploadRemedyDeviceImage(fieldId, created.id, deviceImage);
+        }
         setMsg('✓ Прибор аптеки размещён');
       } else {
         await api.adminCreateTent(
@@ -390,6 +398,9 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           install_cards: Math.max(1, Number(cellModal.installCards) || 10),
           remedy_ids: cellModal.ids,
         });
+        if (cellModal.image) {
+          await api.adminUploadRemedyDeviceImage(fieldId, cellModal.existingId, cellModal.image);
+        }
         setMsg('✓ Прибор аптеки обновлён');
       } else {
         if (cellModal.existingId != null) {
@@ -980,6 +991,16 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                   strokeDasharray="4 3"
                   strokeWidth={1}
                 />
+                {z.image_url && (
+                  <image
+                    href={mediaUrl(z.image_url)}
+                    x={z.col1 * sz + 2}
+                    y={z.row1 * sz + 2}
+                    width={zw - 4}
+                    height={zh - 4}
+                    preserveAspectRatio="xMidYMid meet"
+                  />
+                )}
                 <text
                   x={z.col1 * sz + zw / 2}
                   y={z.row1 * sz + zh / 2 + 4}
@@ -988,7 +1009,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                   textAnchor="middle"
                   style={{ textShadow: '0 1px 2px #000' }}
                 >
-                  🔧 Прибор
+                  {z.image_url ? '' : '🔧 Прибор'}
                 </text>
               </g>
             );
@@ -1175,6 +1196,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     onClick={() => setCellModal({
                       kind: 'gather', col: gc.col, row: gc.row,
                       window: gc.window, ids: gc.ingredient_ids, partCode: '', installCards: '10', existingId: gc.id,
+                      image: null,
                     })}
                   >
                     ✏️
@@ -1219,6 +1241,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     onClick={() => setCellModal({
                       kind: 'trade', col: tc.col, row: tc.row,
                       window: 'always', ids: tc.ingredient_ids, partCode: '', installCards: '10', existingId: tc.id,
+                      image: null,
                     })}
                   >
                     ✏️
@@ -1263,6 +1286,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     onClick={() => setCellModal({
                       kind: 'body_part', col: pc.col, row: pc.row,
                       window: 'always', ids: [], partCode: pc.part_code, installCards: '10', existingId: pc.id,
+                      image: null,
                     })}
                   >
                     ✏️
@@ -1337,6 +1361,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                       kind: 'remedy_device', col: d.col1, row: d.row1,
                       window: 'always', ids: d.remedies.map((r2) => r2.remedy_id),
                       partCode: '', installCards: String(d.install_cards), existingId: d.id,
+                      image: null,
                     })}
                   >
                     ✏️
@@ -1487,6 +1512,21 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                   max={30}
                   value={cellModal.installCards}
                   onChange={(e) => setCellModal({ ...cellModal, installCards: e.target.value })}
+                />
+                {(() => {
+                  const cur = field?.device_cells?.find((d) => d.id === cellModal.existingId)?.image_url;
+                  return cur ? (
+                    <div style={{ marginTop: 10 }}>
+                      <label style={lbl}>Текущая картинка</label>
+                      <img src={mediaUrl(cur)} alt="" style={{ maxHeight: 96, maxWidth: '100%', objectFit: 'contain', borderRadius: 8 }} />
+                    </div>
+                  ) : null;
+                })()}
+                <label style={{ ...lbl, marginTop: 10 }}>Картинка прибора (необязательно)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setCellModal({ ...cellModal, image: e.target.files?.[0] || null })}
                 />
                 <label style={{ ...lbl, marginTop: 10 }}>Лекарства, производимые на приборе</label>
                 <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 8 }}>
@@ -1644,6 +1684,8 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                   value={multiModal.installCards}
                   onChange={(e) => setMultiModal({ ...multiModal, installCards: e.target.value })}
                 />
+                <label style={lbl}>Картинка прибора (необязательно)</label>
+                <input type="file" accept="image/*" onChange={(e) => setDeviceImage(e.target.files?.[0] || null)} />
                 <label style={{ ...lbl, marginTop: 10 }}>Лекарства, производимые на приборе</label>
                 <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 8 }}>
                   {allRemedies.length === 0 ? (

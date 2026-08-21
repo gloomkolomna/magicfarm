@@ -977,6 +977,7 @@ export interface DeviceCell {
   col2: number;
   row2: number;
   install_cards: number;
+  image_url: string | null;
   remedies: DeviceRemedy[];
   device: DeviceState | null;
 }
@@ -1055,6 +1056,7 @@ export interface AdminDeviceCell {
   col2: number;
   row2: number;
   install_cards: number;
+  image_url: string | null;
   remedies: { remedy_id: number; remedy_name: string; remedy_image_url: string | null }[];
 }
 
@@ -1844,6 +1846,12 @@ export const api = {
     client.post<AdminDeviceCell>(`/admin/fields/${fieldId}/remedy-device-cells`, data).then((r) => r.data),
   adminUpdateRemedyDeviceCell: (fieldId: number, id: number, data: { install_cards?: number; remedy_ids?: number[] }) =>
     client.put<AdminDeviceCell>(`/admin/fields/${fieldId}/remedy-device-cells/${id}`, data).then((r) => r.data),
+  adminUploadRemedyDeviceImage: (fieldId: number, id: number, image: File) => {
+    const form = new FormData();
+    form.append('image', image);
+    return client.put<AdminDeviceCell>(`/admin/fields/${fieldId}/remedy-device-cells/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => r.data);
+  },
   adminDeleteRemedyDeviceCell: (fieldId: number, id: number) =>
     client.delete(`/admin/fields/${fieldId}/remedy-device-cells/${id}`).then((r) => r.data),
   adminUpdateGatherCell: (fieldId: number, id: number, data: { window?: string; ingredient_ids?: number[] }) =>

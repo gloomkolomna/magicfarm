@@ -1,3 +1,6 @@
+import io
+import os
+
 from tests.conftest import TestingSessionLocal, make_user_client
 from tests.test_phase11_infirmary import _brew_remedy, _img_bytes
 
@@ -552,3 +555,72 @@ def test_device_zone_delete_resets_cells(admin_client):
     for c in range(0, 2):
         for rr in range(0, 2):
             assert kinds[(c, rr)] == "empty"
+
+
+def _upload_device_image(c, fid: int, cell_id: int):
+    return c.put(
+        f"/api/admin/fields/{fid}/remedy-device-cells/{cell_id}/image",
+        files={"image": ("d.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+
+
+def test_device_image_upload_and_show_in_player(admin_client, uploads_tmp):
+    ing = _seed_ingredient("Роса")
+    rid = _seed_remedy("Мазь", [(ing, 1)])
+    fid = _seed_field("remedy_lab", "Лаборатория-картинка")
+    cell_id = _seed_device(admin_client, fid, rid)
+
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    assert detail["device_cells"][0]["image_url"] is None
+
+    r = _upload_device_image(admin_client, fid, cell_id)
+    assert r.status_code == 200, r.text
+    url = r.json()["image_url"]
+    assert url.startswith("/api/uploads/remedy_device_")
+    assert os.path.isfile(os.path.join(uploads_tmp, url.rsplit("/", 1)[-1]))
+
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    assert detail["device_cells"][0]["image_url"] == url
+
+    with make_user_client(123, "player") as c:
+        data = c.get(f"/api/remedy-lab/{fid}").json()
+    assert data["device_cells"][0]["image_url"] == url
+
+
+def test_device_image_upload_404(admin_client, uploads_tmp):
+    fid = _seed_field("remedy_lab", "Лаборатория-404")
+    r = _upload_device_image(admin_client, fid, 99999)
+    assert r.status_code == 404
+
+
+def test_device_image_upload_requires_admin(player_client):
+    r = player_client.put(
+        "/api/admin/fields/1/remedy-device-cells/1/image",
+        files={"image": ("d.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+    assert r.status_code == 403
+
+
+def test_device_image_replace_removes_old_file(admin_client, uploads_tmp):
+    rid = _seed_remedy("Мазь", [])
+    fid = _seed_field("remedy_lab", "Лаборатория-замена")
+    cell_id = _seed_device(admin_client, fid, rid)
+
+    first = _upload_device_image(admin_client, fid, cell_id).json()["image_url"]
+    second = _upload_device_image(admin_client, fid, cell_id).json()["image_url"]
+    assert first != second
+    assert not os.path.isfile(os.path.join(uploads_tmp, first.rsplit("/", 1)[-1]))
+    assert os.path.isfile(os.path.join(uploads_tmp, second.rsplit("/", 1)[-1]))
+
+
+def test_device_delete_removes_image_file(admin_client, uploads_tmp):
+    rid = _seed_remedy("Мазь", [])
+    fid = _seed_field("remedy_lab", "Лаборатория-удаление-картинки")
+    cell_id = _seed_device(admin_client, fid, rid)
+    url = _upload_device_image(admin_client, fid, cell_id).json()["image_url"]
+    name = url.rsplit("/", 1)[-1]
+    assert os.path.isfile(os.path.join(uploads_tmp, name))
+
+    r = admin_client.delete(f"/api/admin/fields/{fid}/remedy-device-cells/{cell_id}")
+    assert r.status_code == 204
+    assert not os.path.isfile(os.path.join(uploads_tmp, name))

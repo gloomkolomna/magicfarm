@@ -126,6 +126,7 @@ export default function RemedyLabPage() {
             {cells.map((cell) => {
               const dev = cell.device;
               const brewing = dev != null && dev.brew_card_id != null;
+              const img = cell.image_url ? mediaUrl(cell.image_url) : null;
               return (
                 <div
                   key={`dev-${cell.id}`}
@@ -145,21 +146,42 @@ export default function RemedyLabPage() {
                     cursor: 'pointer', touchAction: 'manipulation',
                   }}
                 >
-                  {!dev && (
+                  {img && (
+                    <img
+                      src={img}
+                      alt=""
+                      style={{ position: 'absolute', inset: 2, width: 'calc(100% - 4px)', height: 'calc(100% - 4px)', objectFit: 'contain', pointerEvents: 'none' }}
+                    />
+                  )}
+                  {!dev && !img && (
                     <div style={{ fontSize: 'clamp(12px,3vw,20px)', color: '#e6d9ff', textAlign: 'center', lineHeight: 1.2, textShadow: '0 1px 3px #000', fontWeight: 600 }}>
                       🔧<div style={{ fontSize: 9 }}>прибор</div>
                     </div>
                   )}
                   {dev?.build_status === 'building' && (
-                    <div style={{ fontSize: 'clamp(10px,2.4vw,14px)', color: '#ffd9a0', textAlign: 'center', lineHeight: 1.2, textShadow: '0 1px 3px #000', fontWeight: 600 }}>
+                    <div
+                      style={{
+                        position: 'absolute', bottom: 2, left: 2, right: 2,
+                        fontSize: 'clamp(10px,2.4vw,14px)', color: '#ffd9a0', textAlign: 'center', lineHeight: 1.2,
+                        textShadow: '0 1px 3px #000', fontWeight: 600,
+                        background: img ? 'rgba(20,12,4,0.55)' : 'transparent',
+                        borderRadius: 4,
+                      }}
+                    >
                       🛠 {dev.accumulated}/{dev.required}
                     </div>
                   )}
-                  {dev?.build_status === 'built' && !brewing && (
+                  {dev?.build_status === 'built' && !brewing && !img && (
                     <div style={{ fontSize: 'clamp(12px,3vw,20px)', lineHeight: 1 }}>⚗️</div>
                   )}
                   {brewing && dev && (
-                    <div style={{ textAlign: 'center', lineHeight: 1.15 }}>
+                    <div
+                      style={{
+                        textAlign: 'center', lineHeight: 1.15,
+                        background: img ? 'rgba(10,25,8,0.55)' : 'transparent',
+                        borderRadius: 4, padding: img ? 2 : 0,
+                      }}
+                    >
                       <div style={{ fontSize: 'clamp(12px,3vw,20px)' }}>{dev.brew_dice.map((d) => DICE_FACE[d] || '⚀').join('')}</div>
                       <div style={{ fontSize: 'clamp(8px,2vw,11px)', color: '#b8ffb8', fontWeight: 700, textShadow: '0 1px 2px #000' }}>
                         {dev.brew_accumulated}/{dev.brew_required}
