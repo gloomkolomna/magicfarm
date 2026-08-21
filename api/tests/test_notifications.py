@@ -68,6 +68,19 @@ def test_trade_accept_notifies_offerer():
         notifs = a.get("/api/notifications").json()
         assert len(notifs) == 1
         assert "принял" in notifs[0]["text"]
+        assert notifs[0]["peer_vk_id"] == 7002
+
+
+def test_gift_notifies_with_peer():
+    _add_user(7001)
+    _give_plant(123, 1, 2)
+    with make_user_client(123, "player") as a:
+        assert a.post("/api/gifts", json={"to_user_id": 7001, "kind": "plant", "item_id": 1, "qty": 1}).status_code == 201
+    with make_user_client(7001, "player") as b:
+        notifs = b.get("/api/notifications").json()
+        assert len(notifs) == 1
+        assert "подарок" in notifs[0]["text"]
+        assert notifs[0]["peer_vk_id"] == 123
 
 
 def test_trade_reject_notifies_offerer():

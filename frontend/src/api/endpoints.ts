@@ -349,6 +349,7 @@ export interface Conversation {
 export interface Notification {
   id: number;
   text: string;
+  peer_vk_id?: number | null;
   created_at: string;
   read: boolean;
 }

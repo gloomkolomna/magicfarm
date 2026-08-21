@@ -140,7 +140,7 @@ def send_gift(
         text="🎁 Вам пришёл подарок", kind="gift", gift_id=gift.id,
     ))
     sender_name = _user_name(db, user)
-    notify(db, req.to_user_id, f"🎁 {sender_name} отправил(а) вам подарок")
+    notify(db, req.to_user_id, f"🎁 {sender_name} отправил(а) вам подарок", peer_vk_id=user.vk_id)
     db.commit()
     db.refresh(gift)
     return _gift_out(db, gift, from_name=sender_name)

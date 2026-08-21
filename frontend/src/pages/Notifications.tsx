@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, type Notification } from '../api/endpoints';
 
 function fmt(iso: string): string {
@@ -9,6 +10,7 @@ function fmt(iso: string): string {
 }
 
 export default function NotificationsPage() {
+  const nav = useNavigate();
   const [items, setItems] = useState<Notification[] | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -17,6 +19,12 @@ export default function NotificationsPage() {
       .then((n) => { setItems(n); api.markNotificationsRead().catch(() => {}); })
       .catch(() => setMsg('Ошибка загрузки уведомлений'));
   }, []);
+
+  function open(n: Notification) {
+    if (n.peer_vk_id != null) {
+      nav(`/chat/${n.peer_vk_id}`);
+    }
+  }
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
@@ -29,10 +37,23 @@ export default function NotificationsPage() {
       ) : (
         <div className="fm-grid">
           {items.map((n) => (
-            <div key={n.id} className={`fm-card fm-rise ${n.read ? '' : ''}`} style={{ fontSize: 14, opacity: n.read ? 0.8 : 1, borderColor: n.read ? undefined : 'rgba(255,200,90,0.4)' }}>
+            <button
+              key={n.id}
+              className="fm-card fm-rise"
+              style={{
+                fontSize: 14,
+                textAlign: 'left',
+                cursor: n.peer_vk_id != null ? 'pointer' : 'default',
+                opacity: n.read ? 0.8 : 1,
+                borderColor: n.read ? undefined : 'rgba(255,200,90,0.4)',
+              }}
+              onClick={() => open(n)}
+            >
               <div style={{ whiteSpace: 'pre-wrap' }}>{n.text}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{fmt(n.created_at)}</div>
-            </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                {fmt(n.created_at)}{n.peer_vk_id != null ? ' · нажмите, чтобы открыть чат →' : ''}
+              </div>
+            </button>
           ))}
         </div>
       )}
