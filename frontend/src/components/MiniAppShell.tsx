@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
+import { api } from '../api/endpoints';
 
 interface Tab {
   path: string;
@@ -8,6 +9,7 @@ interface Tab {
   location?: string;
   locked?: boolean;
   hideWhenLocked?: boolean;
+  unread?: number;
 }
 
 interface Props {
@@ -39,13 +41,32 @@ function MiniAppShell({ children }: Props) {
   const loc = useLocation();
   const { user } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [chatUnread, setChatUnread] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const convs = await api.chatConversations();
+        if (!cancelled) setChatUnread(convs.reduce((s, c) => s + (c.unread_count || 0), 0));
+      } catch { /* ignore */ }
+    };
+    tick();
+    const id = setInterval(tick, 15000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
   const isLocked = (code?: string) =>
     user?.role !== 'admin' && !!code && (user?.locked_locations ?? []).includes(code);
 
   const tabs: Tab[] = BASE_TABS
     .filter((t) => !(t.hideWhenLocked && isLocked(t.location)))
-    .map((t) => (isLocked(t.location) ? { ...t, label: `${t.label} 🔒`, locked: true } : t));
+    .map((t) => {
+      const locked = isLocked(t.location);
+      const tab: Tab = locked ? { ...t, label: `${t.label} 🔒`, locked: true } : { ...t };
+      if (t.path === '/chat' && chatUnread > 0) tab.unread = chatUnread;
+      return tab;
+    });
   if (user?.role === 'admin') tabs.push({ path: '/admin', label: '⚙️ Управление' });
 
   const active = tabs.find(
@@ -118,6 +139,9 @@ function MiniAppShell({ children }: Props) {
         >
           {active?.label ?? '🗺️ Поля'}
         </span>
+        {active?.unread ? (
+          <span style={{ flexShrink: 0, background: '#e5484d', color: '#fff', borderRadius: 999, fontSize: 13, padding: '2px 9px', fontWeight: 700 }}>{active.unread}</span>
+        ) : null}
       </div>
 
       {menuOpen && (
@@ -164,10 +188,17 @@ function MiniAppShell({ children }: Props) {
                 style={{
                   padding: '16px 18px',
                   fontSize: 17,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  justifyContent: 'space-between',
                   ...(t.locked ? { opacity: 0.55, cursor: 'not-allowed' } : {}),
                 }}
               >
-                {t.label}
+                <span>{t.label}</span>
+                {t.unread ? (
+                  <span style={{ flexShrink: 0, background: '#e5484d', color: '#fff', borderRadius: 999, fontSize: 13, padding: '2px 9px', fontWeight: 700 }}>{t.unread}</span>
+                ) : null}
               </button>
             ))}
           </div>

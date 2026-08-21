@@ -268,6 +268,15 @@ export interface FarmPet {
   emoji: string | null;
 }
 
+export interface FarmField {
+  id: number;
+  code: string;
+  name: string;
+  cols: number;
+  rows: number;
+  map_url: string | null;
+}
+
 export interface PlayerFarm {
   vk_id: number;
   display_name: string;
@@ -276,6 +285,7 @@ export interface PlayerFarm {
   crosses_total: number;
   round: number;
   achievements_total: number;
+  fields: FarmField[];
   plots: FarmPlot[];
   productions: FarmProduction[];
   plants: FarmItem[];

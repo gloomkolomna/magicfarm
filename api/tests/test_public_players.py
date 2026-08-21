@@ -126,3 +126,84 @@ def test_player_field_404(player_client):
     _add_user(9011)
     assert player_client.get("/api/players/999999/fields/1").status_code == 404
     assert player_client.get("/api/players/9011/fields/999999").status_code == 404
+
+
+def test_farm_fields_lists_only_opened_locations(player_client):
+    _add_user(9012, display_name="Фермер")
+    s = TestingSessionLocal()
+    try:
+        f1 = Field(code="f1", name="Поле 1", cols=4, rows=2, grid_color="#2a1a0e")
+        f2 = Field(code="f2", name="Поле 2", cols=4, rows=2, grid_color="#2a1a0e")
+        s.add_all([f1, f2])
+        s.flush()
+        s.add(FieldCell(field_id=f1.id, col=0, row=0, kind="bed"))
+        s.flush()
+        cell = s.query(FieldCell).filter(FieldCell.field_id == f1.id).first()
+        s.add(Plot(user_id=9012, plant_id=1, qty=1, cell_id=cell.id, status="planted", accumulated=0, required=100))
+        s.commit()
+        f1_id = f1.id
+        f2_id = f2.id
+    finally:
+        s.close()
+    data = player_client.get("/api/players/9012/farm").json()
+    ids = [f["id"] for f in data["fields"]]
+    assert f1_id in ids
+    assert f2_id not in ids
+
+
+def test_player_field_includes_pets(player_client):
+    from models import Pet, PetZone, UserPet
+
+    _add_user(9013, display_name="Фермер")
+    s = TestingSessionLocal()
+    try:
+        fld = Field(code="pets_f", name="Питомцы", cols=4, rows=2, grid_color="#2a1a0e")
+        s.add(fld)
+        s.flush()
+        s.add(PetZone(field_id=fld.id, col1=0, row1=0, col2=2, row2=1))
+        s.add(FieldCell(field_id=fld.id, col=0, row=0, kind="pet"))
+        s.flush()
+        pet = Pet(code="test_pet", name="Енот", emoji="🦝")
+        s.add(pet)
+        s.flush()
+        cell = s.query(FieldCell).filter(FieldCell.field_id == fld.id).first()
+        s.add(UserPet(user_id=9013, pet_id=pet.id, cell_id=cell.id))
+        s.commit()
+        fld_id = fld.id
+    finally:
+        s.close()
+    data = player_client.get(f"/api/players/9013/fields/{fld_id}").json()
+    zones = data["pet_zones"]
+    assert len(zones) == 1
+    assert zones[0]["pet_id"] is not None
+    assert zones[0]["pet_name"] == "Енот"
+    assert zones[0]["pet_emoji"] == "🦝"
+
+
+def test_farm_fields_includes_only_active_patient_scene(player_client):
+    from models import PatientAnimal, UserPatientState
+
+    _add_user(9014, display_name="Фермер")
+    s = TestingSessionLocal()
+    try:
+        pa = PatientAnimal(code="test_pa", name="Лис", level=1)
+        s.add(pa)
+        s.flush()
+        scene = Field(code="scene_f", name="Лесная лечебница", cols=4, rows=2, grid_color="#2a1a0e",
+                      field_kind="infirmary", clinic_animal_id=pa.id, clinic_stage="sick")
+        s.add(scene)
+        s.flush()
+        other = Field(code="other_scene", name="Другая сцена", cols=4, rows=2, grid_color="#2a1a0e",
+                      field_kind="infirmary")
+        s.add(other)
+        s.commit()
+        s.add(UserPatientState(user_id=9014, patient_id=pa.id, status="sick", current_field_id=scene.id))
+        s.commit()
+        scene_id = scene.id
+        other_id = other.id
+    finally:
+        s.close()
+    data = player_client.get("/api/players/9014/farm").json()
+    ids = [f["id"] for f in data["fields"]]
+    assert scene_id in ids
+    assert other_id not in ids

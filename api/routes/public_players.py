@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user
 from models import (
-    Field, FieldCell, Inventory, Plot, Production, Tent, TentBuild, User,
-    UserAchievement, UserIngredient, UserPet,
+    BarnyardSlot, Field, FieldCell, Inventory, PlantBed, Plot, Production, Tent,
+    TentBuild, User, UserAchievement, UserIngredient, UserPatientState, UserPet,
 )
 from routes.admin_players import (
     AdminFieldCellOut, AdminFieldDetailOut, AdminTentOut, PlayerPlotOut,
@@ -55,6 +55,15 @@ class FarmPetOut(BaseModel):
     emoji: str | None
 
 
+class FarmFieldOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    cols: int
+    rows: int
+    map_url: str | None
+
+
 class FarmOut(BaseModel):
     vk_id: int
     display_name: str
@@ -63,12 +72,72 @@ class FarmOut(BaseModel):
     crosses_total: int
     round: int
     achievements_total: int
+    fields: list[FarmFieldOut]
     plots: list[FarmPlotOut]
     productions: list[FarmProductionOut]
     plants: list[FarmItemOut]
     products: list[FarmItemOut]
     ingredients: list[FarmItemOut]
     pets: list[FarmPetOut]
+
+
+def _player_field_ids(db: Session, vk_id: int) -> set[int]:
+    """Поля, где у игрока есть хоть какая-то активность: грядки, шатры, загоны, питомцы, грядки-гнезда."""
+    ids: set[int] = set()
+
+    cell_ids = [
+        r[0] for r in db.query(Plot.cell_id).filter(
+            Plot.user_id == vk_id, Plot.cell_id.isnot(None)
+        ).all()
+    ]
+    if cell_ids:
+        ids.update(
+            r[0] for r in db.query(FieldCell.field_id).filter(FieldCell.id.in_(cell_ids)).all()
+        )
+
+    tent_ids = [
+        r[0] for r in db.query(TentBuild.tent_id).filter(
+            TentBuild.user_id == vk_id, TentBuild.tent_id.isnot(None)
+        ).all()
+    ]
+    if tent_ids:
+        ids.update(
+            r[0] for r in db.query(Tent.field_id).filter(Tent.id.in_(tent_ids)).all()
+        )
+
+    bs_cell_ids = [
+        r[0] for r in db.query(BarnyardSlot.cell_id).filter(
+            BarnyardSlot.user_id == vk_id, BarnyardSlot.cell_id.isnot(None)
+        ).all()
+    ]
+    if bs_cell_ids:
+        ids.update(
+            r[0] for r in db.query(FieldCell.field_id).filter(FieldCell.id.in_(bs_cell_ids)).all()
+        )
+
+    up_cell_ids = [
+        r[0] for r in db.query(UserPet.cell_id).filter(
+            UserPet.user_id == vk_id, UserPet.cell_id.isnot(None)
+        ).all()
+    ]
+    if up_cell_ids:
+        ids.update(
+            r[0] for r in db.query(FieldCell.field_id).filter(FieldCell.id.in_(up_cell_ids)).all()
+        )
+
+    ids.update(
+        r[0] for r in db.query(PlantBed.field_id).filter(PlantBed.occupant_user_id == vk_id).all()
+    )
+
+    active_patient = (
+        db.query(UserPatientState)
+        .filter(UserPatientState.user_id == vk_id, UserPatientState.status != "released")
+        .order_by(UserPatientState.patient_id.asc())
+        .first()
+    )
+    if active_patient is not None and active_patient.current_field_id is not None:
+        ids.add(active_patient.current_field_id)
+    return ids
 
 
 def _resolve_names(db: Session, users: list[User]) -> dict[int, dict]:
@@ -155,6 +224,15 @@ def get_player_farm(
         .filter(UserAchievement.user_id == vk_id).scalar() or 0
     )
 
+    field_ids = _player_field_ids(db, vk_id)
+    fields: list[FarmFieldOut] = []
+    if field_ids:
+        for f in db.query(Field).filter(Field.id.in_(field_ids)).order_by(Field.id.asc()).all():
+            fields.append(FarmFieldOut(
+                id=f.id, code=f.code, name=f.name,
+                cols=f.cols or 0, rows=f.rows or 0, map_url=f.map_url,
+            ))
+
     return FarmOut(
         vk_id=player.vk_id,
         display_name=_display_name(player, names),
@@ -163,6 +241,7 @@ def get_player_farm(
         crosses_total=player.crosses_total or 0,
         round=player.round or 1,
         achievements_total=achievements_total,
+        fields=fields,
         plots=[
             FarmPlotOut(
                 plant_name=p.plant.name if p.plant else None,
@@ -282,10 +361,41 @@ def get_player_field(
             required=(tb.required or 0) if tb is not None else (t.required or 0),
         )
 
+    pet_zone_cells: dict[int, list[FieldCell]] = {}
+    for pz in f.pet_zones:
+        pet_zone_cells[pz.id] = [
+            c for c in f.cells
+            if c.kind == "pet"
+            and pz.col1 <= c.col <= pz.col2 and pz.row1 <= c.row <= pz.row2
+        ]
+    pet_zone_pets: dict[int, UserPet] = {}
+    all_pet_cell_ids = [c.id for cells_in_zone in pet_zone_cells.values() for c in cells_in_zone]
+    if all_pet_cell_ids:
+        for up in db.query(UserPet).filter(
+            UserPet.user_id == vk_id, UserPet.cell_id.in_(all_pet_cell_ids)
+        ).all():
+            for zid, cells_in_zone in pet_zone_cells.items():
+                if any(c.id == up.cell_id for c in cells_in_zone):
+                    pet_zone_pets[zid] = up
+                    break
+    pet_zones = []
+    for pz in f.pet_zones:
+        up = pet_zone_pets.get(pz.id)
+        pet = up.pet if up is not None and up.pet is not None else None
+        pet_zones.append({
+            "id": pz.id, "col1": pz.col1, "row1": pz.row1, "col2": pz.col2, "row2": pz.row2,
+            "pet_id": up.pet_id if up is not None else None,
+            "pet_name": pet.name if pet else None,
+            "pet_emoji": pet.emoji if pet else None,
+            "pet_image_url": pet.image_url if pet else None,
+            "bonus_description": pet.bonus_description if pet else None,
+        })
+
     return AdminFieldDetailOut(
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
         created_at=f.created_at.isoformat() if f.created_at else None,
         cells=cells_out,
         tents=[_tent_out(t) for t in f.tents],
+        pet_zones=pet_zones,
     )

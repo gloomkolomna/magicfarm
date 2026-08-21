@@ -47,7 +47,7 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
                       setSelectedCell({ col: ci, row: ri, plotId: cell.plot.id });
                     }
                   }}
-                  title={cell?.plot ? `Норма: ${cell.plot.required}❎ · ${cell.plot.accumulated}/${cell.plot.required} · norm_revealed: ${cell.plot.norm_revealed}` : undefined}
+                  title={cell?.plot ? `Норма: ${cell.plot.required}❆ · накоплено ${cell.plot.accumulated}/${cell.plot.required}` : undefined}
                   style={{
                     border: `1px solid ${field.grid_color || 'rgba(255,255,255,0.08)'}`,
                     background: fill,
@@ -90,6 +90,37 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
                 )}
                 {t.build_status === 'slot' && (
                   <div style={{ fontSize: 10, color: '#ccc' }}>слот</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {(field.pet_zones ?? []).map((z) => {
+          const spanCols = z.col2 - z.col1 + 1;
+          const spanRows = z.row2 - z.row1 + 1;
+          const hasPet = z.pet_id != null;
+          return (
+            <div key={`petzone-${z.id}`} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'grid', gridTemplateColumns: `repeat(${field.cols}, 1fr)`, gridTemplateRows: `repeat(${field.rows}, 1fr)` }}>
+              <div style={{
+                gridColumn: `${z.col1 + 1} / span ${spanCols}`,
+                gridRow: `${z.row1 + 1} / span ${spanRows}`,
+                position: 'relative', overflow: 'hidden',
+                border: hasPet ? 'none' : '2px dashed rgba(200,130,220,0.75)',
+                borderRadius: 6,
+                background: hasPet ? 'transparent' : 'rgba(200,130,220,0.12)',
+              }}>
+                {hasPet && z.pet_image_url && (
+                  <img src={mediaUrl(z.pet_image_url)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                )}
+                {hasPet && z.pet_name && (
+                  <div style={{ position: 'absolute', left: 2, right: 2, bottom: 1, fontSize: 'clamp(9px,2.2vw,13px)', color: '#e6d9ff', textAlign: 'center', fontWeight: 600, background: 'rgba(10,16,8,0.5)', borderRadius: 4, padding: '0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {z.pet_name}
+                  </div>
+                )}
+                {!hasPet && (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(14px,3vw,28px)', lineHeight: 1, pointerEvents: 'none', opacity: 0.85 }}>
+                    🐾
+                  </div>
                 )}
               </div>
             </div>

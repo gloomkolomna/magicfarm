@@ -337,6 +337,7 @@ class AdminFieldDetailOut(BaseModel):
     created_at: str | None
     cells: list[AdminFieldCellOut]
     tents: list[AdminTentOut]
+    pet_zones: list = []
 
 
 class AdminTentOut(BaseModel):

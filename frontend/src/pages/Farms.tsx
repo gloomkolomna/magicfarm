@@ -1,21 +1,29 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, type FieldDetail, type FieldInfo, type PlayerFarm, type PlayerSearchItem } from '../api/endpoints';
+import { api, type FieldDetail, type PlayerFarm, type PlayerSearchItem } from '../api/endpoints';
 import FieldGridView from '../components/FieldGridView';
 import Toast from '../components/Toast';
+
+const PLOT_STATUS_LABEL: Record<string, string> = {
+  planted: 'посажено',
+  grown: 'выросло',
+  await_replant: 'готово к пересадке',
+};
+
+const PROD_STATUS_LABEL: Record<string, string> = {
+  installed: 'установлено',
+};
 
 export default function FarmsPage() {
   const nav = useNavigate();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<PlayerSearchItem[]>([]);
   const [farm, setFarm] = useState<PlayerFarm | null>(null);
-  const [fields, setFields] = useState<FieldInfo[]>([]);
   const [viewField, setViewField] = useState<FieldDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    api.fields().then(setFields).catch(() => {});
     api.playerSearch('').then(setResults).catch(() => {});
   }, []);
 
@@ -88,9 +96,9 @@ export default function FarmsPage() {
                     🏆 Уровень {p.level} · 🪙 {p.coins} · 🧵 {p.crosses_total}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>ID: {p.vk_id}</div>
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                    <button className="fm-btn fm-btn-sm" onClick={(e) => { e.stopPropagation(); openFarm(p.vk_id); }}>👁 Смотреть</button>
-                    <button className="fm-btn fm-btn-sm fm-btn-outline" onClick={(e) => { e.stopPropagation(); writeTo(p.vk_id); }}>💬 Написать</button>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    <button className="fm-btn fm-btn-sm" style={{ flex: '1 1 45%', minWidth: 0 }} onClick={(e) => { e.stopPropagation(); openFarm(p.vk_id); }}>👁 Смотреть</button>
+                    <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ flex: '1 1 45%', minWidth: 0 }} onClick={(e) => { e.stopPropagation(); writeTo(p.vk_id); }}>💬 Написать</button>
                   </div>
                 </div>
               ))}
@@ -111,11 +119,11 @@ export default function FarmsPage() {
           </div>
 
           <h3 style={{ margin: '0 0 8px' }}>🗺️ Локации</h3>
-          {fields.length === 0 ? (
-            <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Нет полей.</div>
+          {farm.fields.length === 0 ? (
+            <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Нет открытых локаций.</div>
           ) : (
             <div className="fm-grid" style={{ marginBottom: 12 }}>
-              {fields.map((f) => (
+              {farm.fields.map((f) => (
                 <button key={f.id} className="fm-card fm-rise" style={{ fontSize: 13, textAlign: 'left', cursor: 'pointer' }} onClick={() => openField(f.id)}>
                   <strong>🗺️ {f.name}</strong>
                   <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{f.cols}×{f.rows} клеток</div>
@@ -133,7 +141,7 @@ export default function FarmsPage() {
                 <div key={i} className="fm-card" style={{ fontSize: 13 }}>
                   <strong>{pl.plant_emoji || '🌱'} {pl.plant_name || '—'}</strong>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {pl.status} · {pl.accumulated}/{pl.required} ❆
+                    {PLOT_STATUS_LABEL[pl.status] || '—'} · {pl.accumulated}/{pl.required} ❆
                   </div>
                 </div>
               ))}
@@ -149,7 +157,7 @@ export default function FarmsPage() {
                 <div key={i} className="fm-card" style={{ fontSize: 13 }}>
                   <strong>{pr.name}</strong>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {pr.status} · {pr.accumulated}/{pr.required} ❆
+                    {PROD_STATUS_LABEL[pr.status] || '—'} · {pr.accumulated}/{pr.required} ❆
                   </div>
                 </div>
               ))}

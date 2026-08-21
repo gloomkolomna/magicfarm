@@ -126,28 +126,6 @@ export default function InfirmaryHubPage() {
         )}
       </div>
 
-      <h3 style={{ margin: '0 0 8px' }}>Пациенты по уровням</h3>
-      {(hub?.levels ?? []).map((lv) => (
-        <div key={lv.level} className="fm-card" style={{ marginBottom: 8, padding: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <strong>Уровень {lv.level}</strong>
-            {!lv.unlocked && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>🔒 Вылечите всех животных прошлого уровня</span>}
-          </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {lv.patients.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Животных нет</span>}
-            {lv.patients.map((p) => (
-              <span key={p.id} className="fm-card" style={{ padding: '4px 10px', fontSize: 13, opacity: lv.unlocked ? 1 : 0.55, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                {p.animal_image_url
-                  ? <img src={mediaUrl(p.animal_image_url)} alt="" style={{ width: 22, height: 22, borderRadius: 6, objectFit: 'cover' }} />
-                  : <span>{p.animal_type_emoji || '🐾'}</span>}
-                {p.name}
-                {p.healed ? ' ✅' : ' ⏳'}
-              </span>
-            ))}
-          </div>
-        </div>
-      ))}
-
       <h2 style={{ fontSize: 16, margin: '16px 0 8px' }}>💭 Воспоминания</h2>
       {(hub?.memories ?? []).length === 0 ? (
         <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Пока никого не вылечили.</div>

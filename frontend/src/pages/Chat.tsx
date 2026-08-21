@@ -6,8 +6,9 @@ import Toast from '../components/Toast';
 
 function fmt(iso: string | null): string {
   if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(iso);
+  const d = new Date(hasZone ? iso : iso + 'Z');
+  return d.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function ChatPage() {
@@ -25,6 +26,10 @@ export default function ChatPage() {
 
   useEffect(() => {
     api.chatConversations().then(setConvs).catch(() => {});
+    const id = setInterval(() => {
+      api.chatConversations().then(setConvs).catch(() => {});
+    }, 15000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
