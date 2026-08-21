@@ -53,6 +53,7 @@ const LessonsPage = lazyPage(() => import('./pages/Lessons'));
 const FarmsPage = lazyPage(() => import('./pages/Farms'));
 const TradesPage = lazyPage(() => import('./pages/Trades'));
 const ChatPage = lazyPage(() => import('./pages/Chat'));
+const NotificationsPage = lazyPage(() => import('./pages/Notifications'));
 
 const zoomed = { zoom: 'var(--app-scale)', width: 'calc(100% / var(--app-scale))', margin: '0 auto' } as const;
 
@@ -203,6 +204,7 @@ function App() {
           <Route path="/trades" element={<MiniAppShell><TradesPage /></MiniAppShell>} />
           <Route path="/chat" element={<MiniAppShell><ChatPage /></MiniAppShell>} />
           <Route path="/chat/:vkId" element={<MiniAppShell><ChatPage /></MiniAppShell>} />
+          <Route path="/notifications" element={<MiniAppShell><NotificationsPage /></MiniAppShell>} />
           <Route path="/orders" element={<MiniAppShell><OrdersPage /></MiniAppShell>} />
           <Route path="/orders/catalog" element={<MiniAppShell><OrderCatalogPage /></MiniAppShell>} />
           <Route path="/profile" element={<MiniAppShell><ProfilePage /></MiniAppShell>} />

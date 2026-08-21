@@ -42,6 +42,7 @@ function MiniAppShell({ children }: Props) {
   const { user } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
+  const [notifUnread, setNotifUnread] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +50,10 @@ function MiniAppShell({ children }: Props) {
       try {
         const convs = await api.chatConversations();
         if (!cancelled) setChatUnread(convs.reduce((s, c) => s + (c.unread_count || 0), 0));
+      } catch { /* ignore */ }
+      try {
+        const n = await api.notificationUnreadCount();
+        if (!cancelled) setNotifUnread(n.count);
       } catch { /* ignore */ }
     };
     tick();
@@ -142,6 +147,27 @@ function MiniAppShell({ children }: Props) {
         {active?.unread ? (
           <span style={{ flexShrink: 0, background: '#e5484d', color: '#fff', borderRadius: 999, fontSize: 13, padding: '2px 9px', fontWeight: 700 }}>{active.unread}</span>
         ) : null}
+        <button
+          onClick={() => nav('/notifications')}
+          className="fm-btn fm-btn-outline"
+          aria-label="Уведомления"
+          style={{
+            position: 'relative',
+            flexShrink: 0,
+            padding: '8px 12px',
+            fontSize: 16,
+            background: 'rgba(255,255,255,0.14)',
+            color: '#ffffff',
+            borderColor: 'rgba(255,255,255,0.25)',
+          }}
+        >
+          🔔
+          {notifUnread > 0 && (
+            <span style={{ position: 'absolute', top: -4, right: -4, background: '#e5484d', color: '#fff', borderRadius: 999, fontSize: 12, padding: '1px 7px', fontWeight: 700, minWidth: 20, textAlign: 'center' }}>
+              {notifUnread}
+            </span>
+          )}
+        </button>
       </div>
 
       {menuOpen && (

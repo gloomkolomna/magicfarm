@@ -503,7 +503,7 @@ def admin_upload_card_image(
     if r is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
     remove_upload(r.card_image_url)
-    r.card_image_url = save_upload(image, f"cocktail_card_{r.id}", max_size=512)
+    r.card_image_url = save_upload(image, f"cocktail_card_{r.id}", max_size=1200)
     db.commit()
     db.refresh(r)
     return _admin_recipe_out(r)

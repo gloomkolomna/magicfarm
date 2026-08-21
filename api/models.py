@@ -1407,3 +1407,13 @@ class ChatMessage(Base):
     text = Column(Text, nullable=False)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
     read_at = Column(DateTime, nullable=True)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+    read_at = Column(DateTime, nullable=True)

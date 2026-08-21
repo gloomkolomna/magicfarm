@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type FieldDetail, type PlayerFarm, type PlayerSearchItem } from '../api/endpoints';
 import FieldGridView from '../components/FieldGridView';
@@ -17,26 +17,23 @@ const PROD_STATUS_LABEL: Record<string, string> = {
 export default function FarmsPage() {
   const nav = useNavigate();
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<PlayerSearchItem[]>([]);
+  const [allPlayers, setAllPlayers] = useState<PlayerSearchItem[]>([]);
   const [farm, setFarm] = useState<PlayerFarm | null>(null);
   const [viewField, setViewField] = useState<FieldDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    api.playerSearch('').then(setResults).catch(() => {});
+    api.playerSearch('', 100).then(setAllPlayers).catch(() => {});
   }, []);
 
-  async function search() {
-    setBusy(true); setMsg(null);
-    try {
-      setResults(await api.playerSearch(q));
-    } catch (e: any) {
-      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка поиска'));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const results = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return allPlayers;
+    return allPlayers.filter(
+      (p) => p.display_name.toLowerCase().includes(needle) || String(p.vk_id).includes(needle),
+    );
+  }, [q, allPlayers]);
 
   async function openFarm(vkId: number) {
     setBusy(true); setMsg(null);
@@ -72,16 +69,13 @@ export default function FarmsPage() {
 
       {!farm ? (
         <>
-          <div className="fm-card" style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="fm-card" style={{ marginBottom: 12 }}>
             <input
               className="fm-input"
-              placeholder="Имя или ID игрока…"
+              placeholder="Фильтр: имя или ID игрока…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
-              style={{ flex: '1 1 180px', minWidth: 0 }}
             />
-            <button className="fm-btn fm-btn-sm" style={{ flexShrink: 0 }} disabled={busy} onClick={search}>🔍 Найти</button>
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
             Только просмотр: фермы других игроков можно смотреть и писать, но нельзя трогать.

@@ -10,6 +10,7 @@ from deps import get_current_user
 from models import (
     Inventory, TradeHold, TradeOffer, TradeOfferItem, User, UserIngredient,
 )
+from routes.notifications import notify
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
 
@@ -296,6 +297,7 @@ def accept_trade(
 
     offer.status = "accepted"
     offer.accepted_at = datetime.datetime.utcnow()
+    notify(db, offer.from_user_id, f"✅ {_user_name(db, user)} принял(а) ваше предложение по бартеру")
     db.commit()
     db.refresh(offer)
     return _offer_out(db, offer)
@@ -312,6 +314,7 @@ def cancel_trade(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Отменить может только отправитель")
     _release_holds(db, offer.id, offer.from_user_id)
     offer.status = "cancelled"
+    notify(db, offer.to_user_id, f"🗑 {_user_name(db, user)} отменил(а) своё предложение по бартеру")
     db.commit()
     db.refresh(offer)
     return _offer_out(db, offer)
@@ -328,6 +331,7 @@ def reject_trade(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Отклонить может только получатель")
     _release_holds(db, offer.id, offer.from_user_id)
     offer.status = "rejected"
+    notify(db, offer.from_user_id, f"✕ {_user_name(db, user)} отклонил(а) ваше предложение по бартеру")
     db.commit()
     db.refresh(offer)
     return _offer_out(db, offer)

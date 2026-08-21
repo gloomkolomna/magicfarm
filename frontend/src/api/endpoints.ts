@@ -344,6 +344,13 @@ export interface Conversation {
   unread_count: number;
 }
 
+export interface Notification {
+  id: number;
+  text: string;
+  created_at: string;
+  read: boolean;
+}
+
 export interface Animal {
   id: number;
   code: string;
@@ -2259,8 +2266,8 @@ export const api = {
     client.delete(`/admin/lessons/${id}`).then((r) => r.data),
 
   // ── Чужие фермы (только просмотр) ──
-  playerSearch: (q: string) =>
-    client.get<PlayerSearchItem[]>('/players/search', { params: { q } }).then((r) => r.data),
+  playerSearch: (q: string, limit?: number) =>
+    client.get<PlayerSearchItem[]>('/players/search', { params: { q, limit } }).then((r) => r.data),
   playerFarm: (vkId: number) =>
     client.get<PlayerFarm>(`/players/${vkId}/farm`).then((r) => r.data),
   playerField: (vkId: number, fieldId: number) =>
@@ -2281,4 +2288,9 @@ export const api = {
   chatThread: (vkId: number) => client.get<ChatMessage[]>(`/chat/with/${vkId}`).then((r) => r.data),
   sendChatMessage: (vkId: number, text: string) =>
     client.post<ChatMessage>(`/chat/with/${vkId}`, { text }).then((r) => r.data),
+
+  // ── Уведомления ──
+  notifications: () => client.get<Notification[]>('/notifications').then((r) => r.data),
+  notificationUnreadCount: () => client.get<{ count: number }>('/notifications/unread-count').then((r) => r.data),
+  markNotificationsRead: () => client.post<{ ok: boolean }>('/notifications/read').then((r) => r.data),
 };

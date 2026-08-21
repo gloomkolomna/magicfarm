@@ -19,7 +19,6 @@ interface RowForm {
 }
 
 const KIND_LABEL: Record<string, string> = { plant: 'Растение', product: 'Товар', ingredient: 'Ингредиент' };
-const STATUS_LABEL: Record<string, string> = { open: 'открыто', accepted: 'принято', rejected: 'отклонено', cancelled: 'отменено' };
 
 function TradeItems({ items, isMine }: { items: TradeOffer['items']; isMine: boolean }) {
   const give = items.filter((i) => i.direction === 'give');
@@ -167,7 +166,10 @@ export default function TradesPage() {
     return (
       <div key={o.id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
-          {isMine ? `${o.to_name}` : `${o.from_name}`} · {o.status === 'open' ? 'открыто' : STATUS_LABEL[o.status]}
+          {isMine ? `${o.to_name}` : `${o.from_name}`} ·{' '}
+          <span style={{ fontWeight: 600, color: o.status === 'accepted' ? 'var(--success, #4caf50)' : o.status === 'rejected' ? 'var(--danger, #e5484d)' : o.status === 'cancelled' ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+            {o.status === 'open' ? 'открыто' : o.status === 'accepted' ? '✅ принято' : o.status === 'rejected' ? '✕ отклонено' : '🗑 отменено'}
+          </span>
         </div>
         {o.message && <div style={{ fontStyle: 'italic', marginBottom: 6 }}>«{o.message}»</div>}
         <TradeItems items={o.items} isMine={isMine} />

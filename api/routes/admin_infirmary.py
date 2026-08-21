@@ -592,7 +592,7 @@ def upload_patient_card_image(
     if p is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
     remove_upload(p.card_image_url)
-    p.card_image_url = save_upload(image, f"patient_card_{patient_id}", max_size=400)
+    p.card_image_url = save_upload(image, f"patient_card_{patient_id}", max_size=1200)
     db.commit()
     db.refresh(p)
     return _patient_out(p)

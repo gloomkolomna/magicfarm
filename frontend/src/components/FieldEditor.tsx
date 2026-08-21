@@ -368,7 +368,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           fieldId,
           zoneKind,
           { col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2 },
-          zoneKind === 'shaker' ? { image: barImage || undefined } : undefined,
+          zoneKind === 'shaker' || zoneKind === 'book' ? { image: barImage || undefined } : undefined,
         );
         setMsg('✓ Зона бара размещена');
       } else if (isInfirmaryZoneBrush(brush)) {
@@ -1304,6 +1304,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             {(field.bar_zones ?? []).map((z: BarZone) => (
               <div key={z.id} className="fm-card">
                 <strong>{BAR_ZONE_LABEL[z.zone_kind] || z.zone_kind}</strong>
+                {z.image_url && <img src={mediaUrl(z.image_url)} alt="" style={{ width: '100%', maxHeight: 80, objectFit: 'contain', borderRadius: 'var(--radius-sm)', marginTop: 6 }} />}
                 {z.cocktail_recipe_id != null && (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                     Коктейль: {allCocktailRecipes.find((r) => r.id === z.cocktail_recipe_id)?.name ?? `#${z.cocktail_recipe_id}`}
@@ -1312,9 +1313,31 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                   {z.col2 - z.col1 + 1}×{z.row2 - z.row1 + 1} · [{z.col1},{z.row1}]
                 </div>
-                <button className="fm-btn fm-btn-sm fm-btn-danger" style={{ marginTop: 8, width: '100%' }} disabled={busy} onClick={() => deleteBarZone(z.id)}>
-                  Удалить
-                </button>
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  {z.zone_kind !== 'cocktail_card' && (
+                    <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ flex: 1, cursor: 'pointer', textAlign: 'center' }}>
+                      🖼️
+                      <input type="file" accept="image/*" hidden onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = '';
+                        if (!f) return;
+                        setBusy(true);
+                        try {
+                          await api.adminUploadBarZoneImage(fieldId, z.id, f);
+                          await load();
+                          setMsg('✓ Картинка зоны загружена');
+                        } catch (err: any) {
+                          setMsg('✗ ' + (err?.response?.data?.detail || 'Ошибка'));
+                        } finally {
+                          setBusy(false);
+                        }
+                      }} />
+                    </label>
+                  )}
+                  <button className="fm-btn fm-btn-sm fm-btn-danger" style={{ flex: z.zone_kind !== 'cocktail_card' ? 1 : 0, minWidth: 90 }} disabled={busy} onClick={() => deleteBarZone(z.id)}>
+                    Удалить
+                  </button>
+                </div>
               </div>
             ))}
             {(field.bar_zones ?? []).length === 0 && (
@@ -1808,7 +1831,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           <div className="fm-card fm-rise" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'calc(var(--shell-max-width) * 0.7)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <h3 style={{ margin: 0 }}>
-                {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом ведьмы' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону питомца' : brush === 'brew_cauldron' ? '🍲 Место котла' : brush === 'brew_jar' ? '🧪 Банка зелья' : brush === 'brew_card' ? '🃏 Карточка рецепта' : brush === 'remedy_device' ? '🔧 Прибор аптеки' : '📖 Зона книги'}
+                {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом ведьмы' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону питомца' : brush === 'brew_cauldron' ? '🍲 Место котла' : brush === 'brew_jar' ? '🧪 Банка зелья' : brush === 'brew_card' ? '🃏 Карточка рецепта' : brush === 'remedy_device' ? '🔧 Прибор аптеки' : brush === 'bar_shaker' ? '🍸 Зона шейкера' : brush === 'bar_book' ? '📖 Зона книги' : brush === 'bar_card' ? '🃏 Зона карточки коктейля' : '📖 Зона книги'}
               </h3>
               <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => setMultiModal(null)}>✕</button>
             </div>
@@ -1902,6 +1925,33 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                   ))}
                 </div>
               </>
+            ) : isBarMultiBrush(brush) ? (
+              brush === 'bar_card' ? (
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  Зона карточки коктейля: картинка подгрузится из рецепта, привязанного к локации.
+                </p>
+              ) : (
+                <>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    {brush === 'bar_shaker'
+                      ? 'На этих клетках у игрока появится место шейкера.'
+                      : 'На этих клетках у игрока появится книга коктейлей.'}
+                  </p>
+                  <label style={lbl}>Картинка зоны (необязательно)</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer' }}>
+                      {barImage ? '🖼️ Заменить' : '🖼️ Выбрать картинку'}
+                      <input type="file" accept="image/*" hidden onChange={(e) => { setBarImage(e.target.files?.[0] || null); e.target.value = ''; }} />
+                    </label>
+                    {barImage && (
+                      <>
+                        <img src={URL.createObjectURL(barImage)} alt="" style={{ height: 44, maxWidth: 120, objectFit: 'contain', borderRadius: 6 }} />
+                        <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => setBarImage(null)}>✕</button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )
             ) : (
               <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                 {brush === 'bed' ? 'Слот садового дерева: игрок сажает сюда 1 дерево (на весь прямоугольник).' : 'Мульти-клеточная зона для питомца.'}
