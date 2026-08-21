@@ -149,7 +149,7 @@ function App() {
       </>
     );
   }
-  if (user && !user.story_seen) {
+  if (user && user.role !== 'admin' && !user.story_seen) {
     return (
       <>
         <Background />
@@ -162,7 +162,7 @@ function App() {
       </>
     );
   }
-  if (user && user.story_seen && !user.onboarding_done) {
+  if (user && user.role !== 'admin' && user.story_seen && !user.onboarding_done) {
     return (
       <>
         <Background />

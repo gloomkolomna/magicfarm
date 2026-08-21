@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSession } from '../context/SessionContext';
 import { api, type DlcStory, type StorySlide } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 
@@ -144,20 +145,23 @@ export function DlcStoryOverlay({ locationCode, name, emoji, onClose }: { locati
 }
 
 export function DlcStoryGate({ locationCode, name, emoji, children }: { locationCode: string; name: string; emoji: string; children: ReactNode }) {
+  const { user } = useSession();
   const [status, setStatus] = useState<DlcStory | null>(null);
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
+    if (isAdmin) return;
     let cancelled = false;
     api.storyDlc(locationCode)
       .then((s) => { if (!cancelled) setStatus(s); })
       .catch(() => { if (!cancelled) setStatus({ slides: [], seen: true }); });
     return () => { cancelled = true; };
-  }, [locationCode]);
+  }, [locationCode, isAdmin]);
 
   return (
     <>
       {children}
-      {status && !status.seen && status.slides.length > 0 && (
+      {!isAdmin && status && !status.seen && status.slides.length > 0 && (
         <DlcStoryOverlay locationCode={locationCode} name={name} emoji={emoji} onClose={() => setStatus((s) => (s ? { ...s, seen: true } : s))} />
       )}
     </>
