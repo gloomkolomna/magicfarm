@@ -283,3 +283,24 @@ def test_delete_report_player_forbidden(uploads_tmp, player_client):
     ).json()["id"]
     res = player_client.delete(f"/api/stitches/reports/{rid}")
     assert res.status_code == 403
+
+
+def test_create_report_dedup_different_context_allowed(uploads_tmp, player_client):
+    first = player_client.post(
+        "/api/stitches/reports",
+        data={"amount": "88", "context_type": "animal_build"},
+        files={"photo_after": ("r1.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+    assert first.status_code == 201
+    second = player_client.post(
+        "/api/stitches/reports",
+        data={"amount": "88", "context_type": "barnyard_withdraw"},
+        files={"photo_after": ("r2.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+    assert second.status_code == 201
+    same_ctx = player_client.post(
+        "/api/stitches/reports",
+        data={"amount": "88", "context_type": "animal_build"},
+        files={"photo_after": ("r3.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+    assert same_ctx.status_code == 429

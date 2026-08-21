@@ -421,3 +421,103 @@ def test_bar_zone_image_upload(admin_client, uploads_tmp):
                          files={"image": ("s.png", io.BytesIO(_img_bytes()), "image/png")})
     assert r.status_code == 201
     assert r.json()["image_url"] is not None
+
+
+def test_admin_recipe_merges_duplicate_items(admin_client):
+    ing = _seed_ingredient()
+    rem = _seed_remedy()
+    payload = {
+        "name": "Дубль коктейль",
+        "items": [
+            {"kind": "plant", "item_id": 1, "qty": 2},
+            {"kind": "plant", "item_id": 1, "qty": 3},
+            {"kind": "ingredient", "item_id": ing, "qty": 1},
+            {"kind": "ingredient", "item_id": ing, "qty": 1},
+        ],
+    }
+    r = admin_client.post("/api/admin/cocktail-recipes", json=payload)
+    assert r.status_code == 201, r.text
+    items = r.json()["items"]
+    assert len(items) == 2
+    plant = next(i for i in items if i["kind"] == "plant")
+    ing_item = next(i for i in items if i["kind"] == "ingredient")
+    assert plant["qty"] == 5
+    assert ing_item["qty"] == 2
+
+
+def test_mix_consumes_total_of_duplicate_rows(admin_client):
+    from models import CocktailRecipeItem
+    from tests.conftest import TestingSessionLocal
+
+    ing = _seed_ingredient()
+    rem = _seed_remedy()
+    rid = _create_recipe(admin_client, ing, rem)
+    _seed_inventory_plant(123, 1, 2)
+
+    s = TestingSessionLocal()
+    try:
+        s.add(CocktailRecipeItem(
+            cocktail_recipe_id=rid, qty=2, plant_id=1,
+        ))
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as c:
+        assert c.post("/api/cocktails/shaker", json={"recipe_id": rid}).status_code == 201
+        r = c.post("/api/cocktails/shaker/mix")
+        assert r.status_code == 400, r.text
+        assert "Не хватает" in r.json()["detail"]
+
+    s = TestingSessionLocal()
+    try:
+        from models import Inventory
+        row = s.query(Inventory).filter(Inventory.user_id == 123, Inventory.plant_id == 1).first()
+        assert row is not None and row.qty == 2
+    finally:
+        s.close()
+
+
+def test_upload_image_failure_keeps_old_file(admin_client, monkeypatch):
+    from routes import cocktails as routes_cocktails
+    from services.uploads import remove_upload as real_remove
+    from models import CocktailRecipe
+    from tests.conftest import TestingSessionLocal
+
+    ing = _seed_ingredient()
+    rem = _seed_remedy()
+    rid = _create_recipe(admin_client, ing, rem)
+
+    s = TestingSessionLocal()
+    try:
+        recipe = s.query(CocktailRecipe).filter(CocktailRecipe.id == rid).first()
+        recipe.image_url = "/api/uploads/old_cocktail.jpg"
+        s.commit()
+    finally:
+        s.close()
+
+    removed = []
+
+    def _fake_remove(url):
+        removed.append(url)
+        return real_remove(url)
+
+    def _bad_save(file, name, **kwargs):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Файл должен быть изображением")
+
+    monkeypatch.setattr(routes_cocktails, "remove_upload", _fake_remove)
+    monkeypatch.setattr(routes_cocktails, "save_upload", _bad_save)
+
+    r = admin_client.put(f"/api/admin/cocktail-recipes/{rid}/image", files={
+        "image": ("x.png", b"notanimage", "image/png"),
+    })
+    assert r.status_code == 400
+    assert removed == []
+
+    s = TestingSessionLocal()
+    try:
+        recipe = s.query(CocktailRecipe).filter(CocktailRecipe.id == rid).first()
+        assert recipe.image_url == "/api/uploads/old_cocktail.jpg"
+    finally:
+        s.close()

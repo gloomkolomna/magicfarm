@@ -67,24 +67,24 @@ def _activate_bonus(c, bonus_code: str):
 
 
 def test_garden_bed_location_locked_without_bonus(admin_client):
-    fid = _make_bed_field(admin_client, min_level=12)
+    fid = _make_bed_field(admin_client, min_level=3)
     pid = _make_plant(admin_client, "garden", 3, "Грядковый корешок-3")
     _link_plant(admin_client, fid, pid)
     with make_user_client(123, "player") as c:
         c.get("/api/me")
-        _set_user_level(123, 6)
+        _set_user_level(123, 2)
         r = c.post(f"/api/fields/{fid}/cells/1/1/plant", json={"plant_id": pid, "qty": 1})
         assert r.status_code == 403
         assert "недоступна" in r.json()["detail"]
 
 
 def test_unlock_garden_l3_opens_locked_bed_location(admin_client):
-    fid = _make_bed_field(admin_client, min_level=12)
+    fid = _make_bed_field(admin_client, min_level=3)
     pid = _make_plant(admin_client, "garden", 3, "Грядковый корешок-3")
     _link_plant(admin_client, fid, pid)
     with make_user_client(123, "player") as c:
         c.get("/api/me")
-        _set_user_level(123, 6)
+        _set_user_level(123, 2)
         _activate_bonus(c, "unlock_garden_l3")
         assert c.get("/api/me").json()["unlocked_plot_level"] == 3
         r = c.post(f"/api/fields/{fid}/cells/1/1/plant", json={"plant_id": pid, "qty": 1})
@@ -94,7 +94,7 @@ def test_unlock_garden_l3_opens_locked_bed_location(admin_client):
 def test_unlock_garden_l3_does_not_open_other_location_kinds(admin_client):
     r = admin_client.post("/api/admin/fields", json={
         "name": "Поле-не-грядки", "cols": 3, "rows": 2,
-        "plant_category": "garden", "min_level": 12,
+        "plant_category": "garden", "min_level": 3,
     })
     fid = r.json()["id"]
     admin_client.put(f"/api/admin/fields/{fid}/cells/blocked", json={
@@ -110,24 +110,24 @@ def test_unlock_garden_l3_does_not_open_other_location_kinds(admin_client):
 
 
 def test_orchard_location_locked_without_bonus(admin_client):
-    fid, pb_id = _make_orchard_field(admin_client, min_level=15)
+    fid, pb_id = _make_orchard_field(admin_client, min_level=3)
     pid = _make_plant(admin_client, "orchard", 3, "Яблоня-3")
     _link_plant(admin_client, fid, pid)
     with make_user_client(123, "player") as c:
         c.get("/api/me")
-        _set_user_level(123, 6)
+        _set_user_level(123, 2)
         r = c.post(f"/api/fields/{fid}/plant-beds/{pb_id}/plant", json={"plant_id": pid, "qty": 1})
         assert r.status_code == 403
         assert "недоступна" in r.json()["detail"]
 
 
 def test_unlock_orchard_l3_opens_locked_garden_location(admin_client):
-    fid, pb_id = _make_orchard_field(admin_client, min_level=15)
+    fid, pb_id = _make_orchard_field(admin_client, min_level=3)
     pid = _make_plant(admin_client, "orchard", 3, "Яблоня-3")
     _link_plant(admin_client, fid, pid)
     with make_user_client(123, "player") as c:
         c.get("/api/me")
-        _set_user_level(123, 6)
+        _set_user_level(123, 2)
         _activate_bonus(c, "unlock_orchard_l3")
         assert c.get("/api/me").json()["unlocked_garden_level"] == 3
         r = c.post(f"/api/fields/{fid}/plant-beds/{pb_id}/plant", json={"plant_id": pid, "qty": 1})
@@ -155,13 +155,13 @@ def test_order_available_after_garden_bonus(admin_client):
     from tests.test_orders import _make_plant_product, _admin_generate
     pid = _make_plant(admin_client, "garden", 3, "Заказной корешок")
     prod = _make_plant_product(pid, "zakaznoy_tovar")
-    fid = _make_bed_field(admin_client, min_level=12)
+    fid = _make_bed_field(admin_client, min_level=3)
     _link_plant(admin_client, fid, pid)
     _admin_generate(prod, 2)
 
     with make_user_client(123, "player") as c:
         c.get("/api/me")
-        _set_user_level(123, 6)
+        _set_user_level(123, 2)
         data = c.get("/api/orders/available").json()
         assert all(o["product_id"] != prod for o in data)
 

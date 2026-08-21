@@ -619,23 +619,87 @@ def restart_player(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
-    """РЕСТАРТ: полное обнуление прогресса игрока (как будто только пришёл в игру)."""
+    """РЕСТАРТ: полное обнуление прогресса игрока (как будто только пришёл в игру).
+
+    Админское не затрагивается: каталоги и настройки (растения, товары, локации,
+    заказы), приглашения (AllowedPlayer) и выданные админом DLC (UserDlcUnlock).
+    Кросс-игровые сущности: открытые бартеры отменяются (предметы из холда возвращаются
+    отправителю), неполученные подарки возвращаются отправителям, чат и уведомления игрока
+    очищаются. Подарки, отправленные игроком другим, сохраняются — они уже у получателей.
+    """
+    from sqlalchemy import or_
+
     from models import (
-        BarnyardSlot, Cauldron, CraftSession, HouseBuild, Inventory,
-        Plot, Production, StitchReport, TentBuild, UserAchievement, UserCrystalNorm,
-        UserOrder, UserPet, UserPlantNorm, UserPotion, UserRecipe,
+        BarnyardSlot, BarnyardStorage, BarnyardWithdrawal, Cauldron, ChatMessage,
+        CraftSession, Gift, HouseBuild, Inventory, Notification, PetActionLog,
+        PetForestTask, Plot, Production, Shaker, StitchReport, TentBuild,
+        TradeHold, TradeOffer, UserAchievement, UserCard, UserCrystalNorm,
+        UserDlcStoryView, UserExamineLog, UserGatherLog,
+        UserIngredient, UserOrder, UserPatientState, UserPet, UserPlantNorm,
+        UserPotion, UserRecipe, UserRemedy, UserRemedyCard, UserRemedyDevice,
     )
+    from routes.notifications import notify
+    from routes.trades import _transfer
 
     target = db.query(User).filter(User.vk_id == vk_id).first()
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
 
+    for r in db.query(StitchReport).filter(StitchReport.user_id == vk_id).all():
+        remove_upload(r.photo_before_url)
+        remove_upload(r.photo_after_url)
+        remove_upload(r.photo_before_thumb_url)
+        remove_upload(r.photo_after_thumb_url)
+
+    db.query(ChatMessage).filter(
+        or_(ChatMessage.from_user_id == vk_id, ChatMessage.to_user_id == vk_id)
+    ).delete(synchronize_session=False)
+
+    offers = db.query(TradeOffer).filter(
+        or_(TradeOffer.from_user_id == vk_id, TradeOffer.to_user_id == vk_id)
+    ).all()
+    for offer in offers:
+        if offer.status == "open":
+            for hold in db.query(TradeHold).filter(TradeHold.offer_id == offer.id).all():
+                _transfer(db, offer.from_user_id, hold.kind, hold.item_id, hold.qty)
+                db.flush()
+                db.delete(hold)
+            partner = offer.to_user_id if offer.from_user_id == vk_id else offer.from_user_id
+            notify(db, partner, "♻️ Игрок перезапущен администратором — предложение по бартеру отменено", peer_vk_id=vk_id)
+        db.delete(offer)
+
+    gifts = db.query(Gift).filter(
+        or_(Gift.from_user_id == vk_id, Gift.to_user_id == vk_id)
+    ).all()
+    for g in gifts:
+        if g.to_user_id == vk_id and g.claimed_at is None:
+            _transfer(db, g.from_user_id, g.kind, g.item_id, g.qty)
+            db.flush()
+            notify(db, g.from_user_id, "♻️ Игрок перезапущен администратором — подарок возвращён", peer_vk_id=vk_id)
+            db.delete(g)
+        elif g.to_user_id == vk_id:
+            db.delete(g)
+
     for model in (
+        UserRemedyDevice, UserRemedyCard, UserRemedy, UserExamineLog, UserCard,
+        UserPatientState, UserGatherLog, UserIngredient, PetActionLog, PetForestTask,
+        UserDlcStoryView, Shaker, Notification,
         UserPlantNorm, UserCrystalNorm, UserAchievement, UserPotion, Cauldron,
-        UserPet, BarnyardSlot, CraftSession, UserRecipe, HouseBuild, TentBuild,
-        UserOrder, Inventory, Production, Plot, StitchReport,
+        UserPet, BarnyardWithdrawal, BarnyardStorage, BarnyardSlot,
+        CraftSession, UserRecipe, HouseBuild, TentBuild, UserOrder, Inventory,
+        Production, Plot, StitchReport,
     ):
         db.query(model).filter(model.user_id == vk_id).delete(synchronize_session=False)
+
+    db.query(FieldCell).filter(FieldCell.occupant_user_id == vk_id).update(
+        {FieldCell.occupant_user_id: None}, synchronize_session=False
+    )
+    db.query(PlantBed).filter(PlantBed.occupant_user_id == vk_id).update(
+        {PlantBed.occupant_user_id: None}, synchronize_session=False
+    )
+    db.query(Tent).filter(Tent.builder_user_id == vk_id).update(
+        {Tent.builder_user_id: None}, synchronize_session=False
+    )
 
     target.crosses_balance = 0
     target.crosses_total = 0
@@ -647,6 +711,7 @@ def restart_player(
     target.unlocked_plot_level = 1
     target.unlocked_garden_level = 0
     target.onboarding_done = False
+    target.story_seen = False
     target.dice_norm = None
     target.animal_product_norm = None
     target.study_norm_l1 = None

@@ -3,6 +3,7 @@ import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import delete, update
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -155,11 +156,46 @@ def claim_gift(
     g = _get_gift(db, gift_id)
     if g.to_user_id != user.vk_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Получить подарок может только получатель")
-    if g.claimed_at is not None:
+
+    claimed = db.execute(
+        update(Gift)
+        .where(Gift.id == gift_id, Gift.claimed_at.is_(None))
+        .values(claimed_at=datetime.datetime.utcnow())
+    )
+    if claimed.rowcount != 1:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Подарок уже получен")
 
     _transfer(db, user.vk_id, g.kind, g.item_id, g.qty)
-    g.claimed_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(g)
     return _gift_out(db, g)
+
+
+@router.post("/{gift_id}/cancel", response_model=GiftOut)
+def cancel_gift(
+    gift_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    g = _get_gift(db, gift_id)
+    if g.from_user_id != user.vk_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Отменить подарок может только отправитель")
+
+    cancelled = db.execute(
+        update(Gift)
+        .where(Gift.id == gift_id, Gift.claimed_at.is_(None))
+        .values(claimed_at=datetime.datetime.utcnow())
+    )
+    if cancelled.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Подарок уже получен — отменить нельзя")
+
+    _transfer(db, user.vk_id, g.kind, g.item_id, g.qty)
+    db.execute(delete(ChatMessage).where(
+        ChatMessage.kind == "gift", ChatMessage.gift_id == gift_id
+    ))
+    notify(db, g.to_user_id, f"↩️ {_user_name(db, user)} отменил(а) подарок", peer_vk_id=user.vk_id)
+    db.commit()
+    db.refresh(g)
+    return _gift_out(db, g, from_name=_user_name(db, user))

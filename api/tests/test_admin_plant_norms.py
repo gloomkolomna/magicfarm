@@ -71,8 +71,13 @@ def test_set_plant_norm_used_by_future_planting(admin_client):
 def test_set_plant_norm_grows_plot_when_accumulated_enough(admin_client):
     fid = _field_with_bed(admin_client, "Поле цен 4", "price_d")
     with make_user_client(132, "player") as c:
+        assert c.get("/api/me").status_code == 200
+    pre = admin_client.put("/api/admin/players/132/plant-norms/1", json={"norm_per_unit": 100})
+    assert pre.status_code == 200, pre.text
+    with make_user_client(132, "player") as c:
         r = c.post(f"/api/fields/{fid}/cells/1/1/plant", json={"plant_id": 1, "qty": 2})
         assert r.status_code == 201
+        assert r.json()["plot"]["required"] == 200
         plot_id = r.json()["plot"]["id"]
         c.post("/api/stitches/reports", data={"amount": "500"},
                files=[("photo_after", ("a.png", _img(), "image/png"))])

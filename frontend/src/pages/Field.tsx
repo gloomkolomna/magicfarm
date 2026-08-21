@@ -1468,7 +1468,10 @@ export default function FieldPage() {
                       {activeWithdrawal && (
                         <>
                           <div className="fm-card" style={{ background: 'var(--bg-secondary)', fontSize: 13, marginBottom: 8 }}>
-                            Забор: {activeWithdrawal.product_emoji || '📦'} {activeWithdrawal.product_name} ×{activeWithdrawal.qty} — норма {activeWithdrawal.required} ❎
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span>Забор: {activeWithdrawal.product_emoji || '📦'} {activeWithdrawal.product_name} ×{activeWithdrawal.qty} — норма {activeWithdrawal.required} ❎</span>
+                              <button className="fm-btn fm-btn-xs fm-btn-outline" disabled={busy} onClick={() => setActiveWithdrawal(null)}>✕ Отменить</button>
+                            </div>
                           </div>
                           <StitchReportForm
                             contextType="barnyard_withdraw"

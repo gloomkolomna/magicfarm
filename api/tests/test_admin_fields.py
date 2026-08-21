@@ -4,7 +4,7 @@ import os
 import pytest
 from PIL import Image
 
-from tests.conftest import make_user_client
+from tests.conftest import TestingSessionLocal, make_user_client
 
 
 def _img_bytes(w=800, h=600, fmt="PNG"):
@@ -281,6 +281,81 @@ def test_set_field_plants_replace(admin_client):
     admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [p1]})
     ids = {p["id"] for p in admin_client.get(f"/api/admin/fields/{fid}").json()["plants"]}
     assert ids == {p1}
+
+
+def test_set_field_plants_level_restriction(admin_client):
+    """В локацию уровня N можно привязывать только растения того же уровня."""
+    p1 = admin_client.post("/api/admin/catalog/plants", json={"name": "Росток1", "category": "garden", "level": 1}).json()
+    p3 = admin_client.post("/api/admin/catalog/plants", json={"name": "Росток3", "category": "garden", "level": 3}).json()
+
+    fid = admin_client.post("/api/admin/fields", json={"name": "Локация 3 ур", "min_level": 3}).json()["id"]
+    res = admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [p3["id"]]})
+    assert res.status_code == 200
+    assert [x["id"] for x in res.json()] == [p3["id"]]
+    assert res.json()[0]["level"] == 3
+
+    res = admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [p3["id"], p1["id"]]})
+    assert res.status_code == 400
+    ids = {x["id"] for x in admin_client.get(f"/api/admin/fields/{fid}").json()["plants"]}
+    assert ids == {p3["id"]}
+
+    res = admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [p1["id"]]})
+    assert res.status_code == 400
+
+
+def test_set_field_plants_no_level_restriction(admin_client):
+    """Локация без уровня (min_level = 0) принимает растения любого уровня."""
+    p1 = admin_client.post("/api/admin/catalog/plants", json={"name": "Росток1", "category": "garden", "level": 1}).json()
+    p3 = admin_client.post("/api/admin/catalog/plants", json={"name": "Росток3", "category": "garden", "level": 3}).json()
+    fid = admin_client.post("/api/admin/fields", json={"name": "Без уровня"}).json()["id"]
+    res = admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [p1["id"], p3["id"]]})
+    assert res.status_code == 200
+    assert {x["id"] for x in res.json()} == {p1["id"], p3["id"]}
+
+
+def test_update_field_min_level_unbinds_mismatched_plants(admin_client):
+    """Смена уровня локации тихо отвязывает растения не того уровня и грядки игроков,
+    не удаляя сами растения из каталога."""
+    fid = admin_client.post("/api/admin/fields", json={"name": "Сад", "cols": 3, "rows": 2}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}/cells/blocked", json={"cells": [{"col": 1, "row": 1}], "kind": "bed"})
+    pid = _plant_id(admin_client, "jackobob")  # уровень 1
+    admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [pid]})
+
+    with make_user_client(123, "player") as c:
+        r = c.post(f"/api/fields/{fid}/cells/1/1/plant", json={"plant_id": pid, "qty": 1})
+        assert r.status_code == 201, r.text
+        plot_id = r.json()["plot"]["id"]
+
+    res = admin_client.put(f"/api/admin/fields/{fid}", json={"min_level": 3})
+    assert res.status_code == 200
+    assert {x["id"] for x in res.json()["plants"]} == set()
+
+    s = TestingSessionLocal()
+    try:
+        from models import Plant, Plot
+        plot = s.query(Plot).filter(Plot.id == plot_id).first()
+        assert plot is not None
+        assert plot.cell_id is None
+        assert s.query(Plant).filter(Plant.id == pid).first() is not None
+    finally:
+        s.close()
+
+
+def test_update_field_min_level_keeps_matching_plants(admin_client):
+    """Смена уровня локации не удаляет растения: их можно привязать заново."""
+    p3 = admin_client.post("/api/admin/catalog/plants", json={"name": "Росток3", "category": "garden", "level": 3}).json()
+    fid = admin_client.post("/api/admin/fields", json={"name": "Сад", "min_level": 3, "cols": 3, "rows": 2}).json()["id"]
+    admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [p3["id"]]})
+
+    res = admin_client.put(f"/api/admin/fields/{fid}", json={"min_level": 5})
+    assert res.status_code == 200
+    assert {x["id"] for x in res.json()["plants"]} == set()
+
+    res = admin_client.put(f"/api/admin/fields/{fid}", json={"min_level": 3})
+    assert res.status_code == 200
+    res = admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [p3["id"]]})
+    assert res.status_code == 200
+    assert {x["id"] for x in res.json()} == {p3["id"]}
 
 
 # ===== Привязка животных/питомцев к локации =====

@@ -112,5 +112,8 @@ def test_trade_cancel_notifies_recipient():
         assert a.post(f"/api/trades/{oid}/cancel").status_code == 200
     with make_user_client(7002, "player") as b:
         notifs = b.get("/api/notifications").json()
-        assert len(notifs) == 1
+        assert len(notifs) == 2
         assert "отменил" in notifs[0]["text"]
+        assert notifs[0]["peer_vk_id"] == 7001
+        assert "предложил" in notifs[1]["text"]
+        assert notifs[1]["peer_vk_id"] == 7001

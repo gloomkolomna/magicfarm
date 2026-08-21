@@ -164,20 +164,33 @@ def search_players(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    users = (
-        db.query(User)
-        .filter(User.status != "blocked")
-        .order_by(User.level.desc(), User.crosses_total.desc())
-        .limit(SEARCH_CANDIDATE_LIMIT)
-        .all()
-    )
     q = (q or "").strip()
     if q.isdigit():
-        users = [u for u in users if str(u.vk_id) == q]
+        exact = (
+            db.query(User)
+            .filter(User.vk_id == int(q), User.status != "blocked")
+            .first()
+        )
+        users = [exact] if exact is not None else []
     elif q:
+        users = (
+            db.query(User)
+            .filter(User.status != "blocked")
+            .order_by(User.level.desc(), User.crosses_total.desc())
+            .limit(SEARCH_CANDIDATE_LIMIT)
+            .all()
+        )
         needle = q.casefold()
         names = _resolve_names(db, users)
         users = [u for u in users if needle in _display_name(u, names).casefold()]
+    else:
+        users = (
+            db.query(User)
+            .filter(User.status != "blocked")
+            .order_by(User.level.desc(), User.crosses_total.desc())
+            .limit(SEARCH_CANDIDATE_LIMIT)
+            .all()
+        )
 
     result = []
     names = _resolve_names(db, users)

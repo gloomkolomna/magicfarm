@@ -3,6 +3,7 @@ import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -11,12 +12,14 @@ from models import (
     Inventory, TradeHold, TradeOffer, TradeOfferItem, User, UserIngredient,
 )
 from routes.notifications import notify
+from services.vk_names import vk_display_name
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
 
 TRADE_KINDS = ("plant", "product", "ingredient")
 TRADE_DIRECTIONS = ("give", "want")
 OPEN_STATUSES = ("open",)
+TRADE_MESSAGE_MAX = 1000
 
 
 class TradeItemIn(BaseModel):
@@ -90,21 +93,21 @@ def _item_meta(db: Session, kind: str, item_id: int) -> tuple[str, str | None]:
 
 
 def _user_name(db: Session, user: User) -> str:
-    if user.display_name:
-        return user.display_name
-    nm: dict = {}
-    try:
-        from services.vk_names import resolve_vk_names
-        nm = resolve_vk_names([user.vk_id]).get(user.vk_id, {})
-    except Exception:
-        nm = {}
-    full = f"{nm.get('first_name', '')} {nm.get('last_name', '')}".strip()
-    return full or f"Игрок {user.vk_id}"
+    return vk_display_name(user)
 
 
 def _offer_out(db: Session, offer: TradeOffer) -> TradeOfferOut:
     from_ = db.query(User).filter(User.vk_id == offer.from_user_id).first()
     to = db.query(User).filter(User.vk_id == offer.to_user_id).first()
+    items = []
+    for it in offer.items:
+        name, emoji = _item_meta(db, it.kind, it.item_id)
+        items.append(TradeItemOut(
+            id=it.id, kind=it.kind, item_id=it.item_id,
+            item_name=name, item_emoji=emoji,
+            qty=it.qty, direction=it.direction,
+            reserved=offer.status == "open" and it.direction == "give",
+        ))
     return TradeOfferOut(
         id=offer.id,
         from_user_id=offer.from_user_id,
@@ -115,16 +118,7 @@ def _offer_out(db: Session, offer: TradeOffer) -> TradeOfferOut:
         message=offer.message,
         created_at=offer.created_at.isoformat() if offer.created_at else None,
         accepted_at=offer.accepted_at.isoformat() if offer.accepted_at else None,
-        items=[
-            TradeItemOut(
-                id=it.id, kind=it.kind, item_id=it.item_id,
-                item_name=_item_meta(db, it.kind, it.item_id)[0],
-                item_emoji=_item_meta(db, it.kind, it.item_id)[1],
-                qty=it.qty, direction=it.direction,
-                reserved=offer.status == "open" and it.direction == "give",
-            )
-            for it in offer.items
-        ],
+        items=items,
     )
 
 
@@ -135,10 +129,10 @@ def _release_holds(db: Session, offer_id: int, to_user_id: int) -> None:
         db.delete(hold)
 
 
-def _validate_items(db: Session, user_id: int, items: list[TradeItemIn]) -> None:
+def _validate_items(db: Session, user_id: int, items: list[TradeItemIn]) -> list[TradeItemIn]:
     if not items:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Добавьте хотя бы один предмет")
-    has_give = False
+    merged: dict[tuple[str, int, str], TradeItemIn] = {}
     for it in items:
         if it.kind not in TRADE_KINDS:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный тип предмета")
@@ -146,10 +140,15 @@ def _validate_items(db: Session, user_id: int, items: list[TradeItemIn]) -> None
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестное направление обмена")
         if it.qty < 1:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Количество должно быть от 1")
-        if it.direction == "give":
-            has_give = True
-    if not has_give:
+        key = (it.kind, it.item_id, it.direction)
+        if key in merged:
+            merged[key].qty += it.qty
+        else:
+            merged[key] = it
+    result = list(merged.values())
+    if not any(i.direction == "give" for i in result):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Укажите, что вы отдаёте (give)")
+    return result
 
 
 def _ensure_target_user(db: Session, vk_id: int) -> User:
@@ -240,9 +239,15 @@ def create_trade(
     if req.to_user_id == user.vk_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нельзя обмениваться с собой")
     target = _ensure_target_user(db, req.to_user_id)
-    _validate_items(db, user.vk_id, req.items)
+    items = _validate_items(db, user.vk_id, req.items)
+    message = (req.message or "").strip() or None
+    if message is not None and len(message) > TRADE_MESSAGE_MAX:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Сообщение не может быть длиннее {TRADE_MESSAGE_MAX} символов",
+        )
 
-    for it in req.items:
+    for it in items:
         if it.direction == "give":
             have = _stock_qty(db, user.vk_id, it.kind, it.item_id)
             if have < it.qty:
@@ -254,11 +259,11 @@ def create_trade(
 
     offer = TradeOffer(
         from_user_id=user.vk_id, to_user_id=req.to_user_id,
-        status="open", message=(req.message or "").strip() or None,
+        status="open", message=message,
     )
     db.add(offer)
     db.flush()
-    for it in req.items:
+    for it in items:
         db.add(TradeOfferItem(
             offer_id=offer.id, kind=it.kind, item_id=it.item_id,
             qty=it.qty, direction=it.direction,
@@ -268,6 +273,8 @@ def create_trade(
             db.add(TradeHold(
                 offer_id=offer.id, kind=it.kind, item_id=it.item_id, qty=it.qty,
             ))
+    sender_name = _user_name(db, user)
+    notify(db, req.to_user_id, f"🔁 {sender_name} предложил(а) вам обмен", peer_vk_id=user.vk_id)
     db.commit()
     db.refresh(offer)
     return _offer_out(db, offer)
@@ -283,10 +290,20 @@ def accept_trade(
     if offer.to_user_id != user.vk_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Принять может только получатель")
 
+    claimed = db.execute(
+        update(TradeOffer)
+        .where(TradeOffer.id == offer_id, TradeOffer.status == "open")
+        .values(status="accepted", accepted_at=datetime.datetime.utcnow())
+    )
+    if claimed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Предложение уже закрыто")
+
     for it in offer.items:
         if it.direction == "give":
             continue
         if _stock_qty(db, offer.to_user_id, it.kind, it.item_id) < it.qty:
+            db.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У вас уже нет запрошенных предметов")
 
     for it in offer.items:
@@ -299,8 +316,6 @@ def accept_trade(
     for hold in db.query(TradeHold).filter(TradeHold.offer_id == offer.id).all():
         db.delete(hold)
 
-    offer.status = "accepted"
-    offer.accepted_at = datetime.datetime.utcnow()
     notify(db, offer.from_user_id, f"✅ {_user_name(db, user)} принял(а) ваше предложение по бартеру", peer_vk_id=offer.to_user_id)
     db.commit()
     db.refresh(offer)
@@ -316,8 +331,15 @@ def cancel_trade(
     offer = _get_open_offer(db, offer_id)
     if offer.from_user_id != user.vk_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Отменить может только отправитель")
+    claimed = db.execute(
+        update(TradeOffer)
+        .where(TradeOffer.id == offer_id, TradeOffer.status == "open")
+        .values(status="cancelled")
+    )
+    if claimed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Предложение уже закрыто")
     _release_holds(db, offer.id, offer.from_user_id)
-    offer.status = "cancelled"
     notify(db, offer.to_user_id, f"🗑 {_user_name(db, user)} отменил(а) своё предложение по бартеру", peer_vk_id=offer.from_user_id)
     db.commit()
     db.refresh(offer)
@@ -333,8 +355,15 @@ def reject_trade(
     offer = _get_open_offer(db, offer_id)
     if offer.to_user_id != user.vk_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Отклонить может только получатель")
+    claimed = db.execute(
+        update(TradeOffer)
+        .where(TradeOffer.id == offer_id, TradeOffer.status == "open")
+        .values(status="rejected")
+    )
+    if claimed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Предложение уже закрыто")
     _release_holds(db, offer.id, offer.from_user_id)
-    offer.status = "rejected"
     notify(db, offer.from_user_id, f"✕ {_user_name(db, user)} отклонил(а) ваше предложение по бартеру", peer_vk_id=offer.to_user_id)
     db.commit()
     db.refresh(offer)

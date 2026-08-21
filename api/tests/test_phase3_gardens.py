@@ -68,6 +68,10 @@ def test_plant_wrong_category_rejected(admin_client):
 
 
 def test_plant_level_too_low(admin_client):
+    r = admin_client.post("/api/admin/catalog/plants", json={
+        "name": "Элита", "emoji": "🌿", "category": "garden", "level": 5,
+    })
+    pid = r.json()["id"]
     r = admin_client.post("/api/admin/fields", json={
         "name": "Элита", "code": "elite", "min_level": 5,
     })
@@ -75,11 +79,11 @@ def test_plant_level_too_low(admin_client):
     admin_client.put(f"/api/admin/fields/{fid}/cells/blocked", json={
         "cells": [{"col": 1, "row": 1}], "kind": "bed",
     })
-    admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [1]})
+    admin_client.put(f"/api/admin/fields/{fid}/plants", json={"plant_ids": [pid]})
 
     with make_user_client(123, "player") as c:
         r = c.post(f"/api/fields/{fid}/cells/1/1/plant", json={
-            "plant_id": 1, "qty": 1,
+            "plant_id": pid, "qty": 1,
         })
         assert r.status_code == 403
 
@@ -88,7 +92,7 @@ def test_plant_level_ok(admin_client):
     from models import User
     from tests.conftest import TestingSessionLocal
     r = admin_client.post("/api/admin/fields", json={
-        "name": "Элита2", "code": "elite2", "min_level": 3,
+        "name": "Элита2", "code": "elite2", "min_level": 1,
     })
     fid = r.json()["id"]
     admin_client.put(f"/api/admin/fields/{fid}/cells/blocked", json={

@@ -182,3 +182,53 @@ def test_s3_key_from_url(monkeypatch):
     assert s3_storage.s3_key_from_url(None) is None
     monkeypatch.setattr(config, "S3_PUBLIC_URL", "")
     assert s3_storage.s3_key_from_url(f"{base}/123/stitch_a.jpg") is None
+
+
+def test_cleanup_commits_before_deleting_objects(db, monkeypatch):
+    import config
+    from services import s3_storage
+    from services.s3_cleanup import cleanup_expired_stitch_photos
+
+    base = "https://storage.example.net/bk"
+    monkeypatch.setattr(config, "S3_PUBLIC_URL", base)
+
+    events = []
+    real_commit = db.commit
+
+    def _commit():
+        events.append("commit")
+        real_commit()
+
+    def _delete(key):
+        events.append(f"delete:{key}")
+
+    monkeypatch.setattr(db, "commit", _commit)
+    monkeypatch.setattr(s3_storage, "delete_object", _delete)
+
+    _seed_report(123, created_days_ago=40, photo_url=f"{base}/123/stitch_123_after_7_zz.jpg")
+
+    stats = cleanup_expired_stitch_photos(db)
+    assert stats["objects_deleted"] == 1
+    assert events[0] == "commit"
+    assert events[1] == "delete:123/stitch_123_after_7_zz.jpg"
+
+
+def test_cleanup_counts_delete_failures(db, monkeypatch):
+    import config
+    from services import s3_storage
+    from services.s3_cleanup import cleanup_expired_stitch_photos
+
+    base = "https://storage.example.net/bk"
+    monkeypatch.setattr(config, "S3_PUBLIC_URL", base)
+
+    def _boom(key):
+        raise RuntimeError("s3 down")
+
+    monkeypatch.setattr(s3_storage, "delete_object", _boom)
+
+    _seed_report(123, created_days_ago=40, photo_url=f"{base}/123/stitch_123_after_8_yy.jpg")
+
+    stats = cleanup_expired_stitch_photos(db)
+    assert stats["cleaned"] == 1
+    assert stats["delete_failed"] == 1
+    assert stats["objects_deleted"] == 0

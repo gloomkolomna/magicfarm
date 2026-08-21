@@ -209,3 +209,20 @@ def test_farm_fields_includes_only_active_patient_scene(player_client):
     ids = [f["id"] for f in data["fields"]]
     assert scene_id in ids
     assert other_id not in ids
+
+
+def test_search_by_vk_id_outside_candidates(player_client, monkeypatch):
+    from routes import public_players
+
+    monkeypatch.setattr(public_players, "SEARCH_CANDIDATE_LIMIT", 2)
+
+    _add_user(501, display_name="Лидер Раз", level=9)
+    _add_user(502, display_name="Лидер Два", level=8)
+    _add_user(777, display_name="Новичок", level=0)
+
+    res = player_client.get("/api/players/search", params={"q": "777"})
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert len(data) == 1
+    assert data[0]["vk_id"] == 777
+    assert data[0]["display_name"] == "Новичок"

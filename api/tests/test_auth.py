@@ -125,3 +125,13 @@ def test_access_token_expiry_matches_config():
     expected_min = before + config.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     expected_max = after + config.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     assert expected_min <= exp <= expected_max
+
+
+def test_session_survives_vk_names_error(client, monkeypatch):
+    def _boom(vk_ids):
+        raise RuntimeError("vk down")
+
+    monkeypatch.setattr("services.vk_names.resolve_vk_names", _boom)
+    res = client.post("/api/auth/session", json={"params": {"vk_user_id": "31337"}})
+    assert res.status_code == 200
+    assert res.json()["vk_id"] == 31337

@@ -89,3 +89,41 @@ def test_conversations_lists_peers():
         assert by_id[7004]["unread_count"] == 1
         assert by_id[7003]["display_name"] == "Игрок7003"
         assert by_id[7004]["last_message"] == "другое"
+
+
+def test_conversations_survive_vk_names_error(monkeypatch):
+    def _boom(vk_ids):
+        raise RuntimeError("vk down")
+
+    monkeypatch.setattr("services.vk_names.resolve_vk_names", _boom)
+    _add_user(5001)
+    _add_user(5002)
+    with make_user_client(5001, "player") as a:
+        assert a.post("/api/chat/with/5002", json={"text": "привет"}).status_code == 201
+    with make_user_client(5002, "player") as b:
+        r = b.get("/api/chat/conversations")
+        assert r.status_code == 200, r.text
+        convs = r.json()
+        assert len(convs) == 1
+        assert convs[0]["vk_id"] == 5001
+        assert convs[0]["unread_count"] == 1
+
+
+def test_conversations_limit_keeps_unread_counts(monkeypatch):
+    from models import ChatMessage
+    from tests.conftest import TestingSessionLocal
+    from routes import chat as routes_chat
+
+    monkeypatch.setattr(routes_chat, "CONVERSATION_MESSAGES_LIMIT", 3)
+
+    _add_user(5101)
+    _add_user(5102)
+    with make_user_client(5101, "player") as a:
+        for i in range(5):
+            assert a.post("/api/chat/with/5102", json={"text": f"msg{i}"}).status_code == 201
+
+    with make_user_client(5102, "player") as b:
+        convs = b.get("/api/chat/conversations").json()
+        assert len(convs) == 1
+        assert convs[0]["unread_count"] == 5
+        assert convs[0]["last_message"] == "msg4"

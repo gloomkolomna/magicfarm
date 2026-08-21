@@ -116,8 +116,9 @@ def admin_upload_lesson_video(
     user: User = Depends(require_role("admin")),
 ):
     l = _get_lesson_or_404(lesson_id, db)
+    new_url = save_upload(file, f"lesson_{l.id}", allow_video=True)
     remove_upload(l.video_url)
-    l.video_url = save_upload(file, f"lesson_{l.id}", allow_video=True)
+    l.video_url = new_url
     db.commit()
     db.refresh(l)
     return _lesson_out(l)
@@ -131,8 +132,9 @@ def admin_upload_lesson_image(
     user: User = Depends(require_role("admin")),
 ):
     l = _get_lesson_or_404(lesson_id, db)
+    new_url = save_upload(file, f"lesson_{l.id}", max_size=1200)
     remove_upload(l.image_url)
-    l.image_url = save_upload(file, f"lesson_{l.id}", max_size=1200)
+    l.image_url = new_url
     db.commit()
     db.refresh(l)
     return _lesson_out(l)

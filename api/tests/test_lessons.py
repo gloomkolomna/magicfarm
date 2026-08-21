@@ -88,3 +88,48 @@ def test_admin_lessons_require_admin(player_client):
 def test_admin_lesson_404(admin_client):
     assert admin_client.put("/api/admin/lessons/999", json={"title": "x"}).status_code == 404
     assert admin_client.delete("/api/admin/lessons/999").status_code == 404
+
+
+def test_upload_video_failure_keeps_old_file(admin_client, monkeypatch):
+    from routes import lessons as routes_lessons
+    from services.uploads import remove_upload as real_remove
+    from models import Lesson
+    from tests.conftest import TestingSessionLocal
+
+    r = admin_client.post("/api/admin/lessons", json={"title": "Урок медиа"})
+    assert r.status_code == 201, r.text
+    lid = r.json()["id"]
+
+    s = TestingSessionLocal()
+    try:
+        lesson = s.query(Lesson).filter(Lesson.id == lid).first()
+        lesson.video_url = "/api/uploads/old_lesson.mp4"
+        s.commit()
+    finally:
+        s.close()
+
+    removed = []
+
+    def _fake_remove(url):
+        removed.append(url)
+        return real_remove(url)
+
+    def _bad_save(file, name, **kwargs):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Файл слишком большой")
+
+    monkeypatch.setattr(routes_lessons, "remove_upload", _fake_remove)
+    monkeypatch.setattr(routes_lessons, "save_upload", _bad_save)
+
+    res = admin_client.put(f"/api/admin/lessons/{lid}/video", files={
+        "file": ("v.mp4", b"xxxx", "video/mp4"),
+    })
+    assert res.status_code == 400
+    assert removed == []
+
+    s = TestingSessionLocal()
+    try:
+        lesson = s.query(Lesson).filter(Lesson.id == lid).first()
+        assert lesson.video_url == "/api/uploads/old_lesson.mp4"
+    finally:
+        s.close()

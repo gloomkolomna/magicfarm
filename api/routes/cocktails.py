@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -55,6 +57,22 @@ def _unlocked_patient_ids(user_id: int, db: Session) -> set[int]:
     return {
         c.patient_id for c in db.query(UserCard).filter(UserCard.user_id == user_id).all()
     }
+
+
+def _item_meta_by_kind(db: Session, kind: str, item_id: int) -> str | None:
+    if kind == "product":
+        p = db.query(Product).filter(Product.id == item_id).first()
+        return p.name if p else None
+    if kind == "plant":
+        p = db.query(Plant).filter(Plant.id == item_id).first()
+        return p.name if p else None
+    if kind == "ingredient":
+        i = db.query(Ingredient).filter(Ingredient.id == item_id).first()
+        return i.name if i else None
+    if kind == "remedy":
+        r = db.query(Remedy).filter(Remedy.id == item_id).first()
+        return r.name if r else None
+    return None
 
 
 def _item_stock(item: CocktailRecipeItem, user_id: int, db: Session) -> int:
@@ -199,7 +217,11 @@ def install_shaker(
 
     s = Shaker(user_id=user.vk_id, cocktail_recipe_id=recipe.id, status="empty")
     db.add(s)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Уже есть активный шейкер")
     db.refresh(s)
     return _shaker_out(s, db)
 
@@ -211,31 +233,50 @@ class MixOut(BaseModel):
     coins_balance: int
 
 
-def _consume_item(item: CocktailRecipeItem, user_id: int, db: Session) -> None:
-    if item.product_id is not None:
-        inv = db.query(Inventory).filter(
-            Inventory.user_id == user_id, Inventory.product_id == item.product_id
-        ).first()
-        if inv is not None:
-            inv.qty = (inv.qty or 0) - item.qty
-    elif item.plant_id is not None:
-        inv = db.query(Inventory).filter(
-            Inventory.user_id == user_id, Inventory.plant_id == item.plant_id
-        ).first()
-        if inv is not None:
-            inv.qty = (inv.qty or 0) - item.qty
-    elif item.ingredient_id is not None:
-        ui = db.query(UserIngredient).filter(
-            UserIngredient.user_id == user_id, UserIngredient.ingredient_id == item.ingredient_id
-        ).first()
-        if ui is not None:
-            ui.qty = (ui.qty or 0) - item.qty
-    elif item.remedy_id is not None:
-        ur = db.query(UserRemedy).filter(
-            UserRemedy.user_id == user_id, UserRemedy.remedy_id == item.remedy_id
-        ).first()
-        if ur is not None:
-            ur.qty = (ur.qty or 0) - item.qty
+def _grouped_items(recipe_items: list[CocktailRecipeItem]) -> list[tuple[str, int, int]]:
+    totals: dict[tuple[str, int], int] = {}
+    for item in recipe_items:
+        if item.product_id is not None:
+            key = ("product", item.product_id)
+        elif item.plant_id is not None:
+            key = ("plant", item.plant_id)
+        elif item.ingredient_id is not None:
+            key = ("ingredient", item.ingredient_id)
+        elif item.remedy_id is not None:
+            key = ("remedy", item.remedy_id)
+        else:
+            continue
+        totals[key] = totals.get(key, 0) + (item.qty or 0)
+    return [(kind, item_id, qty) for (kind, item_id), qty in totals.items()]
+
+
+_STOCK_MODELS = {
+    "product": (Inventory, "product_id"),
+    "plant": (Inventory, "plant_id"),
+    "ingredient": (UserIngredient, "ingredient_id"),
+    "remedy": (UserRemedy, "remedy_id"),
+}
+
+
+def _stock_filter(kind: str, item_id: int, user_id: int):
+    model, col_name = _STOCK_MODELS[kind]
+    return (model.user_id == user_id, getattr(model, col_name) == item_id)
+
+
+def _grouped_stock(db: Session, kind: str, item_id: int, user_id: int) -> int:
+    model, col_name = _STOCK_MODELS[kind]
+    row = db.query(model).filter(*_stock_filter(kind, item_id, user_id)).first()
+    return (row.qty or 0) if row else 0
+
+
+def _grouped_consume(db: Session, kind: str, item_id: int, user_id: int, qty: int) -> bool:
+    model, _ = _STOCK_MODELS[kind]
+    res = db.execute(
+        update(model)
+        .where(*_stock_filter(kind, item_id, user_id), model.qty >= qty)
+        .values(qty=model.qty - qty)
+    )
+    return res.rowcount == 1
 
 
 @router.post("/shaker/mix", response_model=MixOut)
@@ -253,19 +294,25 @@ def mix_cocktail(
     if recipe is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Рецепт не найден")
 
+    grouped = _grouped_items(recipe.recipe_items)
     missing = []
-    for item in recipe.recipe_items:
-        if _item_stock(item, user.vk_id, db) < item.qty:
-            name = _item_out(item, user.vk_id, db).name or f"#{item.id}"
-            missing.append(name)
+    for kind, item_id, qty in grouped:
+        if _grouped_stock(db, kind, item_id, user.vk_id) < qty:
+            meta = _item_meta_by_kind(db, kind, item_id)
+            missing.append(meta or f"#{item_id}")
     if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Не хватает ингредиентов: " + ", ".join(missing),
         )
 
-    for item in recipe.recipe_items:
-        _consume_item(item, user.vk_id, db)
+    for kind, item_id, qty in grouped:
+        if not _grouped_consume(db, kind, item_id, user.vk_id, qty):
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Не хватает ингредиентов, попробуйте ещё раз",
+            )
 
     u = db.query(User).filter(User.vk_id == user.vk_id).first()
     u.coins = (u.coins or 0) + COCKTAIL_REWARD_COINS
@@ -398,12 +445,17 @@ def _validate_patient(patient_id: int | None, db: Session) -> None:
 
 
 def _set_items(recipe_id: int, items: list[CocktailItemIn], db: Session) -> None:
-    db.query(CocktailRecipeItem).filter(CocktailRecipeItem.cocktail_recipe_id == recipe_id).delete()
+    merged: dict[tuple[str, int], int] = {}
     for it in items:
         if it.qty < 1:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Количество должно быть не меньше 1")
-        fields = _resolve_item_kind(it.kind, it.item_id, db)
-        db.add(CocktailRecipeItem(cocktail_recipe_id=recipe_id, qty=it.qty, **fields))
+        _resolve_item_kind(it.kind, it.item_id, db)
+        key = (it.kind, it.item_id)
+        merged[key] = merged.get(key, 0) + it.qty
+    db.query(CocktailRecipeItem).filter(CocktailRecipeItem.cocktail_recipe_id == recipe_id).delete()
+    for (kind, item_id), qty in merged.items():
+        fields = _resolve_item_kind(kind, item_id, db)
+        db.add(CocktailRecipeItem(cocktail_recipe_id=recipe_id, qty=qty, **fields))
 
 
 @admin_router.get("", response_model=list[CocktailRecipeAdminOut])
@@ -485,8 +537,9 @@ def admin_upload_image(
     r = db.query(CocktailRecipe).filter(CocktailRecipe.id == recipe_id).first()
     if r is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
+    new_url = save_upload(image, f"cocktail_{r.id}", max_size=400)
     remove_upload(r.image_url)
-    r.image_url = save_upload(image, f"cocktail_{r.id}", max_size=400)
+    r.image_url = new_url
     db.commit()
     db.refresh(r)
     return _admin_recipe_out(r)
@@ -502,8 +555,9 @@ def admin_upload_card_image(
     r = db.query(CocktailRecipe).filter(CocktailRecipe.id == recipe_id).first()
     if r is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рецепт не найден")
+    new_url = save_upload(image, f"cocktail_card_{r.id}", max_size=1200)
     remove_upload(r.card_image_url)
-    r.card_image_url = save_upload(image, f"cocktail_card_{r.id}", max_size=1200)
+    r.card_image_url = new_url
     db.commit()
     db.refresh(r)
     return _admin_recipe_out(r)

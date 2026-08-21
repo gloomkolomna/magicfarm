@@ -2220,9 +2220,12 @@ export default function AdminPage() {
   const qActive = query.trim().length > 0;
   const fl = <T,>(items: T[]): T[] => (qActive ? items.filter((it) => matchesAny(it, query)) : items);
 
+  const [plantLevelFilter, setPlantLevelFilter] = useState('');
+  const plantLevels = Array.from(new Set(plants.map((p) => p.level))).sort((a, b) => a - b);
+
   const shownOrders = fl(adminOrders);
   const shownFields = fl(fields);
-  const shownPlants = fl(plants);
+  const shownPlants = fl(plants).filter((p) => !plantLevelFilter || String(p.level) === plantLevelFilter);
   const shownAnimals = fl(animals);
   const shownPets = fl(pets);
   const shownProducts = fl(catalogProducts);
@@ -2813,9 +2816,23 @@ export default function AdminPage() {
           )}
 
           {tab === 'plants' && (
-            <CatalogTab title="🌱 Растения" items={shownPlants} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePlant} onDelete={deletePlant} onUploadImage={uploadPlantImage} onUploadImageYoung={uploadPlantImageYoung} onUploadImageGrown={uploadPlantImageGrown} onUploadImageHarvested={uploadPlantImageHarvested} hideMainImage emptyText={qActive ? NO_MATCH : undefined}
-              fields={[{ key: 'name', label: 'Название', ph: 'Джекобоб' }, { key: 'emoji', label: 'Эмодзи', ph: '🌱' }, { key: 'level', label: 'Уровень', ph: '1', type: 'number' }, { key: 'category', label: 'Категория', options: [{ value: 'garden', label: '🌱 Грядка' }, { value: 'orchard', label: '🍎 Сад' }] }, { key: 'description', label: 'Описание', ph: 'Грибы' }, { key: 'stitch_condition', label: 'Условие отшива', ph: 'Вышить на белой канве' }]}
-            />
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                <label style={{ fontSize: 13, whiteSpace: 'nowrap' }}>Уровень:</label>
+                <select className="fm-input" value={plantLevelFilter} onChange={(e) => setPlantLevelFilter(e.target.value)} style={{ maxWidth: 180 }}>
+                  <option value="">— все уровни —</option>
+                  {plantLevels.map((l) => (
+                    <option key={l} value={String(l)}>Уровень {l}</option>
+                  ))}
+                </select>
+                {plantLevelFilter && (
+                  <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => setPlantLevelFilter('')}>✕</button>
+                )}
+              </div>
+              <CatalogTab title="🌱 Растения" items={shownPlants} busy={busy} form={catForm} formOpen={formOpen} editingId={editingId} onFormChange={setCatForm} onCreate={startCreate} onEdit={startEdit} onCancel={cancelForm} onSave={savePlant} onDelete={deletePlant} onUploadImage={uploadPlantImage} onUploadImageYoung={uploadPlantImageYoung} onUploadImageGrown={uploadPlantImageGrown} onUploadImageHarvested={uploadPlantImageHarvested} hideMainImage emptyText={qActive ? NO_MATCH : undefined} showLevel
+                fields={[{ key: 'name', label: 'Название', ph: 'Джекобоб' }, { key: 'emoji', label: 'Эмодзи', ph: '🌱' }, { key: 'level', label: 'Уровень', ph: '1', type: 'number' }, { key: 'category', label: 'Категория', options: [{ value: 'garden', label: '🌱 Грядка' }, { value: 'orchard', label: '🍎 Сад' }] }, { key: 'description', label: 'Описание', ph: 'Грибы' }, { key: 'stitch_condition', label: 'Условие отшива', ph: 'Вышить на белой канве' }]}
+              />
+            </>
           )}
 
           {tab === 'animals' && (
@@ -3425,7 +3442,7 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 interface CatField { key: string; label: string; ph?: string; type?: string; options?: { value: string; label: string }[] }
 
 function CatalogTab({
-  title, items, busy, form, formOpen, editingId, onFormChange, onCreate, onEdit, onCancel, onSave, onDelete, onUploadImage, onUploadImageYoung, onUploadImageGrown, onUploadImageEmptyPen, onUploadImagePen, onUploadImageHarvested, fields, imageLabel = 'Изображение', hideMainImage = false, emptyText,
+  title, items, busy, form, formOpen, editingId, onFormChange, onCreate, onEdit, onCancel, onSave, onDelete, onUploadImage, onUploadImageYoung, onUploadImageGrown, onUploadImageEmptyPen, onUploadImagePen, onUploadImageHarvested, fields, imageLabel = 'Изображение', hideMainImage = false, emptyText, showLevel = false,
 }: {
   title: string;
   items: any[];
@@ -3449,6 +3466,7 @@ function CatalogTab({
   imageLabel?: string;
   hideMainImage?: boolean;
   emptyText?: string;
+  showLevel?: boolean;
 }) {
   const [pendingUpload, setPendingUpload] = useState<{ file: File; cb: (id: number, f: File) => Promise<void> } | null>(null);
 
@@ -3559,6 +3577,9 @@ function CatalogTab({
                 <div style={{ marginBottom: 4 }}>
                   <strong style={{ wordBreak: 'break-word' }}>{item.emoji || '❔'} {item.name}</strong>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', wordBreak: 'break-all' }}>{item.code}</div>
+                  {showLevel && item.level != null && (
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Уровень {item.level}</div>
+                  )}
                 </div>
                 {!hideMainImage && item.image_url && (
                   <img src={mediaUrl(item.image_url)} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: 6 }} />

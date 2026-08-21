@@ -291,3 +291,75 @@ def test_reject_restores_reserved_items():
         assert s.query(TradeHold).filter(TradeHold.offer_id == oid).count() == 0
     finally:
         s.close()
+
+
+def test_create_trade_merges_duplicate_items():
+    from models import TradeHold, TradeOfferItem
+
+    _add_user(7001)
+    _add_user(7002)
+    _give_plant(7001, 1, 3)
+    _give_product(7002, 1, 2)
+    with make_user_client(7001, "player") as a:
+        r = a.post("/api/trades", json=_offer_payload(
+            7002,
+            [
+                {"kind": "plant", "item_id": 1, "qty": 1, "direction": "give"},
+                {"kind": "plant", "item_id": 1, "qty": 2, "direction": "give"},
+                {"kind": "product", "item_id": 1, "qty": 1, "direction": "want"},
+                {"kind": "product", "item_id": 1, "qty": 1, "direction": "want"},
+            ],
+        ))
+        assert r.status_code == 201, r.text
+        body = r.json()
+        give = [i for i in body["items"] if i["direction"] == "give"]
+        want = [i for i in body["items"] if i["direction"] == "want"]
+        assert len(give) == 1 and give[0]["qty"] == 3
+        assert len(want) == 1 and want[0]["qty"] == 2
+        oid = body["id"]
+
+    s = TestingSessionLocal()
+    try:
+        row = s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).first()
+        assert row is None
+        items = s.query(TradeOfferItem).filter(TradeOfferItem.offer_id == oid).all()
+        assert sorted(i.qty for i in items) == [2, 3]
+        holds = s.query(TradeHold).filter(TradeHold.offer_id == oid).all()
+        assert len(holds) == 1 and holds[0].qty == 3
+    finally:
+        s.close()
+
+
+def test_create_trade_merged_duplicates_insufficient():
+    _add_user(7001)
+    _add_user(7002)
+    _give_plant(7001, 1, 3)
+    with make_user_client(7001, "player") as a:
+        r = a.post("/api/trades", json=_offer_payload(
+            7002,
+            [
+                {"kind": "plant", "item_id": 1, "qty": 2, "direction": "give"},
+                {"kind": "plant", "item_id": 1, "qty": 2, "direction": "give"},
+            ],
+        ))
+        assert r.status_code == 400
+        assert "Недостаточно" in r.json()["detail"]
+    s = TestingSessionLocal()
+    try:
+        row = s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).first()
+        assert row is not None and row.qty == 3
+    finally:
+        s.close()
+
+
+def test_create_trade_message_too_long(player_client):
+    _add_user(7001)
+    with make_user_client(123, "player") as a:
+        r = a.post("/api/trades", json=_offer_payload(
+            7001,
+            [{"kind": "plant", "item_id": 1, "qty": 1, "direction": "want"},
+             {"kind": "plant", "item_id": 2, "qty": 1, "direction": "give"}],
+            message="x" * 1001,
+        ))
+        assert r.status_code == 400
+        assert "символов" in r.json()["detail"]

@@ -174,6 +174,8 @@ GIT_REMOTE="https://github.com/gloomkolomna/magicfarm.git"
 GIT_BRANCH="main"
 HEALTH_URL="http://127.0.0.1:8003/api/"              # через nginx — поменяй на домен/путь
 LOG_FILE="$API_DIR/deploy.log"
+PREV_ASSETS_DIR="$FRONTEND_DIR/dist.assets.prev"     # прошлое поколение хэшированных ассетов
+ASSETS_KEEP_DAYS=7                                   # окно жизни старых ассетов для открытых сессий
 
 # Флаги состояния
 PREV_REV=""
@@ -244,6 +246,7 @@ rollback_all() {
         rm -rf "$FRONTEND_DIR/dist"
         mv "$DIST_BACKUP_PATH" "$FRONTEND_DIR/dist"
     fi
+    rm -rf "$PREV_ASSETS_DIR" 2>/dev/null || true
 
     log "ОТКАТ: перезапуск сервиса magicfarm-api..."
     systemctl restart magicfarm-api || true
@@ -354,10 +357,24 @@ log "Миграции применены. Текущая ревизия: $(pytho
 # ===== 5. Сборка фронтенда =====
 log "=== 5. Сборка фронтенда ==="
 cd "$FRONTEND_DIR"
+if [ -d "$FRONTEND_DIR/dist/assets" ]; then
+    rm -rf "$PREV_ASSETS_DIR"
+    cp -a "$FRONTEND_DIR/dist/assets" "$PREV_ASSETS_DIR"
+fi
 rm -rf "$FRONTEND_DIR/dist"
 npm install
 npm run build
 BUILD_RAN=1
+
+if [ -d "$PREV_ASSETS_DIR" ]; then
+    if cp -an "$PREV_ASSETS_DIR/." "$FRONTEND_DIR/dist/assets/" 2>>"$LOG_FILE"; then
+        find "$FRONTEND_DIR/dist/assets" -type f -mtime +"$ASSETS_KEEP_DAYS" -delete
+        log "Сохранены ассеты предыдущей сборки (окно $ASSETS_KEEP_DAYS дн.) — открытые сессии не сломаются."
+    else
+        log "Внимание: не удалось влить старые ассеты (не критично, продолжаю)."
+    fi
+    rm -rf "$PREV_ASSETS_DIR"
+fi
 
 # ===== 6. Перезапуск сервиса =====
 log "=== 6. Перезапуск сервиса ==="
@@ -386,3 +403,4 @@ fi
 log "=== Деплой успешно завершён ==="
 
 rm -rf "$DIST_BACKUP_PATH" 2>/dev/null || true
+rm -rf "$PREV_ASSETS_DIR" 2>/dev/null || true

@@ -18,7 +18,9 @@ def cleanup_expired_stitch_photos(db: Session) -> dict:
     ).all()
     cleaned = 0
     objects_deleted = 0
+    delete_failed = 0
     skipped = 0
+    pending_deletes: list[str] = []
     for r in reports:
         if not r.photo_after_thumb_url:
             skipped += 1
@@ -26,24 +28,29 @@ def cleanup_expired_stitch_photos(db: Session) -> dict:
         changed = False
         after_key = s3_storage.s3_key_from_url(r.photo_after_url)
         if after_key:
-            s3_storage.delete_object(after_key)
+            pending_deletes.append(after_key)
             r.photo_after_url = None
             changed = True
-            objects_deleted += 1
         if r.photo_before_url and r.photo_before_thumb_url:
             before_key = s3_storage.s3_key_from_url(r.photo_before_url)
             if before_key:
-                s3_storage.delete_object(before_key)
+                pending_deletes.append(before_key)
                 r.photo_before_url = None
                 changed = True
-                objects_deleted += 1
         if changed:
             cleaned += 1
     if cleaned:
         db.commit()
+    for key in pending_deletes:
+        try:
+            s3_storage.delete_object(key)
+            objects_deleted += 1
+        except Exception:
+            delete_failed += 1
     return {
         "scanned": len(reports),
         "cleaned": cleaned,
         "objects_deleted": objects_deleted,
         "skipped_no_thumb": skipped,
+        "delete_failed": delete_failed,
     }

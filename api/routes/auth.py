@@ -55,9 +55,13 @@ def create_session(req: SessionRequest, db: Session = Depends(get_db)):
         db.commit()
 
     if not user.display_name:
-        from services.vk_names import resolve_vk_names
-        nm = resolve_vk_names([user.vk_id]).get(user.vk_id, {})
-        full = f"{nm.get('first_name', '')} {nm.get('last_name', '')}".strip()
+        full = ""
+        try:
+            from services.vk_names import resolve_vk_names
+            nm = resolve_vk_names([user.vk_id]).get(user.vk_id, {})
+            full = f"{nm.get('first_name', '')} {nm.get('last_name', '')}".strip()
+        except Exception:
+            full = ""
         if full:
             user.display_name = full
             db.commit()

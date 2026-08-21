@@ -7,21 +7,39 @@ import MiniAppShell from './components/MiniAppShell';
 import { ConfirmHost } from './components/Confirm';
 import { installGlobalErrorReporters } from './api/vkLogger';
 
-function reloadOnStaleChunk(err: unknown): never {
+function isStaleChunkError(err: unknown): boolean {
   const msg = String((err as Error)?.message || '');
-  if (msg.includes('Failed to fetch dynamically imported module')) {
-    try {
-      if (!sessionStorage.getItem('farm_chunk_reload')) {
-        sessionStorage.setItem('farm_chunk_reload', '1');
-        window.location.reload();
-      }
-    } catch { /* ignore */ }
-  }
-  throw err;
+  return (
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Importing a module script failed')
+  );
 }
 
-const lazyPage = (load: () => Promise<{ default: React.ComponentType }>) =>
-  lazy(() => load().catch(reloadOnStaleChunk));
+function reloadOnStaleChunk(err: unknown): Promise<{ default: React.ComponentType }> {
+  try {
+    if (!sessionStorage.getItem('farm_chunk_reload')) {
+      sessionStorage.setItem('farm_chunk_reload', '1');
+      window.location.reload();
+    }
+  } catch { /* ignore */ }
+  return new Promise(() => {});
+}
+
+const lazyPage = (load: () => Promise<{ default: React.ComponentType }>) => {
+  let retried = false;
+  return lazy(() =>
+    load().catch((err: unknown) => {
+      if (!retried && isStaleChunkError(err)) {
+        retried = true;
+        return load();
+      }
+      if (isStaleChunkError(err)) {
+        return reloadOnStaleChunk(err);
+      }
+      throw err;
+    }),
+  );
+};
 
 const OrdersPage = lazyPage(() => import('./pages/Orders'));
 const OrderCatalogPage = lazyPage(() => import('./pages/OrderCatalog'));
@@ -46,8 +64,8 @@ const AchievementsPage = lazyPage(() => import('./pages/Achievements'));
 const Onboarding = lazyPage(() => import('./pages/Onboarding'));
 const PrehistoryPage = lazyPage(() => import('./pages/Prehistory').then((m) => ({ default: m.PrehistoryPage })));
 const Prehistory = lazyPage(() => import('./pages/Prehistory')) as unknown as ComponentType<{ onDone?: () => void }>;
-const DlcStoryGate = lazy(() =>
-  import('./pages/Prehistory').then((m) => ({ default: m.DlcStoryGate as unknown as ComponentType })).catch(reloadOnStaleChunk),
+const DlcStoryGate = lazyPage(() =>
+  import('./pages/Prehistory').then((m) => ({ default: m.DlcStoryGate as unknown as ComponentType })),
 ) as unknown as ComponentType<{ locationCode: string; name: string; emoji: string; children: ReactNode }>;
 const LessonsPage = lazyPage(() => import('./pages/Lessons'));
 const FarmsPage = lazyPage(() => import('./pages/Farms'));

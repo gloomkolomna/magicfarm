@@ -234,7 +234,7 @@ export function ForestBarScenePage() {
             )}
 
             {cardZones.map((z) => {
-              const cocktailImg = z.recipe_image || null;
+              const cocktailImg = z.recipe_card_image || z.recipe_image || null;
               return (
                 <ZoneRect key={z.id} cols={field.cols} rows={field.rows} zone={z} onClick={() => openBook(z.cocktail_recipe_id ?? undefined)}>
                   {cocktailImg ? (

@@ -3,15 +3,17 @@ import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user
 from models import ChatMessage, User
-from services.vk_names import resolve_vk_names
+from services.vk_names import vk_display_name
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+CONVERSATION_MESSAGES_LIMIT = 200
 
 
 class ChatMessageIn(BaseModel):
@@ -38,11 +40,7 @@ class ConversationOut(BaseModel):
 
 
 def _user_name(user: User) -> str:
-    if user.display_name:
-        return user.display_name
-    nm = resolve_vk_names([user.vk_id]).get(user.vk_id, {})
-    full = f"{nm.get('first_name', '')} {nm.get('last_name', '')}".strip()
-    return full or f"Игрок {user.vk_id}"
+    return vk_display_name(user)
 
 
 def _msg_out(m: ChatMessage) -> ChatMessageOut:
@@ -59,29 +57,36 @@ def list_conversations(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    rows = (
+    recent = (
         db.query(ChatMessage)
         .filter(or_(ChatMessage.from_user_id == user.vk_id, ChatMessage.to_user_id == user.vk_id))
-        .order_by(ChatMessage.created_at.asc())
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+        .limit(CONVERSATION_MESSAGES_LIMIT)
         .all()
     )
-    by_peer: dict[int, list[ChatMessage]] = {}
-    for m in rows:
+    unread_rows = (
+        db.query(ChatMessage.from_user_id, func.count(ChatMessage.id))
+        .filter(ChatMessage.to_user_id == user.vk_id, ChatMessage.read_at.is_(None))
+        .group_by(ChatMessage.from_user_id)
+        .all()
+    )
+    unread_by_peer = {peer: cnt for peer, cnt in unread_rows}
+
+    by_peer: dict[int, ChatMessage] = {}
+    for m in reversed(recent):
         peer = m.to_user_id if m.from_user_id == user.vk_id else m.from_user_id
-        by_peer.setdefault(peer, []).append(m)
+        by_peer[peer] = m
 
     peers = {p.vk_id: p for p in db.query(User).filter(User.vk_id.in_(by_peer.keys())).all()}
     result = []
-    for peer_id, msgs in by_peer.items():
-        last = msgs[-1]
-        unread = sum(1 for m in msgs if m.to_user_id == user.vk_id and m.read_at is None)
+    for peer_id, last in by_peer.items():
         p = peers.get(peer_id)
         result.append(ConversationOut(
             vk_id=peer_id,
             display_name=_user_name(p) if p else f"Игрок {peer_id}",
             last_message=last.text,
             last_message_at=last.created_at.isoformat(),
-            unread_count=unread,
+            unread_count=unread_by_peer.get(peer_id, 0),
         ))
     result.sort(key=lambda c: c.last_message_at or "", reverse=True)
     return result

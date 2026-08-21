@@ -14,7 +14,7 @@ from models import (
     ClinicPartCell, CocktailRecipe, Field, FieldAnimal, FieldCell, FieldCocktailRecipe, FieldPet,
     FieldPlant, FieldPotionRecipe,
     GATHER_WINDOW_KINDS, GatherCell, GatherCellIngredient, Ingredient, InfirmaryZone, KASSA_KIND,
-    Pet, PetZone, Plant, PlantBed, PotionRecipe, ProductionTemplate, REMEDY_DEVICE_LIMIT,
+    Pet, PetZone, Plant, PlantBed, Plot, PotionRecipe, ProductionTemplate, REMEDY_DEVICE_LIMIT,
     Remedy, RemedyDeviceCell, RemedyDeviceRemedy, Tent, TradeCell,
     TradeCellIngredient, User, WITCH_HOUSE_KIND,
 )
@@ -277,6 +277,7 @@ class PlantOut(BaseModel):
     code: str
     name: str
     emoji: str | None
+    level: int
 
 
 class FieldOut(BaseModel):
@@ -343,7 +344,7 @@ def _tent_to_out(t: Tent) -> TentOut:
 
 
 def _plant_to_out(p: Plant) -> PlantOut:
-    return PlantOut(id=p.id, code=p.code, name=p.name, emoji=p.emoji)
+    return PlantOut(id=p.id, code=p.code, name=p.name, emoji=p.emoji, level=p.level)
 
 
 @router.get("", response_model=list[FieldOut])
@@ -404,6 +405,7 @@ def update_field(
         f.plant_category = req.plant_category
     if req.min_level is not None:
         f.min_level = req.min_level
+        _unbind_level_mismatched_plants(f, db)
     if req.field_kind is not None:
         f.field_kind = req.field_kind
     if req.cols is not None or req.rows is not None:
@@ -560,6 +562,42 @@ def set_cell_kind(
     return _cell_to_out(cell)
 
 
+def _unbind_level_mismatched_plants(f: Field, db: Session) -> None:
+    """Тихо отвязывает от локации растения не того уровня (когда min_level > 0).
+
+    Удаляются только связи field_plants и ссылки грядок игроков на клетки/слоты
+    этой локации. Сами растения в базе остаются нетронутыми.
+    """
+    level = f.min_level
+    if level is None or level <= 0:
+        return
+    mismatched = [
+        fp.plant_id for fp in db.query(FieldPlant).filter(FieldPlant.field_id == f.id).all()
+        if fp.plant is not None and fp.plant.level != level
+    ]
+    if mismatched:
+        db.query(FieldPlant).filter(
+            FieldPlant.field_id == f.id, FieldPlant.plant_id.in_(mismatched)
+        ).delete(synchronize_session=False)
+
+    for p in (
+        db.query(Plot)
+        .join(FieldCell, Plot.cell_id == FieldCell.id)
+        .filter(FieldCell.field_id == f.id)
+        .all()
+    ):
+        if p.plant is not None and p.plant.level != level:
+            p.cell_id = None
+    for p in (
+        db.query(Plot)
+        .join(PlantBed, Plot.plant_bed_id == PlantBed.id)
+        .filter(PlantBed.field_id == f.id)
+        .all()
+    ):
+        if p.plant is not None and p.plant.level != level:
+            p.plant_bed_id = None
+
+
 class FieldPlantsRequest(BaseModel):
     plant_ids: list[int]
 
@@ -572,7 +610,17 @@ def set_field_plants(
     user: User = Depends(require_role("admin")),
 ):
     f = _get_field_or_404(field_id, db)
-    valid_ids = {p.id for p in db.query(Plant).filter(Plant.id.in_(req.plant_ids)).all()}
+    plants = {p.id: p for p in db.query(Plant).filter(Plant.id.in_(req.plant_ids)).all()}
+    valid_ids = set(plants)
+    level = f.min_level
+    if level is not None and level > 0:
+        bad = [pid for pid in req.plant_ids if pid in valid_ids and plants[pid].level != level]
+        if bad:
+            names = ", ".join(plants[pid].name for pid in bad)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"В локацию {level} уровня можно добавлять только растения того же уровня: {names}",
+            )
     db.query(FieldPlant).filter(FieldPlant.field_id == f.id).delete()
     for pid in req.plant_ids:
         if pid in valid_ids:

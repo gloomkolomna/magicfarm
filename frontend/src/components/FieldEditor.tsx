@@ -1658,10 +1658,14 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           <h3>🌱 Растения локации</h3>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
             Отметьте растения, доступные для посадки игроками в этой локации.
+            {(field?.min_level || 0) > 0 && (
+              <> Доступны только растения {field.min_level} уровня.</>
+            )}
           </p>
           <div className="fm-grid">
             {allPlants
               .filter((p) => !field?.plant_category || p.category === field.plant_category)
+              .filter((p) => (field?.min_level || 0) <= 0 || p.level === (field?.min_level || 0))
               .map((p) => (
                 <label key={p.id} className="fm-card" style={{ cursor: 'pointer' }}>
                   <input
@@ -1672,6 +1676,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     style={{ marginRight: 8 }}
                   />
                   {p.emoji} {p.name}
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}> · ур. {p.level}</span>
                 </label>
               ))}
           </div>

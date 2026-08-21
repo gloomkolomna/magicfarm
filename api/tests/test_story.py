@@ -105,3 +105,92 @@ def test_dlc_story_unknown_location_400(player_client):
 def test_admin_dlc_slide_invalid_location_400(admin_client):
     assert admin_client.post("/api/admin/story/slides", json={"text": "x", "location_code": "wrong"}).status_code == 400
 
+
+
+def test_dlc_story_locked_without_unlock(player_client):
+    from routes.settings import set_locked_locations
+    from tests.conftest import TestingSessionLocal
+
+    s = TestingSessionLocal()
+    try:
+        set_locked_locations(s, ["brewery"])
+    finally:
+        s.close()
+    try:
+        assert player_client.get("/api/story/dlc/brewery").status_code == 403
+        assert player_client.post("/api/story/dlc/brewery/seen").status_code == 403
+        assert player_client.get("/api/story/dlc/infirmary").status_code == 200
+    finally:
+        s = TestingSessionLocal()
+        try:
+            set_locked_locations(s, [])
+        finally:
+            s.close()
+
+
+def test_dlc_story_unlocked_with_dlc(player_client):
+    from models import UserDlcUnlock
+    from routes.settings import set_locked_locations
+    from tests.conftest import TestingSessionLocal
+
+    s = TestingSessionLocal()
+    try:
+        set_locked_locations(s, ["brewery"])
+        s.add(UserDlcUnlock(user_id=123, location_code="brewery"))
+        s.commit()
+    finally:
+        s.close()
+    try:
+        assert player_client.get("/api/story/dlc/brewery").status_code == 200
+        assert player_client.post("/api/story/dlc/brewery/seen").status_code == 200
+    finally:
+        s = TestingSessionLocal()
+        try:
+            set_locked_locations(s, [])
+        finally:
+            s.close()
+
+
+def test_upload_slide_image_failure_keeps_old_file(admin_client, monkeypatch):
+    from routes import story as routes_story
+    from services.uploads import remove_upload as real_remove
+    from models import StorySlide
+    from tests.conftest import TestingSessionLocal
+
+    r = admin_client.post("/api/admin/story/slides", json={"text": "слайд"})
+    assert r.status_code == 201, r.text
+    sid = r.json()["id"]
+
+    s = TestingSessionLocal()
+    try:
+        slide = s.query(StorySlide).filter(StorySlide.id == sid).first()
+        slide.image_url = "/api/uploads/old_story.jpg"
+        s.commit()
+    finally:
+        s.close()
+
+    removed = []
+
+    def _fake_remove(url):
+        removed.append(url)
+        return real_remove(url)
+
+    def _bad_save(file, name, **kwargs):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Файл должен быть изображением")
+
+    monkeypatch.setattr(routes_story, "remove_upload", _fake_remove)
+    monkeypatch.setattr(routes_story, "save_upload", _bad_save)
+
+    res = admin_client.put(f"/api/admin/story/slides/{sid}/image", files={
+        "file": ("x.png", b"notanimage", "image/png"),
+    })
+    assert res.status_code == 400
+    assert removed == []
+
+    s = TestingSessionLocal()
+    try:
+        slide = s.query(StorySlide).filter(StorySlide.id == sid).first()
+        assert slide.image_url == "/api/uploads/old_story.jpg"
+    finally:
+        s.close()

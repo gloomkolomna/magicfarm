@@ -354,11 +354,17 @@ def create_report(
         )
 
     recent_cutoff = datetime.datetime.utcnow() - datetime.timedelta(seconds=DEDUP_WINDOW_SECONDS)
-    duplicate = db.query(StitchReport).filter(
+    duplicate_filters = [
         StitchReport.user_id == user.vk_id,
         StitchReport.amount == amount,
         StitchReport.created_at >= recent_cutoff,
-    ).first()
+        StitchReport.context_type == context_type,
+    ]
+    if context_id is None:
+        duplicate_filters.append(StitchReport.context_id.is_(None))
+    else:
+        duplicate_filters.append(StitchReport.context_id == context_id)
+    duplicate = db.query(StitchReport).filter(*duplicate_filters).first()
     if duplicate is not None:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

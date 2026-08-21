@@ -217,3 +217,63 @@ def test_gift_product_and_ingredient():
         assert row is not None and row.qty == 1
     finally:
         s.close()
+
+
+def test_cancel_gift_returns_items_to_sender():
+    from models import ChatMessage, Gift
+
+    _add_user(7001)
+    _add_user(7002)
+    _give_plant(7001, 1, 2)
+    with make_user_client(7001, "player") as a:
+        r = a.post("/api/gifts", json={"to_user_id": 7002, "kind": "plant", "item_id": 1, "qty": 2})
+        assert r.status_code == 201, r.text
+        gid = r.json()["id"]
+        assert a.post(f"/api/gifts/{gid}/cancel").status_code == 200
+
+    s = TestingSessionLocal()
+    try:
+        row = s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).first()
+        assert row is not None and row.qty == 2
+        g = s.query(Gift).filter(Gift.id == gid).first()
+        assert g.claimed_at is not None
+        assert s.query(ChatMessage).filter(ChatMessage.gift_id == gid).count() == 0
+    finally:
+        s.close()
+
+    with make_user_client(7002, "player") as b:
+        assert b.get("/api/gifts/received").json() == []
+        assert b.post(f"/api/gifts/{gid}/claim").status_code == 400
+
+
+def test_cancel_gift_only_sender():
+    _add_user(7001)
+    _add_user(7002)
+    _give_plant(7001, 1, 1)
+    with make_user_client(7001, "player") as a:
+        gid = a.post("/api/gifts", json={"to_user_id": 7002, "kind": "plant", "item_id": 1, "qty": 1}).json()["id"]
+    with make_user_client(7002, "player") as b:
+        assert b.post(f"/api/gifts/{gid}/cancel").status_code == 403
+
+
+def test_cancel_claimed_gift_rejected():
+    _add_user(7001)
+    _add_user(7002)
+    _give_plant(7001, 1, 1)
+    with make_user_client(7001, "player") as a:
+        gid = a.post("/api/gifts", json={"to_user_id": 7002, "kind": "plant", "item_id": 1, "qty": 1}).json()["id"]
+    with make_user_client(7002, "player") as b:
+        assert b.post(f"/api/gifts/{gid}/claim").status_code == 200
+    with make_user_client(7001, "player") as a:
+        assert a.post(f"/api/gifts/{gid}/cancel").status_code == 400
+
+
+def test_second_claim_rejected():
+    _add_user(7001)
+    _add_user(7002)
+    _give_plant(7001, 1, 2)
+    with make_user_client(7001, "player") as a:
+        gid = a.post("/api/gifts", json={"to_user_id": 7002, "kind": "plant", "item_id": 1, "qty": 1}).json()["id"]
+    with make_user_client(7002, "player") as b:
+        assert b.post(f"/api/gifts/{gid}/claim").status_code == 200
+        assert b.post(f"/api/gifts/{gid}/claim").status_code == 400

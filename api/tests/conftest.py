@@ -10,6 +10,7 @@ os.environ["DEV_LOGIN_ENABLED"] = "true"
 os.environ["ADMIN_VK_IDS"] = "400977,795384"
 os.environ["SECRET_KEY"] = "test-secret-not-for-prod"
 os.environ["VK_APP_SECRET"] = "test-secret"
+os.environ["VK_SERVICE_TOKEN"] = ""
 os.environ["S3_ENABLED"] = ""
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))

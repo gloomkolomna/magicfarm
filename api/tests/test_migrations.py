@@ -310,3 +310,79 @@ def ghost_purge_db(tmp_path, monkeypatch):
 def test_migration_purges_barnyard_ghost_slots(ghost_purge_db):
     rows = _fetch(ghost_purge_db, "SELECT id, cell_id FROM barnyard_slots")
     assert rows == [(1, 100)]
+
+
+LEVEL_MISMATCH_PRE_REV = "dcc82124b5c3"
+
+
+@pytest.fixture
+def level_mismatch_db(tmp_path, monkeypatch):
+    """База на текущем head с рассинхроном уровней локаций и растений.
+
+    Схема создаётся по моделям (create_all), alembic стампится на предыдущий
+    head, после чего применяется только новая data-миграция.
+    """
+    import config
+    db_path = tmp_path / "farm_level_mismatch.db"
+    monkeypatch.setattr(config, "DATABASE_URL", f"sqlite:///{db_path}")
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from models import Base, Field, FieldCell, FieldPlant, Plant, PlantBed, Plot, User
+
+    eng = create_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(eng)
+    eng.dispose()
+
+    from alembic import command
+    from alembic.config import Config
+    cfg = Config(os.path.join(API_DIR, "alembic.ini"))
+    command.stamp(cfg, LEVEL_MISMATCH_PRE_REV)
+
+    Session = sessionmaker(bind=create_engine(f"sqlite:///{db_path}"))
+    s = Session()
+    try:
+        f1 = Field(id=1, code="orchard", name="Сад", cols=4, rows=3, min_level=3)
+        f2 = Field(id=2, code="garden", name="Огород", cols=4, rows=3, min_level=0)
+        p_low = Plant(id=1, code="yablonya", name="Яблоня", category="orchard", level=1)
+        p_match = Plant(id=2, code="sliva", name="Слива", category="orchard", level=3)
+        s.add_all([f1, f2, p_low, p_match])
+        s.flush()
+        s.add_all([
+            FieldPlant(field_id=1, plant_id=1),  # рассинхрон: ур.1 vs локация ур.3
+            FieldPlant(field_id=1, plant_id=2),  # ок
+            FieldPlant(field_id=2, plant_id=1),  # локация без уровня — ок
+        ])
+        c10 = FieldCell(id=10, field_id=1, col=0, row=0, kind="bed")
+        c11 = FieldCell(id=11, field_id=2, col=0, row=0, kind="bed")
+        s.add_all([c10, c11])
+        s.flush()
+        pb20 = PlantBed(id=20, field_id=1, col1=1, row1=1, col2=2, row2=2)
+        s.add(pb20)
+        s.flush()
+        s.add(User(vk_id=1, role="player"))
+        s.flush()
+        s.add_all([
+            Plot(id=1, user_id=1, plant_id=1, qty=1, cell_id=10),   # ур.1 vs локация ур.3 → отвязать
+            Plot(id=2, user_id=1, plant_id=2, qty=1, plant_bed_id=20),  # ок — остаётся
+            Plot(id=3, user_id=1, plant_id=1, qty=1, cell_id=11),   # локация без уровня — остаётся
+        ])
+        s.commit()
+    finally:
+        s.close()
+
+    command.upgrade(cfg, "head")
+    yield str(db_path)
+
+
+def test_migration_unbinds_level_mismatched_plants(level_mismatch_db):
+    fp = _fetch(level_mismatch_db, "SELECT field_id, plant_id FROM field_plants ORDER BY field_id, plant_id")
+    assert fp == [(1, 2), (2, 1)]
+
+    plots = _fetch(level_mismatch_db, "SELECT id, cell_id, plant_bed_id FROM plots ORDER BY id")
+    assert plots == [(1, None, None), (2, None, 20), (3, 11, None)]
+
+
+def test_migration_keeps_plants_in_catalog(level_mismatch_db):
+    rows = _fetch(level_mismatch_db, "SELECT id, code FROM plants ORDER BY id")
+    assert rows == [(1, "yablonya"), (2, "sliva")]

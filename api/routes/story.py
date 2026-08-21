@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -86,6 +87,14 @@ def _dlc_seen(user_id: int, location_code: str, db: Session) -> bool:
     )
 
 
+def _check_dlc_access(code: str, user: User, db: Session) -> None:
+    from services.availability import location_lock_reason
+
+    reason = location_lock_reason(code, user, db)
+    if reason is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
+
+
 @router.get("/dlc/{location_code}", response_model=DlcStoryOut)
 def get_dlc_story(
     location_code: str,
@@ -93,6 +102,7 @@ def get_dlc_story(
     user: User = Depends(get_current_user),
 ):
     code = _validate_location_code(location_code)
+    _check_dlc_access(code, user, db)
     slides = [
         _slide_out(s)
         for s in db.query(StorySlide)
@@ -129,13 +139,17 @@ def mark_dlc_story_seen(
     user: User = Depends(get_current_user),
 ):
     code = _validate_location_code(location_code)
+    _check_dlc_access(code, user, db)
     existing = db.query(UserDlcStoryView).filter(
         UserDlcStoryView.user_id == user.vk_id,
         UserDlcStoryView.location_code == code,
     ).first()
     if existing is None:
         db.add(UserDlcStoryView(user_id=user.vk_id, location_code=code))
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
     return SeenOut()
 
 
@@ -209,8 +223,9 @@ def admin_upload_slide_image(
     user: User = Depends(require_role("admin")),
 ):
     s = _get_slide_or_404(slide_id, db)
+    new_url = save_upload(file, f"story_{s.id}", max_size=1920)
     remove_upload(s.image_url)
-    s.image_url = save_upload(file, f"story_{s.id}", max_size=1920)
+    s.image_url = new_url
     db.commit()
     db.refresh(s)
     return _slide_out(s)

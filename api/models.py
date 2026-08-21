@@ -1,6 +1,7 @@
 from __future__ import annotations
 from sqlalchemy import (
-    CheckConstraint, Column, Integer, String, Boolean, Text, DateTime, ForeignKey, UniqueConstraint,
+    CheckConstraint, Column, Index, Integer, String, Boolean, Text, DateTime, ForeignKey,
+    UniqueConstraint, text,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -1323,6 +1324,13 @@ class Shaker(Base):
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     recipe = relationship("CocktailRecipe")
+
+    __table_args__ = (
+        Index(
+            "uq_shakers_user_active", "user_id", unique=True,
+            sqlite_where=text("status != 'done'"),
+        ),
+    )
 
 
 class StorySlide(Base):
