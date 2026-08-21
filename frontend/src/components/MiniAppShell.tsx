@@ -26,14 +26,14 @@ const BASE_TABS: Tab[] = [
   { path: '/brewery', label: '🧪 Зельеварение', location: 'brewery' },
   { path: '/bonuses', label: '⚡ Бонусы', location: 'brewery', hideWhenLocked: true },
   { path: '/inventory', label: '📦 Склад' },
-  { path: '/farms', label: '🌾 Фермы игроков' },
-  { path: '/trades', label: '🤝 Бартер' },
-  { path: '/chat', label: '💬 Чат' },
   { path: '/orders', label: '🧺 Заказы' },
   { path: '/achievements', label: '🏆 Достижения' },
   { path: '/collection', label: '🃏 Коллекция', location: 'infirmary', hideWhenLocked: true },
   { path: '/profile', label: '👤 Профиль', section: 'profile' },
   { path: '/lessons', label: '🎬 Уроки', section: 'profile' },
+  { path: '/trades', label: '🤝 Бартер', section: 'profile' },
+  { path: '/chat', label: '💬 Чат', section: 'profile' },
+  { path: '/farms', label: '🌾 Фермы игроков', section: 'profile' },
 ];
 
 function MiniAppShell({ children }: Props) {
