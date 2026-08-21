@@ -450,7 +450,9 @@ export interface StitchReport {
   user_id: number;
   amount: number;
   photo_before_url: string | null;
-  photo_after_url: string;
+  photo_after_url: string | null;
+  photo_before_thumb_url?: string | null;
+  photo_after_thumb_url?: string | null;
   note: string | null;
   context_type: string | null;
   context_id: number | null;

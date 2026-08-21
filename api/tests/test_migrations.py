@@ -59,6 +59,13 @@ def migrated_db(tmp_path, monkeypatch):
                 customer VARCHAR, status VARCHAR NOT NULL DEFAULT 'open',
                 name VARCHAR, image_url VARCHAR,
                 created_at DATETIME, fulfilled_at DATETIME);
+            CREATE TABLE stitch_reports (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL,
+                amount INTEGER NOT NULL,
+                photo_before_url VARCHAR, photo_after_url VARCHAR NOT NULL,
+                note TEXT, context_type VARCHAR, context_id INTEGER, cell_id INTEGER,
+                status VARCHAR NOT NULL DEFAULT 'pending',
+                reviewer_id INTEGER, reviewed_at DATETIME, created_at DATETIME);
         """)
         conn.execute("INSERT INTO alembic_version (version_num) VALUES (:r)", {"r": OLD_REV})
         conn.execute("INSERT INTO settings (key, value) VALUES ('house_material_norm', '150')")
@@ -252,6 +259,13 @@ def ghost_purge_db(tmp_path, monkeypatch):
                 customer VARCHAR, status VARCHAR NOT NULL DEFAULT 'open',
                 name VARCHAR, image_url VARCHAR,
                 created_at DATETIME, fulfilled_at DATETIME);
+            CREATE TABLE stitch_reports (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL,
+                amount INTEGER NOT NULL,
+                photo_before_url VARCHAR, photo_after_url VARCHAR NOT NULL,
+                note TEXT, context_type VARCHAR, context_id INTEGER, cell_id INTEGER,
+                status VARCHAR NOT NULL DEFAULT 'pending',
+                reviewer_id INTEGER, reviewed_at DATETIME, created_at DATETIME);
         """)
         conn.execute("INSERT INTO alembic_version (version_num) VALUES (:r)", {"r": OLD_REV})
         conn.execute("INSERT INTO users (vk_id, role) VALUES (1, 'player')")

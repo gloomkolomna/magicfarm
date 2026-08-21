@@ -2198,11 +2198,13 @@ export default function AdminPage() {
                         <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Отчётов нет.</div>
                       ) : (
                         <div className="fm-grid">
-                          {playerReports.map((r) => (
+                          {playerReports.map((r) => {
+                            const photo = r.photo_after_url || r.photo_after_thumb_url;
+                            return (
                             <div key={r.id} className="fm-card fm-rise">
                               <div style={{ display: 'flex', gap: 10 }}>
-                                {r.photo_after_url && (
-                                  <img src={mediaUrl(r.photo_after_url)} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 'var(--radius-sm)' }} />
+                                {photo && (
+                                  <img src={mediaUrl(photo)} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 'var(--radius-sm)' }} />
                                 )}
                                 <div style={{ flex: 1 }}>
                                   <strong>❎ {r.amount}</strong>
@@ -2219,7 +2221,8 @@ export default function AdminPage() {
                                 </div>
                               )}
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>

@@ -12,7 +12,7 @@ from routes.settings import get_auto_credit
 from services.achievements import check_and_award
 from services.pet_bonuses import apply_pet_bonus_craft
 from services.potion_bonuses import consume_potion, is_potion_active, product_bonus_code
-from services.uploads import remove_upload, save_upload
+from services.uploads import remove_upload, save_stitch_photo, save_upload
 
 router = APIRouter(prefix="/api/stitches", tags=["stitches"])
 
@@ -171,7 +171,9 @@ class StitchReportOut(BaseModel):
     user_id: int
     amount: int
     photo_before_url: str | None
-    photo_after_url: str
+    photo_after_url: str | None
+    photo_before_thumb_url: str | None
+    photo_after_thumb_url: str | None
     note: str | None
     context_type: str | None
     context_id: int | None
@@ -185,6 +187,7 @@ def _to_out(r: StitchReport) -> StitchReportOut:
     return StitchReportOut(
         id=r.id, user_id=r.user_id, amount=r.amount,
         photo_before_url=r.photo_before_url, photo_after_url=r.photo_after_url,
+        photo_before_thumb_url=r.photo_before_thumb_url, photo_after_thumb_url=r.photo_after_thumb_url,
         note=r.note, context_type=r.context_type, context_id=r.context_id,
         status=r.status, reviewer_id=r.reviewer_id,
         reviewed_at=r.reviewed_at, created_at=r.created_at,
@@ -362,11 +365,15 @@ def create_report(
             detail=f"Такой отчёт уже отправлен недавно — подождите {DEDUP_WINDOW_SECONDS} секунд",
         )
 
-    after_url = save_upload(photo_after, f"stitch_{user.vk_id}_after", max_size=1280)
-    before_url = save_upload(photo_before, f"stitch_{user.vk_id}_before", max_size=1280) if photo_before else None
+    after_url, after_thumb_url = save_stitch_photo(photo_after, user.vk_id, "after")
+    if photo_before:
+        before_url, before_thumb_url = save_stitch_photo(photo_before, user.vk_id, "before")
+    else:
+        before_url, before_thumb_url = None, None
     r = StitchReport(
         user_id=user.vk_id, amount=amount,
         photo_before_url=before_url, photo_after_url=after_url,
+        photo_before_thumb_url=before_thumb_url, photo_after_thumb_url=after_thumb_url,
         note=note, context_type=context_type, context_id=context_id,
         cell_id=cell_id,
         status="pending",
@@ -466,6 +473,8 @@ def delete_report(report_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Отчёт не найден")
     remove_upload(r.photo_before_url)
     remove_upload(r.photo_after_url)
+    remove_upload(r.photo_before_thumb_url)
+    remove_upload(r.photo_after_thumb_url)
     db.delete(r)
     db.commit()
     return None

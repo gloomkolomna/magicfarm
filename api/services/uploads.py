@@ -106,6 +106,31 @@ def save_upload(upload: UploadFile, prefix: str, max_size: int | None = None, al
     return f"/api/uploads/{name}"
 
 
+THUMB_MAX_SIZE = 300
+
+
+def save_stitch_photo(upload: UploadFile, vk_id: int, kind: str) -> tuple[str, str | None]:
+    buf, _ = _read_with_limit(upload)
+    processed, is_png = _process(buf, max_size=1280)
+    thumb, thumb_is_png = _process(buf, max_size=THUMB_MAX_SIZE)
+    stamp = int(time.time())
+    name = f"stitch_{vk_id}_{kind}_{stamp}_{os.urandom(3).hex()}.{'png' if is_png else 'jpg'}"
+    thumb_name = f"thumb_stitch_{vk_id}_{kind}_{stamp}_{os.urandom(3).hex()}.{'png' if thumb_is_png else 'jpg'}"
+    s3 = _get_s3()
+    if s3:
+        upload_fn, _ = s3
+        url = upload_fn(f"{vk_id}/{name}", processed, "image/png" if is_png else "image/jpeg")
+        thumb_url = upload_fn(f"{vk_id}/{thumb_name}", thumb, "image/png" if thumb_is_png else "image/jpeg")
+        return url, thumb_url
+    path = os.path.join(config.UPLOADS_DIR, name)
+    with open(path, "wb") as fh:
+        fh.write(processed)
+    thumb_path = os.path.join(config.UPLOADS_DIR, thumb_name)
+    with open(thumb_path, "wb") as fh:
+        fh.write(thumb)
+    return f"/api/uploads/{name}", f"/api/uploads/{thumb_name}"
+
+
 def remove_upload(url: str | None) -> None:
     if not url:
         return

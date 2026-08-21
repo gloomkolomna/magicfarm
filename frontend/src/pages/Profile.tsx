@@ -182,12 +182,14 @@ export default function ProfilePage() {
         </div>
       ) : (
         <div className="fm-grid">
-          {reports.filter((r) => !filter || r.context_type === filter).map((r) => (
+          {reports.filter((r) => !filter || r.context_type === filter).map((r) => {
+            const photo = r.photo_after_url || r.photo_after_thumb_url;
+            return (
             <div key={r.id} className="fm-card fm-rise">
               <div style={{ display: 'flex', gap: 10 }}>
-                {r.photo_after_url && (
+                {photo && (
                   <img
-                    src={mediaUrl(r.photo_after_url)}
+                    src={mediaUrl(photo)}
                     alt=""
                     style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
                   />
@@ -201,7 +203,8 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

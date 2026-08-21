@@ -1,0 +1,10 @@
+[Unit]
+Description=MagicFarm S3 stitch photos cleanup (30 days TTL)
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/magicfarm
+Environment=PATH=/opt/magicfarm/api/venv/bin
+Environment=PYTHONPATH=/opt/magicfarm/api
+ExecStart=/opt/magicfarm/api/venv/bin/python /opt/magicfarm/api/run_cleanup.py

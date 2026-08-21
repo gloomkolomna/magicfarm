@@ -39,3 +39,12 @@ def delete_object(key: str) -> None:
         client.delete_object(Bucket=config.S3_BUCKET_NAME, Key=key)
     except Exception:
         pass
+
+
+def s3_key_from_url(url: str | None) -> str | None:
+    if not url or not url.startswith("http") or not config.S3_PUBLIC_URL:
+        return None
+    base = config.S3_PUBLIC_URL.rstrip("/") + "/"
+    if not url.startswith(base):
+        return None
+    return url[len(base):]

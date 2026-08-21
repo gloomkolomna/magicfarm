@@ -76,6 +76,8 @@ class PlayerReportOut(BaseModel):
     amount: int
     photo_after_url: str | None
     photo_before_url: str | None
+    photo_after_thumb_url: str | None
+    photo_before_thumb_url: str | None
     note: str | None
     status: str
     context_type: str | None
@@ -293,6 +295,7 @@ def get_player_reports(
         PlayerReportOut(
             id=r.id, user_id=r.user_id, amount=r.amount,
             photo_after_url=r.photo_after_url, photo_before_url=r.photo_before_url,
+            photo_after_thumb_url=r.photo_after_thumb_url, photo_before_thumb_url=r.photo_before_thumb_url,
             note=r.note, status=r.status,
             context_type=r.context_type, context_id=r.context_id,
             reviewer_id=r.reviewer_id,
@@ -717,6 +720,8 @@ def delete_player(
     for r in reports:
         remove_upload(r.photo_before_url)
         remove_upload(r.photo_after_url)
+        remove_upload(r.photo_before_thumb_url)
+        remove_upload(r.photo_after_thumb_url)
 
     for model in (
         UserRemedyDevice, UserRemedyCard, UserRemedy, UserExamineLog, UserCard,
