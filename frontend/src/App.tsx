@@ -202,6 +202,7 @@ function App() {
           <Route path="/farms" element={<MiniAppShell><FarmsPage /></MiniAppShell>} />
           <Route path="/trades" element={<MiniAppShell><TradesPage /></MiniAppShell>} />
           <Route path="/chat" element={<MiniAppShell><ChatPage /></MiniAppShell>} />
+          <Route path="/chat/:vkId" element={<MiniAppShell><ChatPage /></MiniAppShell>} />
           <Route path="/orders" element={<MiniAppShell><OrdersPage /></MiniAppShell>} />
           <Route path="/orders/catalog" element={<MiniAppShell><OrderCatalogPage /></MiniAppShell>} />
           <Route path="/profile" element={<MiniAppShell><ProfilePage /></MiniAppShell>} />

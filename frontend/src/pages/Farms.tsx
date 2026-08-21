@@ -1,21 +1,30 @@
-import { useState } from 'react';
-import { api, type PlayerFarm, type PlayerSearchItem } from '../api/endpoints';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api, type FieldDetail, type FieldInfo, type PlayerFarm, type PlayerSearchItem } from '../api/endpoints';
+import FieldGridView from '../components/FieldGridView';
 import Toast from '../components/Toast';
 
 export default function FarmsPage() {
+  const nav = useNavigate();
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<PlayerSearchItem[] | null>(null);
+  const [results, setResults] = useState<PlayerSearchItem[]>([]);
   const [farm, setFarm] = useState<PlayerFarm | null>(null);
+  const [fields, setFields] = useState<FieldInfo[]>([]);
+  const [viewField, setViewField] = useState<FieldDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  useEffect(() => {
+    api.fields().then(setFields).catch(() => {});
+    api.playerSearch('').then(setResults).catch(() => {});
+  }, []);
+
   async function search() {
-    setBusy(true); setMsg(null); setFarm(null);
+    setBusy(true); setMsg(null);
     try {
       setResults(await api.playerSearch(q));
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка поиска'));
-      setResults([]);
     } finally {
       setBusy(false);
     }
@@ -30,6 +39,22 @@ export default function FarmsPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function openField(fieldId: number) {
+    if (!farm) return;
+    setBusy(true); setMsg(null);
+    try {
+      setViewField(await api.playerField(farm.vk_id, fieldId));
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка загрузки локации'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function writeTo(vkId: number) {
+    nav(`/chat/${vkId}`);
   }
 
   return (
@@ -47,38 +72,57 @@ export default function FarmsPage() {
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
             />
-            <button className="fm-btn" disabled={busy || !q.trim()} onClick={search}>🔍 Найти</button>
+            <button className="fm-btn" disabled={busy} onClick={search}>🔍</button>
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
-            Только просмотр: фермы других игроков можно смотреть, но нельзя трогать.
+            Только просмотр: фермы других игроков можно смотреть и писать, но нельзя трогать.
           </p>
-          {results !== null && (
-            results.length === 0 ? (
-              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Никого не найдено.</div>
-            ) : (
-              <div className="fm-grid">
-                {results.map((p) => (
-                  <button key={p.vk_id} className="fm-card fm-rise" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => openFarm(p.vk_id)}>
-                    <strong style={{ fontSize: 15 }}>👤 {p.display_name}</strong>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
-                      🏆 Уровень {p.level} · 🪙 {p.coins} · 🧵 {p.crosses_total}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>ID: {p.vk_id} →</div>
-                  </button>
-                ))}
-              </div>
-            )
+          {results.length === 0 ? (
+            <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Игроков пока нет.</div>
+          ) : (
+            <div className="fm-grid">
+              {results.map((p) => (
+                <div key={p.vk_id} className="fm-card fm-rise" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => openFarm(p.vk_id)}>
+                  <strong style={{ fontSize: 15 }}>👤 {p.display_name}</strong>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                    🏆 Уровень {p.level} · 🪙 {p.coins} · 🧵 {p.crosses_total}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>ID: {p.vk_id}</div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                    <button className="fm-btn fm-btn-sm" onClick={(e) => { e.stopPropagation(); openFarm(p.vk_id); }}>👁 Смотреть</button>
+                    <button className="fm-btn fm-btn-sm fm-btn-outline" onClick={(e) => { e.stopPropagation(); writeTo(p.vk_id); }}>💬 Написать</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </>
       ) : (
         <div>
-          <button className="fm-btn fm-btn-outline" style={{ marginBottom: 10 }} disabled={busy} onClick={() => setFarm(null)}>← Назад к поиску</button>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+            <button className="fm-btn fm-btn-outline" disabled={busy} onClick={() => setFarm(null)}>← Назад</button>
+            <button className="fm-btn" disabled={busy} onClick={() => writeTo(farm.vk_id)}>💬 Написать</button>
+          </div>
           <div className="fm-card" style={{ marginBottom: 10 }}>
             <strong style={{ fontSize: 17 }}>👤 {farm.display_name}</strong>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
               🏆 Уровень {farm.level} · 🪙 {farm.coins} · 🧵 {farm.crosses_total} · Раунд {farm.round} · 🏅 Достижений: {farm.achievements_total}
             </div>
           </div>
+
+          <h3 style={{ margin: '0 0 8px' }}>🗺️ Локации</h3>
+          {fields.length === 0 ? (
+            <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Нет полей.</div>
+          ) : (
+            <div className="fm-grid" style={{ marginBottom: 12 }}>
+              {fields.map((f) => (
+                <button key={f.id} className="fm-card fm-rise" style={{ fontSize: 13, textAlign: 'left', cursor: 'pointer' }} onClick={() => openField(f.id)}>
+                  <strong>🗺️ {f.name}</strong>
+                  <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{f.cols}×{f.rows} клеток</div>
+                </button>
+              ))}
+            </div>
+          )}
 
           <h3 style={{ margin: '0 0 8px' }}>🌱 Грядки ({farm.plots.length})</h3>
           {farm.plots.length === 0 ? (
@@ -154,6 +198,18 @@ export default function FarmsPage() {
               {farm.pets.map((pt, i) => <span key={i} className="fm-chip">{pt.emoji || '🐾'} {pt.name}</span>)}
             </div>
           )}
+        </div>
+      )}
+
+      {viewField && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#1a1a2e', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '10px var(--shell-pad)', display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,0.4)', flexShrink: 0 }}>
+            <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => setViewField(null)} style={{ color: '#fff', borderColor: '#fff' }}>← Назад</button>
+            <span style={{ color: '#ccc', fontSize: 14 }}>👁 {viewField.name} · {viewField.cols}×{viewField.rows} — только просмотр</span>
+          </div>
+          <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
+            <FieldGridView field={viewField} />
+          </div>
         </div>
       )}
     </div>

@@ -2245,6 +2245,8 @@ export const api = {
     client.get<PlayerSearchItem[]>('/players/search', { params: { q } }).then((r) => r.data),
   playerFarm: (vkId: number) =>
     client.get<PlayerFarm>(`/players/${vkId}/farm`).then((r) => r.data),
+  playerField: (vkId: number, fieldId: number) =>
+    client.get<FieldDetail>(`/players/${vkId}/fields/${fieldId}`).then((r) => r.data),
 
   // ── Бартер ──
   tradeIncoming: () => client.get<TradeOffer[]>('/trades/incoming').then((r) => r.data),

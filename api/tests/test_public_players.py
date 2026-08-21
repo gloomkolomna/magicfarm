@@ -1,5 +1,5 @@
 from tests.conftest import TestingSessionLocal, make_user_client
-from models import Inventory, Plot, User
+from models import Field, FieldCell, Inventory, Plot, User
 
 
 def _add_user(vk_id, display_name=None, level=0, coins=0, crosses_total=0, status="active"):
@@ -89,3 +89,40 @@ def test_farm_unknown_player_404(player_client):
 def test_farm_blocked_user_404(player_client):
     _add_user(9006, display_name="Блок", status="blocked")
     assert player_client.get("/api/players/9006/farm").status_code == 404
+
+
+def test_player_field_public_requires_auth(client):
+    assert client.get("/api/players/1/fields/1").status_code == 401
+
+
+def test_player_field_returns_plots(player_client):
+    _add_user(9010, display_name="Фермер")
+    s = TestingSessionLocal()
+    try:
+        fld = Field(code="test_f", name="Тестовое поле", cols=4, rows=2, grid_color="#2a1a0e")
+        s.add(fld)
+        s.flush()
+        s.add(FieldCell(field_id=fld.id, col=0, row=0, kind="bed", occupant_user_id=9010))
+        s.flush()
+        cell = s.query(FieldCell).filter(FieldCell.field_id == fld.id).first()
+        s.add(Plot(user_id=9010, plant_id=1, qty=1, cell_id=cell.id, status="planted", accumulated=10, required=100))
+        s.commit()
+        fld_id = fld.id
+    finally:
+        s.close()
+    res = player_client.get(f"/api/players/9010/fields/{fld_id}")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["name"] == "Тестовое поле"
+    assert data["cols"] == 4 and data["rows"] == 2
+    beds = [c for c in data["cells"] if c["kind"] == "bed"]
+    assert len(beds) == 1
+    assert beds[0]["plot"]["plant_name"] == "Джекобоб"
+    assert beds[0]["plot"]["accumulated"] == 10
+    assert beds[0]["plot"]["required"] == 100
+
+
+def test_player_field_404(player_client):
+    _add_user(9011)
+    assert player_client.get("/api/players/999999/fields/1").status_code == 404
+    assert player_client.get("/api/players/9011/fields/999999").status_code == 404

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { api, type ChatMessage, type Conversation } from '../api/endpoints';
 import Toast from '../components/Toast';
@@ -10,6 +11,8 @@ function fmt(iso: string | null): string {
 }
 
 export default function ChatPage() {
+  const nav = useNavigate();
+  const { vkId } = useParams<{ vkId: string }>();
   const { user } = useSession();
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [peer, setPeer] = useState<Conversation | null>(null);
@@ -18,10 +21,24 @@ export default function ChatPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const openedPeerRef = useRef<number | null>(null);
 
   useEffect(() => {
     api.chatConversations().then(setConvs).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!vkId) return;
+    const id = Number(vkId);
+    if (!id || openedPeerRef.current === id) return;
+    openedPeerRef.current = id;
+    const buildPeer = (displayName: string) => {
+      setPeer({ vk_id: id, display_name: displayName, last_message: '', last_message_at: null, unread_count: 0 });
+    };
+    api.playerFarm(id)
+      .then((f) => { buildPeer(f.display_name); api.chatThread(id).then(setThread).catch(() => {}); })
+      .catch(() => buildPeer(`Игрок ${id}`));
+  }, [vkId]);
 
   useEffect(() => {
     if (!peer) return;
@@ -90,7 +107,7 @@ export default function ChatPage() {
         )
       ) : (
         <div>
-          <button className="fm-btn fm-btn-outline fm-btn-sm" style={{ marginBottom: 8 }} onClick={() => { setPeer(null); api.chatConversations().then(setConvs).catch(() => {}); }}>
+          <button className="fm-btn fm-btn-outline fm-btn-sm" style={{ marginBottom: 8 }} onClick={() => { setPeer(null); setThread([]); openedPeerRef.current = null; nav('/chat'); api.chatConversations().then(setConvs).catch(() => {}); }}>
             ← К перепискам
           </button>
           <div className="fm-card" style={{ padding: 0, overflow: 'hidden' }}>
