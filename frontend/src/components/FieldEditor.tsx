@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, BODY_PARTS, type Animal, type BreweryZone, type FieldCell, type FieldDetail, type Ingredient, type Pet, type Plant, type PlantBed, type PetZone, type PotionRecipe, type ProductionTemplate, type Tent } from '../api/endpoints';
+import { api, BODY_PARTS, type Animal, type BarZone, type BreweryZone, type CocktailRecipeAdmin, type FieldCell, type FieldDetail, type Ingredient, type Pet, type Plant, type PlantBed, type PetZone, type PotionRecipe, type ProductionTemplate, type Tent } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import { confirmDialog } from './Confirm';
 
-type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house' | 'brew_cauldron' | 'brew_jar' | 'brew_ingredient' | 'brew_card' | 'gather' | 'trade' | 'body_part' | 'inf_book' | 'remedy_device';
+type Brush = 'bed' | 'pet' | 'tent' | 'barnyard' | 'house' | 'brew_cauldron' | 'brew_jar' | 'brew_ingredient' | 'brew_card' | 'bar_shaker' | 'bar_book' | 'bar_card' | 'gather' | 'trade' | 'body_part' | 'inf_book' | 'remedy_device';
 
 function isTentBrush(b: Brush) {
   return b === 'tent' || b === 'house';
@@ -11,6 +11,10 @@ function isTentBrush(b: Brush) {
 
 function isBrewMultiBrush(b: Brush) {
   return b === 'brew_cauldron' || b === 'brew_jar' || b === 'brew_card';
+}
+
+function isBarMultiBrush(b: Brush) {
+  return b === 'bar_shaker' || b === 'bar_book' || b === 'bar_card';
 }
 
 function isInfirmaryZoneBrush(b: Brush) {
@@ -22,6 +26,12 @@ const BREW_ZONE_LABEL: Record<string, string> = {
   jar: '🧪 Банка зелья',
   ingredient: '🔲 Окошко ингредиента',
   recipe_card: '🃏 Карточка рецепта',
+};
+
+const BAR_ZONE_LABEL: Record<string, string> = {
+  shaker: '🍸 Место шейкера',
+  book: '📖 Книга коктейлей',
+  cocktail_card: '🃏 Карточка коктейля',
 };
 
 const WINDOW_LABEL: Record<string, string> = {
@@ -80,7 +90,9 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const [tentImage, setTentImage] = useState<File | null>(null);
   const [prodTemplates, setProdTemplates] = useState<ProductionTemplate[]>([]);
   const [allPotionRecipes, setAllPotionRecipes] = useState<PotionRecipe[]>([]);
+  const [allCocktailRecipes, setAllCocktailRecipes] = useState<CocktailRecipeAdmin[]>([]);
   const [brewImage, setBrewImage] = useState<File | null>(null);
+  const [barImage, setBarImage] = useState<File | null>(null);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
   const [allRemedies, setAllRemedies] = useState<{ id: number; name: string; image_url: string | null }[]>([]);
   const [deviceImage, setDeviceImage] = useState<File | null>(null);
@@ -101,13 +113,14 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [fd, pl, pts, an, pt, pr, ing, rem] = await Promise.all([api.adminCleanupField(fieldId), api.plants(), api.adminProductionTemplates(), api.adminAnimals(), api.adminPets(), api.adminPotionRecipes(), api.adminIngredients(), api.adminRemedies().catch(() => [])]);
+      const [fd, pl, pts, an, pt, pr, cr, ing, rem] = await Promise.all([api.adminCleanupField(fieldId), api.plants(), api.adminProductionTemplates(), api.adminAnimals(), api.adminPets(), api.adminPotionRecipes(), api.adminCocktailRecipes().catch(() => []), api.adminIngredients(), api.adminRemedies().catch(() => [])]);
       setField(fd);
       setAllPlants(pl);
       setProdTemplates(pts);
       setAllAnimals(an);
       setAllPets(pt);
       setAllPotionRecipes(pr);
+      setAllCocktailRecipes(cr);
       setAllIngredients(ing);
       setAllRemedies(rem);
       setMultiDraft(new Set());
@@ -144,6 +157,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const allowedAnimalIds = useMemo(() => new Set(field?.animal_ids ?? []), [field]);
   const allowedPetIds = useMemo(() => new Set(field?.pet_ids ?? []), [field]);
   const allowedPotionRecipeIds = useMemo(() => new Set(field?.potion_recipes?.map((r) => r.id) ?? []), [field]);
+  const allowedCocktailRecipeIds = useMemo(() => new Set(field?.cocktail_recipes?.map((r) => r.id) ?? []), [field]);
 
   const hasKassa = field?.tents?.some((t) => t.kind === 'kassa') ?? false;
 
@@ -214,7 +228,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
       }
       return;
     }
-    if (isTentBrush(brush) || isBrewMultiBrush(brush) || isInfirmaryZoneBrush(brush) || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) {
+    if (isTentBrush(brush) || isBrewMultiBrush(brush) || isBarMultiBrush(brush) || isInfirmaryZoneBrush(brush) || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) {
       setMultiDraft((prev) => {
         const next = new Set(prev);
         if (next.has(key)) next.delete(key); else next.add(key);
@@ -292,6 +306,12 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         return;
       }
     }
+    for (const bz of field?.bar_zones ?? []) {
+      if (!(c2 < bz.col1 || c1 > bz.col2 || r2 < bz.row1 || r1 > bz.row2)) {
+        setMsg('✗ Пересекается с зоной бара');
+        return;
+      }
+    }
     for (const iz of field?.infirmary_zones ?? []) {
       if (!(c2 < iz.col1 || c1 > iz.col2 || r2 < iz.row1 || r1 > iz.row2)) {
         setMsg('✗ Пересекается с зоной лечебницы');
@@ -315,6 +335,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     }
     setTentImage(null);
     setBrewImage(null);
+    setBarImage(null);
     setDeviceImage(null);
     setDeviceName('');
     setTentIsKassa(false);
@@ -341,6 +362,15 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           zoneKind === 'cauldron' ? { image: brewImage || undefined } : undefined,
         );
         setMsg('✓ Зона зельеварни размещена');
+      } else if (isBarMultiBrush(brush)) {
+        const zoneKind = brush === 'bar_shaker' ? 'shaker' : brush === 'bar_book' ? 'book' : 'cocktail_card';
+        await api.adminCreateBarZone(
+          fieldId,
+          zoneKind,
+          { col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2 },
+          zoneKind === 'shaker' ? { image: barImage || undefined } : undefined,
+        );
+        setMsg('✓ Зона бара размещена');
       } else if (isInfirmaryZoneBrush(brush)) {
         await api.adminCreateInfirmaryZone(fieldId, {
           zone_kind: 'book',
@@ -497,6 +527,20 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     }
   }
 
+  async function deleteBarZone(zoneId: number) {
+    if (!(await confirmDialog('Удалить зону бара?'))) return;
+    setBusy(true);
+    try {
+      await api.adminDeleteBarZone(fieldId, zoneId);
+      await load();
+      setMsg('✓ Зона удалена');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteInfirmaryZone(zoneId: number) {
     if (!(await confirmDialog('Удалить зону лечебницы?'))) return;
     setBusy(true);
@@ -534,6 +578,23 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     setMsg(null);
     try {
       await api.adminSetFieldPotionRecipes(fieldId, Array.from(next));
+      await load();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleCocktailRecipe(rid: number) {
+    if (!field) return;
+    const next = new Set(allowedCocktailRecipeIds);
+    if (next.has(rid)) next.delete(rid);
+    else next.add(rid);
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.adminSetFieldCocktailRecipes(fieldId, Array.from(next));
       await load();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -776,6 +837,15 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             </div>
           );
         }
+        if (kind === 'forest_bar') {
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+              <BrushBtn active={brush === 'bar_shaker'} onClick={() => setBrush('bar_shaker')}>🍸 Шейкер</BrushBtn>
+              <BrushBtn active={brush === 'bar_book'} onClick={() => setBrush('bar_book')}>📖 Книга</BrushBtn>
+              <BrushBtn active={brush === 'bar_card'} onClick={() => setBrush('bar_card')}>🃏 Карточка коктейля</BrushBtn>
+            </div>
+          );
+        }
         if (kind === 'meadow') {
           return (
             <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
@@ -843,6 +913,12 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           ? 'Тап по клетке добавляет окошко ингредиента (максимум 6). Удаление — в списке зон ниже.'
           : brush === 'brew_card'
           ? 'Выделите клетки под карточку рецепта — картинка подгрузится из зелья, выбранного игроком для варки.'
+          : brush === 'bar_shaker'
+          ? 'Выделите клетки под место шейкера — картинку можно загрузить.'
+          : brush === 'bar_book'
+          ? 'Выделите клетки под книгу коктейлей — игрок увидит список рецептов.'
+          : brush === 'bar_card'
+          ? 'Выделите клетки под карточку коктейля с рецептом.'
           : 'Тапайте по клеткам — тип меняется сразу (повторный тап убирает).'}
       </p>
 
@@ -863,7 +939,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             if (c.kind === 'tent') {
               fill = KIND_FILL.tent;
             } else {
-              const isMultiCell = (isTentBrush(brush) || isBrewMultiBrush(brush) || isInfirmaryZoneBrush(brush) || brush === 'remedy_device' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && multiDraft.has(key);
+              const isMultiCell = (isTentBrush(brush) || isBrewMultiBrush(brush) || isBarMultiBrush(brush) || isInfirmaryZoneBrush(brush) || brush === 'remedy_device' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && multiDraft.has(key);
               if (isMultiCell) fill = KIND_FILL.tent;
               else fill = KIND_FILL[c.kind] ?? 'transparent';
             }
@@ -926,6 +1002,48 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                   height={zh}
                   fill="rgba(160,120,220,0.18)"
                   stroke="rgba(160,120,220,0.7)"
+                  strokeDasharray="4 3"
+                  strokeWidth={1}
+                />
+                {z.image_url && (
+                  <image
+                    href={mediaUrl(z.image_url)}
+                    x={z.col1 * sz + 2}
+                    y={z.row1 * sz + 2}
+                    width={zw - 4}
+                    height={zh - 4}
+                    preserveAspectRatio="xMidYMid meet"
+                  />
+                )}
+                <text
+                  x={z.col1 * sz + zw / 2}
+                  y={z.row1 * sz + zh / 2 + 4}
+                  fill="#fff"
+                  fontSize={11}
+                  textAnchor="middle"
+                  style={{ textShadow: '0 1px 2px #000' }}
+                >
+                  {label}
+                </text>
+              </g>
+            );
+          })}
+          {/* Зоны бара */}
+          {field.bar_zones?.map((z) => {
+            const zw = (z.col2 - z.col1 + 1) * sz;
+            const zh = (z.row2 - z.row1 + 1) * sz;
+            const label = z.zone_kind === 'shaker' ? '🍸 Шейкер'
+              : z.zone_kind === 'book' ? '📖 Книга'
+              : '🃏 Карточка';
+            return (
+              <g key={`barz-${z.id}`} style={{ pointerEvents: 'none' }}>
+                <rect
+                  x={z.col1 * sz}
+                  y={z.row1 * sz}
+                  width={zw}
+                  height={zh}
+                  fill="rgba(220,170,90,0.18)"
+                  stroke="rgba(220,170,90,0.7)"
                   strokeDasharray="4 3"
                   strokeWidth={1}
                 />
@@ -1057,7 +1175,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 width={sz}
                 height={sz}
                 fill="transparent"
-                style={{ cursor: (isTentBrush(brush) || isBrewMultiBrush(brush) || isInfirmaryZoneBrush(brush) || brush === 'remedy_device' || brush === 'brew_ingredient' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) ? 'crosshair' : 'pointer' }}
+                style={{ cursor: (isTentBrush(brush) || isBrewMultiBrush(brush) || isBarMultiBrush(brush) || isInfirmaryZoneBrush(brush) || brush === 'remedy_device' || brush === 'brew_ingredient' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) ? 'crosshair' : 'pointer' }}
                 onClick={() => onCellClick(c, r)}
               />
             )),
@@ -1065,9 +1183,9 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         </svg>
       </div>
 
-      {(isTentBrush(brush) || isBrewMultiBrush(brush) || isInfirmaryZoneBrush(brush) || brush === 'remedy_device' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && (
+      {(isTentBrush(brush) || isBrewMultiBrush(brush) || isBarMultiBrush(brush) || isInfirmaryZoneBrush(brush) || brush === 'remedy_device' || (brush === 'bed' && field?.plant_category === 'orchard') || (brush === 'pet' && field?.field_kind === 'lawn')) && (
         <button className="fm-btn fm-btn-sm" style={{ marginBottom: 10 }} disabled={busy || multiDraft.size === 0} onClick={openMultiModal}>
-          {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону' : brush === 'brew_cauldron' ? '🍲 Разместить место котла' : brush === 'brew_jar' ? '🧪 Разместить банку' : brush === 'brew_card' ? '🃏 Разместить карточку' : brush === 'remedy_device' ? '🔧 Разместить прибор' : '📖 Разместить книгу'} ({multiDraft.size})
+          {brush === 'tent' ? '⛺ Разместить шатёр' : brush === 'house' ? '🏠 Разместить дом' : brush === 'bed' ? '🌳 Разместить слот дерева' : brush === 'pet' ? '🐾 Разместить зону' : brush === 'brew_cauldron' ? '🍲 Разместить место котла' : brush === 'brew_jar' ? '🧪 Разместить банку' : brush === 'brew_card' ? '🃏 Разместить карточку' : brush === 'bar_shaker' ? '🍸 Разместить шейкер' : brush === 'bar_book' ? '📖 Разместить книгу' : brush === 'bar_card' ? '🃏 Разместить карточку коктейля' : brush === 'remedy_device' ? '🔧 Разместить прибор' : '📖 Разместить книгу'} ({multiDraft.size})
         </button>
       )}
 
@@ -1172,6 +1290,34 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
               </div>
             ))}
             {(field.brewery_zones ?? []).length === 0 && (
+              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Зон пока нет — разместите кистями выше.</div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Зоны бара */}
+      {field?.field_kind === 'forest_bar' && (
+        <>
+          <h3>🍸 Зоны бара</h3>
+          <div className="fm-grid" style={{ marginBottom: 14 }}>
+            {(field.bar_zones ?? []).map((z: BarZone) => (
+              <div key={z.id} className="fm-card">
+                <strong>{BAR_ZONE_LABEL[z.zone_kind] || z.zone_kind}</strong>
+                {z.cocktail_recipe_id != null && (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    Коктейль: {allCocktailRecipes.find((r) => r.id === z.cocktail_recipe_id)?.name ?? `#${z.cocktail_recipe_id}`}
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {z.col2 - z.col1 + 1}×{z.row2 - z.row1 + 1} · [{z.col1},{z.row1}]
+                </div>
+                <button className="fm-btn fm-btn-sm fm-btn-danger" style={{ marginTop: 8, width: '100%' }} disabled={busy} onClick={() => deleteBarZone(z.id)}>
+                  Удалить
+                </button>
+              </div>
+            ))}
+            {(field.bar_zones ?? []).length === 0 && (
               <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Зон пока нет — разместите кистями выше.</div>
             )}
           </div>
@@ -1432,6 +1578,31 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                 {p.emoji} {p.name}
               </label>
             ))}
+          </div>
+        </>
+      ) : field?.field_kind === 'forest_bar' ? (
+        <>
+          <h3>🍸 Коктейли локации</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Отметьте коктейли, доступные для смешивания в этом баре. Карточки коктейлей размещаются только из этого списка.
+          </p>
+          <div className="fm-grid">
+            {allCocktailRecipes.map((r) => (
+              <label key={r.id} className="fm-card" style={{ cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={allowedCocktailRecipeIds.has(r.id)}
+                  disabled={busy}
+                  onChange={() => toggleCocktailRecipe(r.id)}
+                  style={{ marginRight: 8 }}
+                />
+                {r.image_url && <img src={mediaUrl(r.image_url)} alt="" style={{ width: 22, height: 22, objectFit: 'cover', borderRadius: 4, verticalAlign: 'middle', marginRight: 4 }} />}
+                {r.name}
+              </label>
+            ))}
+            {allCocktailRecipes.length === 0 && (
+              <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Создайте рецепты в разделе «Коктейли».</div>
+            )}
           </div>
         </>
       ) : field?.field_kind === 'brewery' ? (

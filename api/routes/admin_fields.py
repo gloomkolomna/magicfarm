@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import require_role
 from models import (
-    BREWERY_MAX_INGREDIENT_CELLS, BREWERY_ZONE_KINDS, INFIRMARY_ZONE_KINDS, Animal, BreweryZone,
-    ClinicPartCell, Field, FieldAnimal, FieldCell, FieldPet, FieldPlant, FieldPotionRecipe,
+    BAR_ZONE_KINDS, BREWERY_MAX_INGREDIENT_CELLS, BREWERY_ZONE_KINDS, INFIRMARY_ZONE_KINDS,
+    Animal, BarZone, BreweryZone,
+    ClinicPartCell, CocktailRecipe, Field, FieldAnimal, FieldCell, FieldCocktailRecipe, FieldPet,
+    FieldPlant, FieldPotionRecipe,
     GATHER_WINDOW_KINDS, GatherCell, GatherCellIngredient, Ingredient, InfirmaryZone, KASSA_KIND,
     Pet, PetZone, Plant, PlantBed, PotionRecipe, ProductionTemplate, REMEDY_DEVICE_LIMIT,
     Remedy, RemedyDeviceCell, RemedyDeviceRemedy, Tent, TradeCell,
@@ -86,6 +88,10 @@ def _trim_out_of_bounds(f: Field, db: Session) -> None:
                     _reset_cell_to_empty(f.id, c, r, db)
             db.delete(pz)
     for z in list(f.brewery_zones):
+        if z.col2 >= cols or z.row2 >= rows:
+            remove_upload(z.image_url)
+            db.delete(z)
+    for z in list(f.bar_zones):
         if z.col2 >= cols or z.row2 >= rows:
             remove_upload(z.image_url)
             db.delete(z)
@@ -226,6 +232,19 @@ class InfirmaryZoneOut(BaseModel):
     row2: int
 
 
+class BarZoneOut(BaseModel):
+    id: int
+    field_id: int
+    zone_kind: str
+    col1: int
+    row1: int
+    col2: int
+    row2: int
+    image_url: str | None
+    cocktail_recipe_id: int | None
+    cocktail_recipe_name: str | None = None
+
+
 class GatherCellOut(BaseModel):
     id: int
     field_id: int
@@ -283,6 +302,7 @@ class FieldDetailOut(FieldOut):
     animal_ids: list[int] = []
     pet_ids: list[int] = []
     brewery_zones: list[BreweryZoneOut] = []
+    bar_zones: list[BarZoneOut] = []
     gather_cells: list[GatherCellOut] = []
     trade_cells: list[TradeCellOut] = []
     part_cells: list[ClinicPartCellOut] = []
@@ -290,6 +310,8 @@ class FieldDetailOut(FieldOut):
     device_cells: list[RemedyDeviceCellOut] = []
     potion_recipes: list = []
     potion_recipe_ids: list[int] = []
+    cocktail_recipes: list = []
+    cocktail_recipe_ids: list[int] = []
 
 
 def _field_to_out(f: Field) -> FieldOut:
@@ -797,6 +819,13 @@ def _detail(f: Field, db: Session) -> FieldDetailOut:
                            image_url=z.image_url, recipe_id=z.recipe_id)
             for z in f.brewery_zones
         ],
+        bar_zones=[
+            BarZoneOut(id=z.id, field_id=z.field_id, zone_kind=z.zone_kind,
+                       col1=z.col1, row1=z.row1, col2=z.col2, row2=z.row2,
+                       image_url=z.image_url, cocktail_recipe_id=z.cocktail_recipe_id,
+                       cocktail_recipe_name=z.recipe.name if z.recipe else None)
+            for z in f.bar_zones
+        ],
         gather_cells=[_gather_cell_out(gc) for gc in f.gather_cells] if f.field_kind == "meadow" else [],
         trade_cells=[_trade_cell_out(tc) for tc in f.trade_cells] if f.field_kind == "shop" else [],
         part_cells=[_part_cell_out(pc) for pc in f.part_cells] if f.field_kind == "infirmary" else [],
@@ -804,6 +833,11 @@ def _detail(f: Field, db: Session) -> FieldDetailOut:
         device_cells=[_device_cell_out(dc) for dc in db.query(RemedyDeviceCell).filter(RemedyDeviceCell.field_id == f.id).all()] if f.field_kind == "remedy_lab" else [],
         potion_recipes=[_recipe_out(fpr.recipe) for fpr in f.potion_recipes],
         potion_recipe_ids=[fpr.recipe_id for fpr in f.potion_recipes],
+        cocktail_recipes=[
+            {"id": fcr.recipe.id, "code": fcr.recipe.code, "name": fcr.recipe.name, "image_url": fcr.recipe.image_url}
+            for fcr in f.cocktail_recipes
+        ],
+        cocktail_recipe_ids=[fcr.cocktail_recipe_id for fcr in f.cocktail_recipes],
     )
 
 
@@ -1216,6 +1250,146 @@ def set_field_potion_recipes(
     db.commit()
     db.refresh(f)
     return [fpr.recipe_id for fpr in f.potion_recipes]
+
+
+# ── Зоны лесного бара ──
+
+def _check_bar_field(f: Field) -> None:
+    if f.field_kind != "forest_bar":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Зоны бара размещаются только на локациях типа «Лесной бар»",
+        )
+
+
+def _check_bar_rect(f: Field, c1: int, r1: int, c2: int, r2: int) -> None:
+    if c1 < 0 or r1 < 0 or c2 >= f.cols or r2 >= f.rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Прямоугольник выходит за пределы поля")
+
+    for z in f.bar_zones:
+        if not (c2 < z.col1 or c1 > z.col2 or r2 < z.row1 or r1 > z.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пересекается с другой зоной бара")
+
+    for t in f.tents:
+        if not (c2 < t.col1 or c1 > t.col2 or r2 < t.row1 or r1 > t.row2):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Пересекается с шатром «{t.name}»")
+
+
+def _bar_zone_out(z: BarZone) -> BarZoneOut:
+    return BarZoneOut(
+        id=z.id, field_id=z.field_id, zone_kind=z.zone_kind,
+        col1=z.col1, row1=z.row1, col2=z.col2, row2=z.row2,
+        image_url=z.image_url, cocktail_recipe_id=z.cocktail_recipe_id,
+        cocktail_recipe_name=z.recipe.name if z.recipe else None,
+    )
+
+
+@router.post("/{field_id}/bar-zones", response_model=BarZoneOut, status_code=status.HTTP_201_CREATED)
+def create_bar_zone(
+    field_id: int,
+    zone_kind: str = Form(...),
+    col1: int = Form(...),
+    row1: int = Form(...),
+    col2: int = Form(...),
+    row2: int = Form(...),
+    image: UploadFile | None = File(default=None),
+    cocktail_recipe_id: int | None = Form(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    _ensure_grid(f, db)
+    _check_bar_field(f)
+    if zone_kind not in BAR_ZONE_KINDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Тип зоны должен быть одним из: {', '.join(BAR_ZONE_KINDS)}",
+        )
+    c1, r1, c2, r2 = _normalize_rect(col1, row1, col2, row2)
+
+    if zone_kind == "cocktail_card":
+        if cocktail_recipe_id is not None:
+            linked = {fcr.cocktail_recipe_id for fcr in f.cocktail_recipes}
+            if cocktail_recipe_id not in linked:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Коктейль не привязан к этой локации")
+    elif cocktail_recipe_id is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="cocktail_recipe_id задаётся только для карточки коктейля")
+
+    _check_bar_rect(f, c1, r1, c2, r2)
+
+    image_url = save_upload(image, f"bar_{f.id}", max_size=512) if image else None
+    z = BarZone(field_id=f.id, zone_kind=zone_kind, col1=c1, row1=r1, col2=c2, row2=r2,
+                image_url=image_url, cocktail_recipe_id=cocktail_recipe_id if zone_kind == "cocktail_card" else None)
+    db.add(z)
+    db.commit()
+    db.refresh(z)
+    return _bar_zone_out(z)
+
+
+@router.put("/{field_id}/bar-zones/{zone_id}/image", response_model=BarZoneOut)
+def upload_bar_zone_image(
+    field_id: int,
+    zone_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    z = db.query(BarZone).filter(BarZone.id == zone_id, BarZone.field_id == f.id).first()
+    if z is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Зона не найдена")
+    new_url = save_upload(image, f"bar_{f.id}_{z.id}", max_size=512)
+    remove_upload(z.image_url)
+    z.image_url = new_url
+    db.commit()
+    db.refresh(z)
+    return _bar_zone_out(z)
+
+
+@router.delete("/{field_id}/bar-zones/{zone_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bar_zone(
+    field_id: int,
+    zone_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    z = db.query(BarZone).filter(BarZone.id == zone_id, BarZone.field_id == f.id).first()
+    if z is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Зона не найдена")
+    remove_upload(z.image_url)
+    db.delete(z)
+    db.commit()
+    return None
+
+
+class FieldCocktailRecipesRequest(BaseModel):
+    recipe_ids: list[int]
+
+
+@router.put("/{field_id}/cocktail-recipes", response_model=list[int])
+def set_field_cocktail_recipes(
+    field_id: int,
+    req: FieldCocktailRecipesRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    f = _get_field_or_404(field_id, db)
+    valid_ids = {r.id for r in db.query(CocktailRecipe).filter(CocktailRecipe.id.in_(req.recipe_ids)).all()}
+    removed = {fcr.cocktail_recipe_id for fcr in f.cocktail_recipes} - valid_ids
+    if removed:
+        for z in db.query(BarZone).filter(
+            BarZone.field_id == f.id, BarZone.zone_kind == "cocktail_card",
+            BarZone.cocktail_recipe_id.in_(removed),
+        ).all():
+            z.cocktail_recipe_id = None
+    db.query(FieldCocktailRecipe).filter(FieldCocktailRecipe.field_id == f.id).delete()
+    for rid in req.recipe_ids:
+        if rid in valid_ids:
+            db.add(FieldCocktailRecipe(field_id=f.id, cocktail_recipe_id=rid))
+    db.commit()
+    db.refresh(f)
+    return [fcr.cocktail_recipe_id for fcr in f.cocktail_recipes]
 
 
 # ── Клетки добычи (лесная поляна) ──

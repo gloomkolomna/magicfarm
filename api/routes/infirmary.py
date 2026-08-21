@@ -294,7 +294,7 @@ def get_infirmary(
                 field_kind="infirmary", map_url=sc.map_url,
             ))
     for f in db.query(Field).order_by(Field.id.asc()).all():
-        if f.field_kind in ("meadow", "shop", "remedy_lab"):
+        if f.field_kind in ("meadow", "shop", "remedy_lab", "forest_bar"):
             locations.append(InfirmaryLocationOut(
                 field_id=f.id, name=f.name, field_kind=f.field_kind, map_url=f.map_url,
             ))

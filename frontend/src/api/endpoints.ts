@@ -633,6 +633,72 @@ export interface BreweryZoneView extends BreweryZone {
   recipe_card_image?: string | null;
 }
 
+export interface CocktailItem {
+  kind: 'product' | 'plant' | 'ingredient' | 'remedy';
+  item_id: number;
+  name: string | null;
+  emoji: string | null;
+  image_url: string | null;
+  qty: number;
+  have: number;
+  enough: boolean;
+}
+
+export interface CocktailRecipe {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  card_image_url: string | null;
+  patient_id: number | null;
+  patient_name: string | null;
+  reward_coins: number;
+  unlocked: boolean;
+  items: CocktailItem[];
+}
+
+export interface Shaker {
+  id: number;
+  cocktail_recipe_id: number | null;
+  recipe_name: string | null;
+  status: string;
+  items: CocktailItem[];
+}
+
+export interface BarZone {
+  id: number;
+  field_id: number;
+  zone_kind: 'shaker' | 'book' | 'cocktail_card';
+  col1: number;
+  row1: number;
+  col2: number;
+  row2: number;
+  image_url: string | null;
+  cocktail_recipe_id: number | null;
+  cocktail_recipe_name?: string | null;
+  recipe_image?: string | null;
+  recipe_card_image?: string | null;
+}
+
+export interface CocktailItemIn {
+  kind: string;
+  item_id: number;
+  qty: number;
+}
+
+export interface CocktailRecipeAdmin {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  card_image_url: string | null;
+  patient_id: number | null;
+  patient_name: string | null;
+  items: { kind: string; item_id: number; name: string | null; emoji: string | null; image_url: string | null; qty: number }[];
+}
+
 export interface GatherCell {
   id: number;
   field_id: number;
@@ -1080,6 +1146,9 @@ export interface FieldDetail extends FieldInfo {
   device_cells?: AdminDeviceCell[];
   potion_recipes?: PotionRecipe[];
   active_cauldron?: Cauldron | null;
+  bar_zones?: BarZone[];
+  cocktail_recipes?: CocktailRecipe[];
+  active_shaker?: Shaker | null;
 }
 
 export interface NormImage {
@@ -1443,6 +1512,36 @@ export const api = {
   adminSetFieldPotionRecipes: (fieldId: number, recipeIds: number[]) =>
     client.put<number[]>(`/admin/fields/${fieldId}/potion-recipes`, { recipe_ids: recipeIds }).then((r) => r.data),
 
+  adminCreateBarZone: (
+    fieldId: number,
+    zoneKind: 'shaker' | 'book' | 'cocktail_card',
+    rect: { col1: number; row1: number; col2: number; row2: number },
+    opts?: { image?: File; cocktailRecipeId?: number },
+  ) => {
+    const form = new FormData();
+    form.append('zone_kind', zoneKind);
+    form.append('col1', String(rect.col1));
+    form.append('row1', String(rect.row1));
+    form.append('col2', String(rect.col2));
+    form.append('row2', String(rect.row2));
+    if (opts?.image) form.append('image', opts.image);
+    if (opts?.cocktailRecipeId != null) form.append('cocktail_recipe_id', String(opts.cocktailRecipeId));
+    return client
+      .post<BarZone>(`/admin/fields/${fieldId}/bar-zones`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => r.data);
+  },
+  adminUploadBarZoneImage: (fieldId: number, zoneId: number, image: File) => {
+    const form = new FormData();
+    form.append('image', image);
+    return client
+      .put<BarZone>(`/admin/fields/${fieldId}/bar-zones/${zoneId}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => r.data);
+  },
+  adminDeleteBarZone: (fieldId: number, zoneId: number) =>
+    client.delete(`/admin/fields/${fieldId}/bar-zones/${zoneId}`).then((r) => r.data),
+  adminSetFieldCocktailRecipes: (fieldId: number, recipeIds: number[]) =>
+    client.put<number[]>(`/admin/fields/${fieldId}/cocktail-recipes`, { recipe_ids: recipeIds }).then((r) => r.data),
+
   adminCreatePetZone: (fieldId: number, col1: number, row1: number, col2: number, row2: number) => {
     const form = new FormData();
     form.append('col1', String(col1));
@@ -1668,6 +1767,26 @@ export const api = {
   adminDeletePotionRecipe: (id: number) =>
     client.delete(`/admin/potion-recipes/${id}`).then((r) => r.data),
 
+  // ── Админ: рецепты коктейлей ──
+  adminCocktailRecipes: () =>
+    client.get<CocktailRecipeAdmin[]>('/admin/cocktail-recipes').then((r) => r.data),
+  adminCreateCocktailRecipe: (data: { name: string; description?: string | null; patient_id?: number | null; items: CocktailItemIn[] }) =>
+    client.post<CocktailRecipeAdmin>('/admin/cocktail-recipes', data).then((r) => r.data),
+  adminUpdateCocktailRecipe: (id: number, data: { name?: string; description?: string | null; patient_id?: number | null; items?: CocktailItemIn[] }) =>
+    client.put<CocktailRecipeAdmin>(`/admin/cocktail-recipes/${id}`, data).then((r) => r.data),
+  adminDeleteCocktailRecipe: (id: number) =>
+    client.delete(`/admin/cocktail-recipes/${id}`).then((r) => r.data),
+  adminUploadCocktailImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<CocktailRecipeAdmin>(`/admin/cocktail-recipes/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadCocktailCardImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return client.put<CocktailRecipeAdmin>(`/admin/cocktail-recipes/${id}/card-image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+
   // ── Зелья: игрок ──
   potionRecipes: (level?: string) =>
     client.get<PotionRecipe[]>('/potions/recipes', { params: { level } }).then((r) => r.data),
@@ -1691,6 +1810,16 @@ export const api = {
     client.get<BonusCatalogItem[]>('/potions/bonuses').then((r) => r.data),
   activatePotion: (id: number) =>
     client.post<UserPotion>(`/potions/${id}/activate`).then((r) => r.data),
+
+  // ── Коктейли: игрок ──
+  cocktailRecipes: () =>
+    client.get<CocktailRecipe[]>('/cocktails/recipes').then((r) => r.data),
+  shaker: () =>
+    client.get<Shaker | null>('/cocktails/shaker').then((r) => r.data),
+  installShaker: (recipeId: number) =>
+    client.post<Shaker>('/cocktails/shaker', { recipe_id: recipeId }).then((r) => r.data),
+  mixCocktail: () =>
+    client.post<{ id: number; recipe_name: string | null; coins_earned: number; coins_balance: number }>('/cocktails/shaker/mix').then((r) => r.data),
 
   // ── Маршруты / уровни ──
   levels: () =>

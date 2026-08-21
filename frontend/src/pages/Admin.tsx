@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, BODY_PARTS, BODY_PART_LABELS, LOCATION_TITLES, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type AllowedPlayer, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport } from '../api/endpoints';
+import { api, BODY_PARTS, BODY_PART_LABELS, LOCATION_TITLES, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type AllowedPlayer, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CocktailItemIn, type CocktailRecipeAdmin, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import Toast from '../components/Toast';
@@ -66,7 +66,7 @@ function matchesAny(item: unknown, q: string): boolean {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs' | 'ingredients' | 'infirmary'>('players');
+  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'cocktail-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs' | 'ingredients' | 'infirmary'>('players');
   const [players, setPlayers] = useState<Player[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
@@ -222,6 +222,14 @@ export default function AdminPage() {
   const [potionForm, setPotionForm] = useState<PotionRecipeCreate>({ name: '', level: 'green', ingredient_slots: [], bonus_code: null, reward_coins: 100, description: '' });
   const [potionEditingId, setPotionEditingId] = useState<number | null>(null);
   const [potionSlotInput, setPotionSlotInput] = useState('');
+
+  // ── Коктейли ──
+  const [cocktailRecipes, setCocktailRecipes] = useState<CocktailRecipeAdmin[]>([]);
+  const [cocktailForm, setCocktailForm] = useState<{ name: string; description: string; patient_id: string; items: CocktailItemIn[] }>({ name: '', description: '', patient_id: '', items: [] });
+  const [cocktailEditingId, setCocktailEditingId] = useState<number | null>(null);
+  const [cocktailPickKind, setCocktailPickKind] = useState<'product' | 'plant' | 'ingredient' | 'remedy'>('product');
+  const [cocktailPickId, setCocktailPickId] = useState<string>('');
+  const [cocktailPickQty, setCocktailPickQty] = useState('1');
 
   // ── Ингредиенты (аптека) ──
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -1036,6 +1044,91 @@ export default function AdminPage() {
     finally { setBusy(false); }
   }
 
+  // ── Коктейли ──
+  async function loadCocktailRecipes() {
+    try {
+      const [cr, pr, pl, ing, rem, pat] = await Promise.all([
+        api.adminCocktailRecipes(),
+        api.adminProducts().catch(() => [] as Product[]),
+        api.adminPlants().catch(() => [] as Plant[]),
+        api.adminIngredients().catch(() => [] as Ingredient[]),
+        api.adminRemedies().catch(() => [] as Remedy[]),
+        api.adminPatients().catch(() => [] as Patient[]),
+      ]);
+      setCocktailRecipes(cr);
+      setProducts(pr);
+      setPlants(pl);
+      setIngredients(ing);
+      setRemedies(rem);
+      setPatients(pat);
+    } catch { /* ignore */ }
+  }
+  async function saveCocktailRecipe() {
+    if (!cocktailForm.name.trim()) { setMsg('✗ Введите название'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const data = {
+        name: cocktailForm.name.trim(),
+        description: cocktailForm.description || null,
+        patient_id: cocktailForm.patient_id ? Number(cocktailForm.patient_id) : null,
+        items: cocktailForm.items,
+      };
+      if (cocktailEditingId) await api.adminUpdateCocktailRecipe(cocktailEditingId, data);
+      else await api.adminCreateCocktailRecipe(data);
+      await loadCocktailRecipes();
+      setCocktailForm({ name: '', description: '', patient_id: '', items: [] });
+      setCocktailEditingId(null);
+      setMsg('✓ Сохранено');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  function addCocktailItem() {
+    const itemId = Number(cocktailPickId);
+    if (!itemId) { setMsg('✗ Выберите предмет'); return; }
+    const qty = Number(cocktailPickQty);
+    if (!qty || qty < 1) { setMsg('✗ Укажите количество'); return; }
+    if (cocktailForm.items.some((i) => i.kind === cocktailPickKind && i.item_id === itemId)) {
+      setMsg('✗ Этот предмет уже добавлен');
+      return;
+    }
+    setCocktailForm({ ...cocktailForm, items: [...cocktailForm.items, { kind: cocktailPickKind, item_id: itemId, qty }] });
+    setCocktailPickId('');
+    setCocktailPickQty('1');
+  }
+  async function uploadCocktailImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminUploadCocktailImage(id, file);
+      await loadCocktailRecipes();
+      setMsg('✓ Картинка коктейля загружена');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function uploadCocktailCardImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminUploadCocktailCardImage(id, file);
+      await loadCocktailRecipes();
+      setMsg('✓ Карточка коктейля загружена');
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+  async function deleteCocktailRecipe(id: number) {
+    if (!(await confirmDialog('Удалить рецепт коктейля?'))) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeleteCocktailRecipe(id); await loadCocktailRecipes(); setMsg('✓ Удалено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  function cocktailItemName(kind: string, id: number): string {
+    if (kind === 'product') return products.find((p) => p.id === id)?.name ?? `#${id}`;
+    if (kind === 'plant') return plants.find((p) => p.id === id)?.name ?? `#${id}`;
+    if (kind === 'ingredient') return ingredients.find((i) => i.id === id)?.name ?? `#${id}`;
+    if (kind === 'remedy') return remedies.find((r) => r.id === id)?.name ?? `#${id}`;
+    return `#${id}`;
+  }
+
   // ── Ингредиенты (аптека) ──
   async function loadIngredients() {
     try { setIngredients(await api.adminIngredients()); }
@@ -1636,6 +1729,108 @@ export default function AdminPage() {
     );
   }
 
+  function renderCocktailRecipes() {
+    const pickOptions = cocktailPickKind === 'product' ? products
+      : cocktailPickKind === 'plant' ? plants
+      : cocktailPickKind === 'ingredient' ? ingredients
+      : remedies;
+    return (
+      <div>
+        <h2>🍸 Рецепты коктейлей</h2>
+        <div className="fm-card" style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <input className="fm-input" placeholder="Название" value={cocktailForm.name} onChange={(e) => setCocktailForm({ ...cocktailForm, name: e.target.value })} />
+            <select className="fm-input" value={cocktailForm.patient_id} onChange={(e) => setCocktailForm({ ...cocktailForm, patient_id: e.target.value })}>
+              <option value="">Открыт сразу (без животного)</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>🔓 Животное: {p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Ингредиенты коктейля (точные предметы)</label>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+              <select className="fm-input" value={cocktailPickKind} onChange={(e) => { setCocktailPickKind(e.target.value as any); setCocktailPickId(''); }}>
+                <option value="product">📦 Товар</option>
+                <option value="plant">🌱 Растение</option>
+                <option value="ingredient">🌾 Ингредиент</option>
+                <option value="remedy">⚗️ Лекарство</option>
+              </select>
+              <select className="fm-input" value={cocktailPickId} onChange={(e) => setCocktailPickId(e.target.value)}>
+                <option value="">— предмет —</option>
+                {pickOptions.map((o: any) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+              <input className="fm-input" type="number" min={1} value={cocktailPickQty} onChange={(e) => setCocktailPickQty(e.target.value)} style={{ width: 70 }} />
+              <button type="button" className="fm-btn fm-btn-sm" onClick={addCocktailItem}>+</button>
+            </div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {cocktailForm.items.map((it, i) => (
+                <span key={i} className="fm-card" style={{ padding: '2px 8px', fontSize: 13, cursor: 'pointer' }} onClick={() => setCocktailForm({ ...cocktailForm, items: cocktailForm.items.filter((_, j) => j !== i) })}>
+                  {cocktailItemName(it.kind, it.item_id)} ×{it.qty} ✕
+                </span>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Описание коктейля</label>
+            <textarea
+              className="fm-input"
+              value={cocktailForm.description}
+              onChange={(e) => setCocktailForm({ ...cocktailForm, description: e.target.value })}
+              placeholder="Например: освежающий лесной коктейль"
+              rows={2}
+              style={{ width: '100%' }}
+            />
+          </div>
+          {cocktailEditingId && (
+            <>
+              <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer', marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                🖼 Картинка коктейля
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCocktailImage(cocktailEditingId, f); }}
+                />
+              </label>
+              <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer', marginBottom: 8, marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                🃏 Карточка рецепта
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCocktailCardImage(cocktailEditingId, f); }}
+                />
+              </label>
+            </>
+          )}
+          <button type="button" className="fm-btn" disabled={busy} onClick={saveCocktailRecipe}>
+            {cocktailEditingId ? '✎ Сохранить' : '➕ Создать'}
+          </button>
+          {cocktailEditingId && <button type="button" className="fm-btn" style={{ marginLeft: 6 }} onClick={() => { setCocktailEditingId(null); setCocktailForm({ name: '', description: '', patient_id: '', items: [] }); }}>Отмена</button>}
+        </div>
+        <table className="fm-table" style={{ width: '100%' }}>
+          <thead><tr><th>ID</th><th>Название</th><th>Животное</th><th>Состав</th><th></th></tr></thead>
+          <tbody>
+            {shownCocktailRecipes.map((r) => (
+              <tr key={r.id}>
+                <td>{r.id}</td>
+                <td>
+                  {r.image_url && <img src={mediaUrl(r.image_url)} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, marginRight: 4, verticalAlign: 'middle' }} />}
+                  {r.card_image_url && <img src={mediaUrl(r.card_image_url)} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, marginRight: 4, verticalAlign: 'middle', border: '1px solid var(--border)' }} />}
+                  {r.name}
+                </td>
+                <td>{r.patient_name || '—'}</td>
+                <td style={{ maxWidth: 260 }}>{r.items.map((i) => `${i.name || i.kind} ×${i.qty}`).join(', ')}</td>
+                <td>
+                  <button type="button" className="fm-btn fm-btn-sm" onClick={() => { setCocktailEditingId(r.id); setCocktailForm({ name: r.name, description: r.description || '', patient_id: r.patient_id != null ? String(r.patient_id) : '', items: r.items.map((i) => ({ kind: i.kind, item_id: i.item_id, qty: i.qty })) }); }}>✎</button>
+                  <button type="button" className="fm-btn fm-btn-sm" style={{ marginLeft: 4 }} onClick={() => deleteCocktailRecipe(r.id)}>🗑</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {qActive && shownCocktailRecipes.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', marginTop: 8 }}>{NO_MATCH}</div>}
+      </div>
+    );
+  }
+
   // ── Рецепты библиотеки ──
   async function loadRecipes() {
     try {
@@ -1928,6 +2123,7 @@ export default function AdminPage() {
   const shownCustomers = fl(customers);
   const shownLevels = fl(levels);
   const shownPotionRecipes = fl(potionRecipes);
+  const shownCocktailRecipes = fl(cocktailRecipes);
   const shownIngredients = fl(ingredients);
   const shownMedia = fl(gameMedia);
   const shownCards = fl(crystalCards);
@@ -1946,6 +2142,7 @@ export default function AdminPage() {
     customers: { total: customers.length, shown: shownCustomers.length },
     levels: { total: levels.length, shown: shownLevels.length },
     'potion-recipes': { total: potionRecipes.length, shown: shownPotionRecipes.length },
+    'cocktail-recipes': { total: cocktailRecipes.length, shown: shownCocktailRecipes.length },
     ingredients: { total: ingredients.length, shown: shownIngredients.length },
     media: { total: gameMedia.length, shown: shownMedia.length },
     'crystal-cards': { total: crystalCards.length, shown: shownCards.length },
@@ -1971,6 +2168,7 @@ export default function AdminPage() {
         <TabBtn active={tab === 'customers'} onClick={() => { setTab('customers'); loadCustomers(); }}>🧑 Заказчики</TabBtn>
         <TabBtn active={tab === 'levels'} onClick={() => { setTab('levels'); loadLevels(); }}>📊 Уровни</TabBtn>
         <TabBtn active={tab === 'potion-recipes'} onClick={() => { setTab('potion-recipes'); loadPotionRecipes(); }}>🧪 Рецепты зелий</TabBtn>
+        <TabBtn active={tab === 'cocktail-recipes'} onClick={() => { setTab('cocktail-recipes'); loadCocktailRecipes(); }}>🍸 Коктейли</TabBtn>
         <TabBtn active={tab === 'ingredients'} onClick={() => { setTab('ingredients'); loadIngredients(); }}>⚗️ Ингредиенты</TabBtn>
         <TabBtn active={tab === 'infirmary'} onClick={() => { setTab('infirmary'); loadInfirmary(); }}>🌲 Лечебница</TabBtn>
         <TabBtn active={tab === 'media'} onClick={() => setTab('media')}>🎬 Медиа</TabBtn>
@@ -2545,6 +2743,7 @@ export default function AdminPage() {
           {tab === 'customers' && renderCustomers()}
           {tab === 'levels' && renderLevels()}
           {tab === 'potion-recipes' && renderPotionRecipes()}
+          {tab === 'cocktail-recipes' && renderCocktailRecipes()}
           {tab === 'ingredients' && renderIngredients()}
           {tab === 'infirmary' && (editorFieldId !== null ? (
             <FieldEditor fieldId={editorFieldId} onClose={() => setEditorFieldId(null)} />

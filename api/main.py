@@ -28,6 +28,7 @@ from routes.levels import router as levels_router, admin_router as admin_levels_
 from routes.barnyard import router as barnyard_router
 from routes.pets import router as pets_router
 from routes.potions import router as potions_router, admin_router as admin_potions_router
+from routes.cocktails import router as cocktails_router, admin_router as admin_cocktails_router
 from routes.achievements import router as achievements_router, admin_router as admin_achievements_router
 from routes.game_media import router as game_media_admin_router, public_router as game_media_public_router
 from routes.logs import router as logs_router
@@ -84,6 +85,8 @@ app.include_router(barnyard_router)
 app.include_router(pets_router)
 app.include_router(potions_router)
 app.include_router(admin_potions_router)
+app.include_router(cocktails_router)
+app.include_router(admin_cocktails_router)
 app.include_router(achievements_router)
 app.include_router(admin_achievements_router)
 app.include_router(game_media_admin_router)

@@ -368,6 +368,8 @@ class Field(Base):
     trade_cells = relationship("TradeCell", back_populates="field", cascade="all, delete-orphan")
     part_cells = relationship("ClinicPartCell", back_populates="field", cascade="all, delete-orphan")
     infirmary_zones = relationship("InfirmaryZone", back_populates="field", cascade="all, delete-orphan")
+    bar_zones = relationship("BarZone", back_populates="field", cascade="all, delete-orphan")
+    cocktail_recipes = relationship("FieldCocktailRecipe", back_populates="field", cascade="all, delete-orphan")
     clinic_animal = relationship("PatientAnimal", back_populates="scenes")
 
     __table_args__ = (
@@ -417,6 +419,9 @@ class FieldPotionRecipe(Base):
 
 BREWERY_ZONE_KINDS = ("cauldron", "jar", "ingredient", "recipe_card")
 BREWERY_MAX_INGREDIENT_CELLS = 6
+
+BAR_ZONE_KINDS = ("shaker", "book", "cocktail_card")
+COCKTAIL_REWARD_COINS = 300
 
 
 class BreweryZone(Base):
@@ -1234,3 +1239,86 @@ class PetForestTask(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "pet_id", "date", name="uq_petforesttask_user_pet_date"),
     )
+
+
+class CocktailRecipe(Base):
+    __tablename__ = "cocktail_recipes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    image_url = Column(String, nullable=True)
+    card_image_url = Column(String, nullable=True)
+    patient_id = Column(Integer, ForeignKey("patient_animals.id", ondelete="SET NULL"), nullable=True)
+
+    patient = relationship("PatientAnimal")
+    recipe_items = relationship("CocktailRecipeItem", back_populates="cocktail_recipe", cascade="all, delete-orphan")
+
+
+class CocktailRecipeItem(Base):
+    __tablename__ = "cocktail_recipe_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cocktail_recipe_id = Column(Integer, ForeignKey("cocktail_recipes.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=True)
+    plant_id = Column(Integer, ForeignKey("plants.id", ondelete="CASCADE"), nullable=True)
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=True)
+    remedy_id = Column(Integer, ForeignKey("remedies.id", ondelete="CASCADE"), nullable=True)
+    qty = Column(Integer, nullable=False, default=1, server_default="1")
+
+    cocktail_recipe = relationship("CocktailRecipe", back_populates="recipe_items")
+    product = relationship("Product")
+    plant = relationship("Plant")
+    ingredient = relationship("Ingredient")
+    remedy = relationship("Remedy")
+
+    __table_args__ = (
+        CheckConstraint(
+            "(product_id IS NOT NULL AND plant_id IS NULL AND ingredient_id IS NULL AND remedy_id IS NULL) OR "
+            "(product_id IS NULL AND plant_id IS NOT NULL AND ingredient_id IS NULL AND remedy_id IS NULL) OR "
+            "(product_id IS NULL AND plant_id IS NULL AND ingredient_id IS NOT NULL AND remedy_id IS NULL) OR "
+            "(product_id IS NULL AND plant_id IS NULL AND ingredient_id IS NULL AND remedy_id IS NOT NULL)",
+            name="ck_cocktailrecipeitem_single_source",
+        ),
+    )
+
+
+class FieldCocktailRecipe(Base):
+    __tablename__ = "field_cocktail_recipes"
+
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+    cocktail_recipe_id = Column(Integer, ForeignKey("cocktail_recipes.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+
+    field = relationship("Field", back_populates="cocktail_recipes")
+    recipe = relationship("CocktailRecipe")
+
+
+class BarZone(Base):
+    __tablename__ = "bar_zones"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=False)
+    zone_kind = Column(String, nullable=False)
+    col1 = Column(Integer, nullable=False)
+    row1 = Column(Integer, nullable=False)
+    col2 = Column(Integer, nullable=False)
+    row2 = Column(Integer, nullable=False)
+    image_url = Column(String, nullable=True)
+    cocktail_recipe_id = Column(Integer, ForeignKey("cocktail_recipes.id", ondelete="CASCADE"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    field = relationship("Field", back_populates="bar_zones")
+    recipe = relationship("CocktailRecipe")
+
+
+class Shaker(Base):
+    __tablename__ = "shakers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    cocktail_recipe_id = Column(Integer, ForeignKey("cocktail_recipes.id", ondelete="CASCADE"), nullable=True)
+    status = Column(String, nullable=False, default="empty", server_default="empty")
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    recipe = relationship("CocktailRecipe")

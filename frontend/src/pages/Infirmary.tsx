@@ -16,6 +16,7 @@ const LOCATION_META: Record<string, { emoji: string; route: string }> = {
   meadow: { emoji: '🌿', route: '/meadow/' },
   shop: { emoji: '🛒', route: '/shop/' },
   remedy_lab: { emoji: '⚗️', route: '/remedy-lab/' },
+  forest_bar: { emoji: '🍹', route: '/forest-bar/' },
 };
 
 export default function InfirmaryHubPage() {

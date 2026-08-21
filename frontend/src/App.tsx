@@ -39,6 +39,8 @@ const InventoryPage = lazyPage(() => import('./pages/Inventory'));
 const LibraryPage = lazyPage(() => import('./pages/Library'));
 const BreweryHubPage = lazyPage(() => import('./pages/Brewery'));
 const BreweryScenePage = lazyPage(() => import('./pages/Brewery').then((m) => ({ default: m.BreweryScenePage })));
+const ForestBarHubPage = lazyPage(() => import('./pages/ForestBar'));
+const ForestBarScenePage = lazyPage(() => import('./pages/ForestBar').then((m) => ({ default: m.ForestBarScenePage })));
 const BonusesPage = lazyPage(() => import('./pages/Bonuses'));
 const AchievementsPage = lazyPage(() => import('./pages/Achievements'));
 const Onboarding = lazyPage(() => import('./pages/Onboarding'));
@@ -165,6 +167,8 @@ function App() {
           <Route path="/meadow/:id" element={<LocationGate location="infirmary"><MeadowPage /></LocationGate>} />
           <Route path="/brewery" element={<LocationGate location="brewery"><MiniAppShell><BreweryHubPage /></MiniAppShell></LocationGate>} />
           <Route path="/brewery/:id" element={<LocationGate location="brewery"><BreweryScenePage /></LocationGate>} />
+          <Route path="/forest-bar" element={<LocationGate location="infirmary"><MiniAppShell><ForestBarHubPage /></MiniAppShell></LocationGate>} />
+          <Route path="/forest-bar/:id" element={<LocationGate location="infirmary"><ForestBarScenePage /></LocationGate>} />
           <Route path="/potions" element={<Navigate to="/brewery" replace />} />
           <Route path="/collection" element={<LocationGate location="infirmary"><MiniAppShell><CollectionPage /></MiniAppShell></LocationGate>} />
           <Route path="/inventory" element={<MiniAppShell><InventoryPage /></MiniAppShell>} />

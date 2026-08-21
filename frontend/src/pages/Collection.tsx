@@ -9,6 +9,7 @@ export default function CollectionPage() {
   const [collection, setCollection] = useState<Collection | null>(null);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
+  const [zoomed, setZoomed] = useState<{ url: string; name: string } | null>(null);
 
   useEffect(() => {
     api.collection()
@@ -36,7 +37,12 @@ export default function CollectionPage() {
           </h3>
           <div className="fm-grid">
             {lvl.cards.map((c) => (
-              <div key={c.patient_id} className="fm-card fm-rise" style={{ textAlign: 'center' }}>
+              <div
+                key={c.patient_id}
+                className="fm-card fm-rise"
+                style={{ textAlign: 'center', cursor: c.earned && c.card_image_url ? 'zoom-in' : 'default' }}
+                onClick={() => { if (c.earned && c.card_image_url) setZoomed({ url: mediaUrl(c.card_image_url), name: c.patient_name }); }}
+              >
                 {c.earned && c.card_image_url ? (
                   <img src={mediaUrl(c.card_image_url)} alt={c.patient_name} style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8 }} />
                 ) : (
@@ -51,6 +57,16 @@ export default function CollectionPage() {
           </div>
         </div>
       ))}
+
+      {zoomed && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={() => setZoomed(null)}
+        >
+          <img src={zoomed.url} alt={zoomed.name} style={{ maxWidth: '90vw', maxHeight: '80vh', borderRadius: 12, objectFit: 'contain' }} />
+          <div style={{ color: '#fff', marginTop: 10, fontSize: 14 }}>{zoomed.name}</div>
+        </div>
+      )}
     </div>
   );
 }

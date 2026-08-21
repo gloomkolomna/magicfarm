@@ -8,13 +8,19 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_onboarding
-from models import BarnyardSlot, Cauldron, Field, FieldCell, FieldPlant, HouseBuild, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Tent, TentBuild, User, UserPet, MAX_PLOT_QTY, WITCH_HOUSE_KIND
+from models import BarnyardSlot, Cauldron, Field, FieldCell, FieldPlant, HouseBuild, PlantBed, Plot, Production, PRODUCTION_NAMES, ProductionTemplate, Shaker, Tent, TentBuild, User, UserPet, MAX_PLOT_QTY, WITCH_HOUSE_KIND
 from routes.admin_fields import (
     CellOut, FieldOut, PlantOut, TentOut,
     _field_to_out, _get_field_or_404, _plant_to_out,
 )
 from routes.farm import PlotOut, _plot_to_out
 from routes.potions import CauldronOut, _cauldron_detail, _recipe_out, _unlocked_levels
+from routes.cocktails import (
+    ShakerOut,
+    _shaker_out as _cocktail_shaker_out,
+    _recipe_out as _cocktail_recipe_out,
+    _unlocked_patient_ids as _cocktail_unlocked_patient_ids,
+)
 from routes.settings import CRYSTAL_COLORS, crystal_norm, get_production_required
 from services.achievements import check_and_award
 from services.card_draw import calculate_norm, cards_to_json, draw_cards, plant_unit_norm
@@ -103,6 +109,20 @@ class BreweryZonePublic(BaseModel):
     recipe_card_image: str | None = None
 
 
+class BarZonePublic(BaseModel):
+    id: int
+    zone_kind: str
+    col1: int
+    row1: int
+    col2: int
+    row2: int
+    image_url: str | None
+    cocktail_recipe_id: int | None
+    cocktail_recipe_name: str | None = None
+    recipe_image: str | None = None
+    recipe_card_image: str | None = None
+
+
 class FieldDetailPublic(FieldOut):
     cells: list[CellDetailOut]
     plants: list[PlantOut]
@@ -112,6 +132,9 @@ class FieldDetailPublic(FieldOut):
     brewery_zones: list[BreweryZonePublic] = []
     potion_recipes: list = []
     active_cauldron: CauldronOut | None = None
+    bar_zones: list[BarZonePublic] = []
+    cocktail_recipes: list = []
+    active_shaker: ShakerOut | None = None
 
 
 @router.get("", response_model=list[FieldListItem])
@@ -369,6 +392,31 @@ def get_field(
         if c is not None:
             active_cauldron = _cauldron_detail(c, db)
 
+    bar_zones = []
+    cocktail_recipes = []
+    active_shaker = None
+    if f.field_kind == "forest_bar":
+        for z in f.bar_zones:
+            r = z.recipe
+            bar_zones.append(BarZonePublic(
+                id=z.id, zone_kind=z.zone_kind, col1=z.col1, row1=z.row1,
+                col2=z.col2, row2=z.row2, image_url=z.image_url,
+                cocktail_recipe_id=z.cocktail_recipe_id,
+                cocktail_recipe_name=r.name if r else None,
+                recipe_image=r.image_url if r else None,
+                recipe_card_image=r.card_image_url if r else None,
+            ))
+        unlocked_patients = _cocktail_unlocked_patient_ids(user.vk_id, db)
+        cocktail_recipes = [
+            _cocktail_recipe_out(fcr.recipe, user.vk_id, db, fcr.recipe.patient_id is None or fcr.recipe.patient_id in unlocked_patients)
+            for fcr in f.cocktail_recipes
+        ]
+        s = db.query(Shaker).filter(
+            Shaker.user_id == user.vk_id, Shaker.status != "done"
+        ).first()
+        if s is not None:
+            active_shaker = _cocktail_shaker_out(s, db)
+
     return FieldDetailPublic(
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
@@ -379,6 +427,8 @@ def get_field(
         pet_zones=pet_zones,
         brewery_zones=brewery_zones, potion_recipes=potion_recipes,
         active_cauldron=active_cauldron,
+        bar_zones=bar_zones, cocktail_recipes=cocktail_recipes,
+        active_shaker=active_shaker,
     )
 
 
