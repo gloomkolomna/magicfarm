@@ -21,8 +21,8 @@ const BAR_BG = 'linear-gradient(180deg, rgba(10,16,8,0.92) 0%, rgba(10,16,8,0.78
 
 const BASE_TABS: Tab[] = [
   { path: '/', label: '🗺️ Поля' },
-  { path: '/infirmary', label: '🌲 Лечебница', location: 'infirmary' },
   { path: '/library', label: '📖 Библиотека' },
+  { path: '/infirmary', label: '🌲 Лечебница', location: 'infirmary' },  
   { path: '/brewery', label: '🧪 Зельеварение', location: 'brewery' },
   { path: '/bonuses', label: '⚡ Бонусы', location: 'brewery', hideWhenLocked: true },
   { path: '/inventory', label: '📦 Склад' },

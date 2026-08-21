@@ -147,8 +147,9 @@ export function ForestBarScenePage() {
   const bookZone = barZones.find((z) => z.zone_kind === 'book') ?? null;
   const cardZones = barZones.filter((z) => z.zone_kind === 'cocktail_card');
   const recipes = field?.cocktail_recipes ?? [];
-  const activeRecipeId = activeShaker?.cocktail_recipe_id ?? null;
-  const activeRecipe = activeRecipeId != null ? recipes.find((r) => r.id === activeRecipeId) ?? null : null;
+  const activeRecipe = activeShaker?.cocktail_recipe_id != null
+    ? recipes.find((r) => r.id === activeShaker.cocktail_recipe_id) ?? null
+    : null;
 
   function openBook(recipeId?: number) {
     const idx = recipeId == null ? 0 : Math.max(0, recipes.findIndex((r) => r.id === recipeId));
@@ -236,10 +237,9 @@ export function ForestBarScenePage() {
             )}
 
             {cardZones.map((z) => {
-              const brewing = activeRecipeId != null && z.cocktail_recipe_id === activeRecipeId;
-              const cocktailImg = (brewing && (activeRecipe?.card_image_url || activeRecipe?.image_url)) || z.recipe_card_image || z.recipe_image || null;
+              const cocktailImg = (activeRecipe?.image_url || activeRecipe?.card_image_url) || z.recipe_image || z.recipe_card_image || null;
               return (
-                <ZoneRect key={z.id} cols={field.cols} rows={field.rows} zone={z} onClick={() => openBook(z.cocktail_recipe_id ?? undefined)}>
+                <ZoneRect key={z.id} cols={field.cols} rows={field.rows} zone={z}>
                   {cocktailImg ? (
                     <img src={mediaUrl(cocktailImg)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
                   ) : (
@@ -382,7 +382,7 @@ export function ForestBarScenePage() {
   );
 }
 
-function ZoneRect({ cols, rows, zone, children, onClick }: { cols: number; rows: number; zone: BarZone; children: React.ReactNode; onClick: () => void }) {
+function ZoneRect({ cols, rows, zone, children, onClick }: { cols: number; rows: number; zone: BarZone; children: React.ReactNode; onClick?: () => void }) {
   const spanCols = zone.col2 - zone.col1 + 1;
   const spanRows = zone.row2 - zone.row1 + 1;
   return (
@@ -402,7 +402,7 @@ function ZoneRect({ cols, rows, zone, children, onClick }: { cols: number; rows:
           alignItems: 'center', justifyContent: 'center',
           padding: 2, overflow: 'hidden', borderRadius: 6,
           border: '2px dashed rgba(220,170,90,0.6)',
-          cursor: 'pointer', touchAction: 'manipulation', pointerEvents: 'auto',
+          cursor: onClick ? 'pointer' : 'default', touchAction: 'manipulation', pointerEvents: 'auto',
         }}
       >
         {children}
