@@ -1925,7 +1925,7 @@ const modalOverlay: React.CSSProperties = {
 
 function BrushBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button className={active ? 'fm-btn' : 'fm-btn fm-btn-outline'} onClick={onClick} style={{ flex: 1, minWidth: 110 }}>
+    <button className={active ? 'fm-btn fm-btn-sm' : 'fm-btn fm-btn-sm fm-btn-outline'} onClick={onClick} style={{ flex: 1, minWidth: 110 }}>
       {children}
     </button>
   );

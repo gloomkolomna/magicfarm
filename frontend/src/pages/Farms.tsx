@@ -72,15 +72,16 @@ export default function FarmsPage() {
 
       {!farm ? (
         <>
-          <div className="fm-card" style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="fm-card" style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <input
               className="fm-input"
               placeholder="Имя или ID игрока…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
+              style={{ flex: '1 1 180px', minWidth: 0 }}
             />
-            <button className="fm-btn" disabled={busy} onClick={search}>🔍</button>
+            <button className="fm-btn fm-btn-sm" style={{ flexShrink: 0 }} disabled={busy} onClick={search}>🔍 Найти</button>
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
             Только просмотр: фермы других игроков можно смотреть и писать, но нельзя трогать.
@@ -108,8 +109,8 @@ export default function FarmsPage() {
       ) : (
         <div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-            <button className="fm-btn fm-btn-outline" disabled={busy} onClick={() => setFarm(null)}>← Назад</button>
-            <button className="fm-btn" disabled={busy} onClick={() => writeTo(farm.vk_id)}>💬 Написать</button>
+            <button className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy} onClick={() => setFarm(null)}>← Назад</button>
+            <button className="fm-btn fm-btn-sm" disabled={busy} onClick={() => writeTo(farm.vk_id)}>💬 Написать</button>
           </div>
           <div className="fm-card" style={{ marginBottom: 10 }}>
             <strong style={{ fontSize: 17 }}>👤 {farm.display_name}</strong>

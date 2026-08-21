@@ -1414,12 +1414,12 @@ export default function FieldPage() {
                           <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
                           <label style={{ display: 'block', fontSize: 13, marginBottom: 6 }}>Заборы в работе</label>
                           {barnyardStorage.pending.map((w) => (
-                            <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 6 }}>
-                              <div style={{ flex: 1, fontSize: 13 }}>
+                            <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 6, flexWrap: 'wrap' }}>
+                              <div style={{ flex: '1 1 160px', minWidth: 0, fontSize: 13 }}>
                                 <div>{w.product_emoji || '📦'} {w.product_name} × {w.qty}</div>
                                 <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>норма: {w.required} ❎</div>
                               </div>
-                              <button className="fm-btn" style={{ padding: '6px 10px', fontSize: 12 }} disabled={busy} onClick={() => setActiveWithdrawal(w)}>
+                              <button className="fm-btn fm-btn-sm" style={{ flexShrink: 0 }} disabled={busy} onClick={() => setActiveWithdrawal(w)}>
                                 Отчитаться
                               </button>
                             </div>
@@ -1492,13 +1492,13 @@ export default function FieldPage() {
                 <>
                   <label style={{ display: 'block', margin: '0 0 6px', fontSize: 14 }}>Текущие крафты</label>
                   {craftSessions.filter((cs) => cs.production_kind === tentModal.kind).map((cs) => (
-                    <div key={cs.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8 }}>
-                      <div style={{ flex: 1, fontSize: 13 }}>
+                    <div key={cs.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8, flexWrap: 'wrap' }}>
+                      <div style={{ flex: '1 1 140px', minWidth: 0, fontSize: 13 }}>
                         <div>{cs.product_emoji} {cs.product_name} × {cs.qty}</div>
                         <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>норма: {cs.required} ❎</div>
                       </div>
-                      <button className="fm-btn" style={{ padding: '6px 10px', fontSize: 12 }} disabled={busy} onClick={() => setActiveCraft(cs)}>Продолжить</button>
-                      <button className="fm-btn" style={{ padding: '6px 10px', fontSize: 12 }} disabled={busy} onClick={() => void doCancelCraft(cs.id)}>Отменить</button>
+                      <button className="fm-btn fm-btn-sm" style={{ flexShrink: 0 }} disabled={busy} onClick={() => setActiveCraft(cs)}>Продолжить</button>
+                      <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ flexShrink: 0 }} disabled={busy} onClick={() => void doCancelCraft(cs.id)}>Отменить</button>
                     </div>
                   ))}
                   <div style={{ borderTop: '1px solid var(--border)', margin: '10px 0' }} />

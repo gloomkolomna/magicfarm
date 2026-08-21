@@ -382,7 +382,7 @@ export function InfirmaryScenePage() {
           {detail.status === 'sick' && (
             isSickScene ? (
               <button
-                className="fm-btn"
+                className="fm-btn fm-btn-sm"
                 disabled={!treatingScene}
                 onClick={() => treatingScene && nav(`/infirmary/${treatingScene.field_id}`)}
               >
@@ -390,7 +390,7 @@ export function InfirmaryScenePage() {
               </button>
             ) : (
               <button
-                className="fm-btn"
+                className="fm-btn fm-btn-sm"
                 disabled={(detail.penalty_due ?? 0) > 0}
                 title={(detail.penalty_due ?? 0) > 0 ? `Сначала отшейте штраф ${detail.penalty_due} ❆` : ''}
                 onClick={() => { setResult(null); setShowHandbook(true); }}
@@ -401,21 +401,21 @@ export function InfirmaryScenePage() {
           )}
           {detail.status === 'diagnosed' && (
             <>
-              <button className="fm-btn fm-btn-outline" title="Погладить" aria-label="Погладить" onClick={doPet}>🤚</button>
-              <button className="fm-btn" disabled={busy} onClick={doGiveRemedy}>💊 Дать лекарство</button>
+              <button className="fm-btn fm-btn-sm fm-btn-outline" title="Погладить" aria-label="Погладить" onClick={doPet}>🤚</button>
+              <button className="fm-btn fm-btn-sm" disabled={busy} onClick={doGiveRemedy}>💊 Дать лекарство</button>
               {detail.remedy_lab_field_id != null && (
-                <button className="fm-btn" onClick={() => nav(`/remedy-lab/${detail.remedy_lab_field_id}`)}>⚗️ Сварить лекарство</button>
+                <button className="fm-btn fm-btn-sm" onClick={() => nav(`/remedy-lab/${detail.remedy_lab_field_id}`)}>⚗️ Сварить лекарство</button>
               )}
-              <button className="fm-btn" onClick={() => setShowWellbeing(true)}>💊 Самочувствие</button>
+              <button className="fm-btn fm-btn-sm" onClick={() => setShowWellbeing(true)}>💊 Самочувствие</button>
             </>
           )}
           {detail.status === 'treated' && (
             <>
-              <button className="fm-btn fm-btn-outline" title="Погладить" aria-label="Погладить" onClick={doPet}>🤚</button>
-              <button className="fm-btn" disabled={busy} onClick={doRelease}>🕊 Выпустить на волю</button>
+              <button className="fm-btn fm-btn-sm fm-btn-outline" title="Погладить" aria-label="Погладить" onClick={doPet}>🤚</button>
+              <button className="fm-btn fm-btn-sm" disabled={busy} onClick={doRelease}>🕊 Выпустить на волю</button>
             </>
           )}
-          <button className="fm-btn fm-btn-outline" onClick={() => { setResult(null); setShowHandbook(true); }}>📖 Книга болезней</button>
+          <button className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => { setResult(null); setShowHandbook(true); }}>📖 Книга болезней</button>
         </div>
         </>
       )}

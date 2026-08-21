@@ -53,17 +53,17 @@ export function ConfirmHost() {
         <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--text-secondary)', whiteSpace: 'pre-line' }}>
           {pending.message}
         </p>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
-            className="fm-btn fm-btn-outline"
-            style={{ flex: 1 }}
+            className="fm-btn fm-btn-sm fm-btn-outline"
+            style={{ flex: '1 1 110px' }}
             onClick={() => close(false)}
           >
             Отмена
           </button>
           <button
-            className="fm-btn"
-            style={{ flex: 1 }}
+            className="fm-btn fm-btn-sm"
+            style={{ flex: '1 1 130px' }}
             onClick={() => close(true)}
           >
             Подтвердить

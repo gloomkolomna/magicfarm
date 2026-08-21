@@ -124,8 +124,8 @@ export function DlcStoryOverlay({ locationCode, name, emoji, onClose }: { locati
             <h1 style={{ fontSize: 'clamp(22px, 7vw, 32px)', margin: 0 }}>{name}</h1>
             <p style={{ fontSize: 15, color: 'var(--text-secondary)', margin: 0 }}>Вы открыли новое дополнение. Узнайте его историю.</p>
             <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-              <button className="fm-btn" onClick={() => setIntro(false)}>▶ Начать историю</button>
-              <button className="fm-btn fm-btn-outline" onClick={finish}>Пропустить</button>
+              <button className="fm-btn fm-btn-sm" onClick={() => setIntro(false)}>▶ Начать историю</button>
+              <button className="fm-btn fm-btn-sm fm-btn-outline" onClick={finish}>Пропустить</button>
             </div>
           </div>
         ) : (

@@ -229,8 +229,8 @@ export default function RemedyLabPage() {
       </LocationMap>
 
       <div style={{ position: 'fixed', left: 12, right: 76, bottom: 'calc(12px + var(--vk-inset-bottom, 0px))', zIndex: 30, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <button className="fm-btn" onClick={() => setShowCards(true)}>📋 Рецепты ({cards.length})</button>
-        <button className="fm-btn fm-btn-outline" onClick={() => setShowStock(true)}>💊 Лекарства ({stock.reduce((a, s) => a + s.qty, 0)})</button>
+        <button className="fm-btn fm-btn-sm" onClick={() => setShowCards(true)}>📋 Рецепты ({cards.length})</button>
+        <button className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => setShowStock(true)}>💊 Лекарства ({stock.reduce((a, s) => a + s.qty, 0)})</button>
       </div>
 
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}

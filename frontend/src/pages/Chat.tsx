@@ -138,15 +138,16 @@ export default function ChatPage() {
               })}
               <div ref={endRef} />
             </div>
-            <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
               <input
                 className="fm-input"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
                 placeholder="Сообщение…"
+                style={{ flex: '1 1 200px', minWidth: 0 }}
               />
-              <button className="fm-btn" disabled={busy || !text.trim()} onClick={send}>➤</button>
+              <button className="fm-btn fm-btn-sm" style={{ flexShrink: 0 }} disabled={busy || !text.trim()} onClick={send}>➤ Отправить</button>
             </div>
           </div>
         </div>

@@ -2264,19 +2264,20 @@ export default function AdminPage() {
       </div>
 
       {tab !== 'players' && tab !== 'logs' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           <input
             className="fm-input"
             placeholder="🔍 Поиск по всем полям…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            style={{ flex: '1 1 200px', minWidth: 0 }}
           />
           {qActive && (
             <>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 {totals[tab]?.shown ?? 0} из {totals[tab]?.total ?? 0}
               </span>
-              <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => setQuery('')}>✕</button>
+              <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" style={{ flexShrink: 0 }} onClick={() => setQuery('')}>✕</button>
             </>
           )}
         </div>
@@ -2292,16 +2293,16 @@ export default function AdminPage() {
             <>
               {selectedPlayer ? (
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                    <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => { setSelectedPlayer(null); setPlayerDetail(null); setPlayerReports([]); }}>← Назад</button>
-                    <h2 style={{ margin: 0, fontSize: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+                    <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" style={{ flexShrink: 0 }} onClick={() => { setSelectedPlayer(null); setPlayerDetail(null); setPlayerReports([]); }}>← Назад</button>
+                    <h2 style={{ margin: 0, fontSize: 18, flex: '1 1 140px', minWidth: 0, overflowWrap: 'anywhere' }}>
                       {selectedPlayer.first_name || selectedPlayer.last_name ? `${selectedPlayer.first_name} ${selectedPlayer.last_name}`.trim() : `#${selectedPlayer.vk_id}`}
                     </h2>
-                    <button type="button" className="fm-btn fm-btn-sm fm-btn-danger" style={{ marginLeft: 'auto' }} disabled={busy} onClick={restartPlayer}>
+                    <button type="button" className="fm-btn fm-btn-sm fm-btn-danger" style={{ flexShrink: 0 }} disabled={busy} onClick={restartPlayer}>
                       🔁 РЕСТАРТ
                     </button>
                     {selectedPlayer.role !== 'admin' && (
-                      <button type="button" className="fm-btn fm-btn-sm fm-btn-danger" disabled={busy} onClick={deletePlayerAccount}>
+                      <button type="button" className="fm-btn fm-btn-sm fm-btn-danger" style={{ flexShrink: 0 }} disabled={busy} onClick={deletePlayerAccount}>
                         🗑 Удалить
                       </button>
                     )}
@@ -2517,15 +2518,15 @@ export default function AdminPage() {
                   <h2 style={{ marginTop: 0 }}>👥 Игроки</h2>
                   <div className="fm-card" style={{ marginBottom: 12 }}>
                     <h3 style={{ margin: '0 0 8px' }}>🔑 Доступ к игре</h3>
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <input
                         className="fm-input"
-                        style={{ flex: 1 }}
+                        style={{ flex: '1 1 220px', minWidth: 0 }}
                         placeholder="Ссылка ВК: https://vk.ru/id123 или vk.ru/имя"
                         value={accessLink}
                         onChange={(e) => setAccessLink(e.target.value)}
                       />
-                      <button type="button" className="fm-btn" disabled={busy || !accessLink.trim()} onClick={addAccessPlayer}>➕ Добавить</button>
+                      <button type="button" className="fm-btn fm-btn-sm" style={{ flexShrink: 0 }} disabled={busy || !accessLink.trim()} onClick={addAccessPlayer}>➕ Добавить</button>
                     </div>
                     {accessPlayers.length === 0 ? (
                       <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 8 }}>
@@ -2682,9 +2683,9 @@ export default function AdminPage() {
               )}
               <div className="fm-card" style={{ marginTop: 10 }}>
                 <h3>🖼️ Нейтральный фон</h3>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input className="fm-input" style={{ flex: 1 }} placeholder="URL фона" value={bgInput} onChange={(e) => setBgInput(e.target.value)} />
-                  <button type="button" className="fm-btn" disabled={busy} onClick={saveBg}>💾</button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input className="fm-input" style={{ flex: '1 1 220px', minWidth: 0 }} placeholder="URL фона" value={bgInput} onChange={(e) => setBgInput(e.target.value)} />
+                  <button type="button" className="fm-btn fm-btn-sm" style={{ flexShrink: 0 }} disabled={busy} onClick={saveBg}>💾</button>
                 </div>
                 {bgUrl && <img src={bgUrl} alt="Фон" style={{ maxWidth: 200, marginTop: 8, borderRadius: 8 }} />}
               </div>
@@ -3298,9 +3299,9 @@ function SettingRow({
     <div className="fm-card fm-rise">
       <strong style={{ fontSize: 15 }}>{field.label}</strong>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>{field.hint}</div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <input className="fm-input" value={v} onChange={(e) => setV(e.target.value)} />
-        <button type="button" className="fm-btn fm-btn-sm" disabled={disabled || v === value} onClick={() => onSave(v)}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <input className="fm-input" style={{ flex: '1 1 180px', minWidth: 0 }} value={v} onChange={(e) => setV(e.target.value)} />
+        <button type="button" className="fm-btn fm-btn-sm" style={{ flexShrink: 0 }} disabled={disabled || v === value} onClick={() => onSave(v)}>
           OK
         </button>
       </div>
@@ -3312,7 +3313,7 @@ function PlantNormEditor({ vkId, plantId, initial, onSaved }: { vkId: number; pl
   const [val, setVal] = useState(String(initial));
   const [busy, setBusy] = useState(false);
   return (
-    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
       <input
         className="fm-input"
         type="number"
@@ -3343,7 +3344,7 @@ function PlantNormEditor({ vkId, plantId, initial, onSaved }: { vkId: number; pl
 
 function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" className={active ? 'fm-btn' : 'fm-btn fm-btn-outline'} onClick={onClick} style={{ fontSize: 13, padding: '6px 10px' }}>
+    <button type="button" className={active ? 'fm-btn fm-btn-sm' : 'fm-btn fm-btn-sm fm-btn-outline'} onClick={onClick}>
       {children}
     </button>
   );

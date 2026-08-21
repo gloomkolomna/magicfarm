@@ -263,7 +263,7 @@ export default function TradesPage() {
           })}
           <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
             <button className="fm-btn fm-btn-outline fm-btn-sm" onClick={() => setRows([...rows, { direction: 'give', kind: 'plant', item_id: '' }])}>➕ Ещё строка</button>
-            <button className="fm-btn" disabled={busy} onClick={submitOffer}>📨 Отправить предложение</button>
+            <button className="fm-btn fm-btn-sm" disabled={busy} onClick={submitOffer}>📨 Отправить предложение</button>
           </div>
         </div>
       )}

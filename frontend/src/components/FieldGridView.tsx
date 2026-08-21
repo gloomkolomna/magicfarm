@@ -134,7 +134,7 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
             <div style={{ marginBottom: 8, color: 'var(--text-secondary)' }}>
               Клетка ({selectedCell.col}, {selectedCell.row})
             </div>
-            <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button type="button" className="fm-btn fm-btn-sm" style={{ background: '#c90', borderColor: '#c90' }}
                 onClick={() => { onResetNorm?.(selectedCell.plotId); setSelectedCell(null); }}>
                 🎲 Сброс нормы

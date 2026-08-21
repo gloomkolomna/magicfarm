@@ -331,7 +331,7 @@ function PotionsCatalog() {
                         paddingTop: 8,
                       }}
                     >
-                      <div style={{ color: 'var(--accent-warm)', fontWeight: 600, whiteSpace: 'nowrap' }}>🪙 {r.reward_coins}</div>
+                      <div style={{ color: 'var(--accent-warm)', fontWeight: 600, overflowWrap: 'anywhere' }}>🪙 {r.reward_coins}</div>
                       <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>{ingredientIcons(r.ingredient_slots)}</div>
                     </div>
                     {r.bonus_code && (

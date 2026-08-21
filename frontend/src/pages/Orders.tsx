@@ -162,10 +162,10 @@ export default function OrdersPage() {
                         <span style={{ color: 'var(--accent-warm)', fontWeight: 600 }}>🪙 {o.reward_coins}</span>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
                       <button
                         className="fm-btn fm-btn-sm"
-                        style={{ flex: 1 }}
+                        style={{ flex: '1 1 120px' }}
                         disabled={busy}
                         onClick={(e) => { e.stopPropagation(); act(() => api.fulfillOrder(o.id), `Заказ выполнен! +${o.reward_coins} монет`); }}
                       >
@@ -173,6 +173,7 @@ export default function OrdersPage() {
                       </button>
                       <button
                         className="fm-btn fm-btn-sm fm-btn-outline"
+                        style={{ flex: '1 1 100px' }}
                         disabled={busy}
                         onClick={(e) => { e.stopPropagation(); act(() => api.cancelOrder(o.id), 'Заказ отменён'); }}
                       >
@@ -249,10 +250,10 @@ export default function OrdersPage() {
             <span style={{ color: 'var(--accent-warm)', fontWeight: 600 }}>🪙 {detailOrder.reward_coins}</span>
           </div>
           {detailOrder.status === 'open' && (
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
-                className="fm-btn"
-                style={{ flex: 1 }}
+                className="fm-btn fm-btn-sm"
+                style={{ flex: '1 1 130px' }}
                 disabled={busy}
                 onClick={async () => {
                   const okDone = await act(() => api.fulfillOrder(detailOrder.id), `Заказ выполнен! +${detailOrder.reward_coins} монет`);
@@ -262,8 +263,8 @@ export default function OrdersPage() {
                 Выполнить
               </button>
               <button
-                className="fm-btn fm-btn-outline"
-                style={{ flex: 1 }}
+                className="fm-btn fm-btn-sm fm-btn-outline"
+                style={{ flex: '1 1 110px' }}
                 disabled={busy}
                 onClick={async () => {
                   const okDone = await act(() => api.cancelOrder(detailOrder.id), 'Заказ отменён — он снова доступен в каталоге');
