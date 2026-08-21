@@ -54,13 +54,15 @@ def _gift_meta(db: Session, kind: str, item_id: int) -> tuple[str, str | None, s
     return (ing.name if ing else "?", None, ing.image_url if ing else None)
 
 
-def _gift_out(db: Session, g: Gift) -> GiftOut:
-    from_ = db.query(User).filter(User.vk_id == g.from_user_id).first()
+def _gift_out(db: Session, g: Gift, from_name: str | None = None) -> GiftOut:
+    if from_name is None:
+        from_ = db.query(User).filter(User.vk_id == g.from_user_id).first()
+        from_name = _user_name(db, from_) if from_ else f"Игрок {g.from_user_id}"
     name, emoji, image = _gift_meta(db, g.kind, g.item_id)
     return GiftOut(
         id=g.id,
         from_user_id=g.from_user_id,
-        from_name=_user_name(db, from_) if from_ else f"Игрок {g.from_user_id}",
+        from_name=from_name,
         to_user_id=g.to_user_id,
         kind=g.kind, item_id=g.item_id,
         item_name=name, item_emoji=emoji, item_image_url=image,
@@ -137,10 +139,11 @@ def send_gift(
         from_user_id=user.vk_id, to_user_id=req.to_user_id,
         text="🎁 Вам пришёл подарок", kind="gift", gift_id=gift.id,
     ))
-    notify(db, req.to_user_id, f"🎁 {_user_name(db, user)} отправил(а) вам подарок")
+    sender_name = _user_name(db, user)
+    notify(db, req.to_user_id, f"🎁 {sender_name} отправил(а) вам подарок")
     db.commit()
     db.refresh(gift)
-    return _gift_out(db, gift)
+    return _gift_out(db, gift, from_name=sender_name)
 
 
 @router.post("/{gift_id}/claim", response_model=GiftOut)

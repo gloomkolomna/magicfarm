@@ -92,8 +92,12 @@ def _item_meta(db: Session, kind: str, item_id: int) -> tuple[str, str | None]:
 def _user_name(db: Session, user: User) -> str:
     if user.display_name:
         return user.display_name
-    from services.vk_names import resolve_vk_names
-    nm = resolve_vk_names([user.vk_id]).get(user.vk_id, {})
+    nm: dict = {}
+    try:
+        from services.vk_names import resolve_vk_names
+        nm = resolve_vk_names([user.vk_id]).get(user.vk_id, {})
+    except Exception:
+        nm = {}
     full = f"{nm.get('first_name', '')} {nm.get('last_name', '')}".strip()
     return full or f"Игрок {user.vk_id}"
 

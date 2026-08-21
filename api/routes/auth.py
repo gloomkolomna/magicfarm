@@ -54,5 +54,13 @@ def create_session(req: SessionRequest, db: Session = Depends(get_db)):
         db.delete(invite)
         db.commit()
 
+    if not user.display_name:
+        from services.vk_names import resolve_vk_names
+        nm = resolve_vk_names([user.vk_id]).get(user.vk_id, {})
+        full = f"{nm.get('first_name', '')} {nm.get('last_name', '')}".strip()
+        if full:
+            user.display_name = full
+            db.commit()
+
     token = create_access_token(user.vk_id)
     return SessionResponse(token=token, vk_id=user.vk_id, role=user.role)
