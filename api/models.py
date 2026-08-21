@@ -1139,6 +1139,7 @@ class RemedyDeviceCell(Base):
     row2 = Column(Integer, nullable=False, default=0, server_default="0")
     install_cards = Column(Integer, nullable=False, default=10, server_default="10")
     image_url = Column(String, nullable=True)
+    name = Column(String, nullable=True)
 
     field = relationship("Field")
     remedies = relationship("RemedyDeviceRemedy", cascade="all, delete-orphan")

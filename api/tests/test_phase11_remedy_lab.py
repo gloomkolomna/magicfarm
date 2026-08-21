@@ -587,6 +587,42 @@ def test_device_image_upload_and_show_in_player(admin_client, uploads_tmp):
     assert data["device_cells"][0]["image_url"] == url
 
 
+def test_device_name_create_update_and_show_in_player(admin_client):
+    rid = _seed_remedy("Мазь", [])
+    fid = _seed_field("remedy_lab", "Лаборатория-название")
+    r = admin_client.post(f"/api/admin/fields/{fid}/remedy-device-cells", json={
+        "col1": 0, "row1": 0, "col2": 0, "row2": 0, "install_cards": 1,
+        "remedy_ids": [rid], "name": "  Реторта  ",
+    })
+    assert r.status_code == 201, r.text
+    cell_id = r.json()["id"]
+    assert r.json()["name"] == "Реторта"
+
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    assert detail["device_cells"][0]["name"] == "Реторта"
+
+    with make_user_client(123, "player") as c:
+        data = c.get(f"/api/remedy-lab/{fid}").json()
+    assert data["device_cells"][0]["name"] == "Реторта"
+
+    upd = admin_client.put(f"/api/admin/fields/{fid}/remedy-device-cells/{cell_id}", json={"name": "Перегонный куб"})
+    assert upd.status_code == 200
+    assert upd.json()["name"] == "Перегонный куб"
+
+    cleared = admin_client.put(f"/api/admin/fields/{fid}/remedy-device-cells/{cell_id}", json={"name": "   "})
+    assert cleared.status_code == 200
+    assert cleared.json()["name"] is None
+
+
+def test_device_name_defaults_to_none(admin_client):
+    rid = _seed_remedy("Мазь", [])
+    fid = _seed_field("remedy_lab", "Лаборатория-без-названия")
+    cell_id = _seed_device(admin_client, fid, rid)
+    detail = admin_client.get(f"/api/admin/fields/{fid}").json()
+    assert detail["device_cells"][0]["name"] is None
+    assert cell_id
+
+
 def test_device_image_upload_404(admin_client, uploads_tmp):
     fid = _seed_field("remedy_lab", "Лаборатория-404")
     r = _upload_device_image(admin_client, fid, 99999)

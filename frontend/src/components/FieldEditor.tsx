@@ -84,6 +84,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
   const [allRemedies, setAllRemedies] = useState<{ id: number; name: string; image_url: string | null }[]>([]);
   const [deviceImage, setDeviceImage] = useState<File | null>(null);
+  const [deviceName, setDeviceName] = useState('');
   const [cellModal, setCellModal] = useState<{
     kind: 'gather' | 'trade' | 'body_part' | 'remedy_device';
     col: number;
@@ -94,6 +95,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     installCards: string;
     existingId: number | null;
     image: File | null;
+    deviceName: string;
   } | null>(null);
 
   const load = useCallback(async () => {
@@ -171,6 +173,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         installCards: '10',
         existingId: existing?.id ?? null,
         image: null,
+        deviceName: '',
       });
       return;
     }
@@ -194,6 +197,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         installCards: '10',
         existingId: existing?.id ?? null,
         image: null,
+        deviceName: '',
       });
       return;
     }
@@ -312,6 +316,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
     setTentImage(null);
     setBrewImage(null);
     setDeviceImage(null);
+    setDeviceName('');
     setTentIsKassa(false);
     setMultiModal({ c1, r1, c2, r2, installCards: '10', ids: [] });
   }
@@ -347,6 +352,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           col1: multiModal.c1, row1: multiModal.r1, col2: multiModal.c2, row2: multiModal.r2,
           install_cards: Math.max(1, Number(multiModal.installCards) || 10),
           remedy_ids: multiModal.ids,
+          name: deviceName.trim() || null,
         });
         if (deviceImage) {
           await api.adminUploadRemedyDeviceImage(fieldId, created.id, deviceImage);
@@ -397,6 +403,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
         await api.adminUpdateRemedyDeviceCell(fieldId, cellModal.existingId, {
           install_cards: Math.max(1, Number(cellModal.installCards) || 10),
           remedy_ids: cellModal.ids,
+          name: cellModal.deviceName.trim() || null,
         });
         if (cellModal.image) {
           await api.adminUploadRemedyDeviceImage(fieldId, cellModal.existingId, cellModal.image);
@@ -1196,7 +1203,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     onClick={() => setCellModal({
                       kind: 'gather', col: gc.col, row: gc.row,
                       window: gc.window, ids: gc.ingredient_ids, partCode: '', installCards: '10', existingId: gc.id,
-                      image: null,
+                      image: null, deviceName: '',
                     })}
                   >
                     ✏️
@@ -1241,7 +1248,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     onClick={() => setCellModal({
                       kind: 'trade', col: tc.col, row: tc.row,
                       window: 'always', ids: tc.ingredient_ids, partCode: '', installCards: '10', existingId: tc.id,
-                      image: null,
+                      image: null, deviceName: '',
                     })}
                   >
                     ✏️
@@ -1286,7 +1293,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                     onClick={() => setCellModal({
                       kind: 'body_part', col: pc.col, row: pc.row,
                       window: 'always', ids: [], partCode: pc.part_code, installCards: '10', existingId: pc.id,
-                      image: null,
+                      image: null, deviceName: '',
                     })}
                   >
                     ✏️
@@ -1345,7 +1352,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
           <div className="fm-grid" style={{ marginBottom: 14 }}>
             {(field.device_cells ?? []).map((d) => (
               <div key={d.id} className="fm-card">
-                <strong>🔧 Прибор</strong>
+                <strong>🔧 {d.name || 'Прибор'}</strong>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                   {d.col2 - d.col1 + 1}×{d.row2 - d.row1 + 1} · [{d.col1},{d.row1}]
                 </div>
@@ -1361,7 +1368,7 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
                       kind: 'remedy_device', col: d.col1, row: d.row1,
                       window: 'always', ids: d.remedies.map((r2) => r2.remedy_id),
                       partCode: '', installCards: String(d.install_cards), existingId: d.id,
-                      image: null,
+                      image: null, deviceName: d.name ?? '',
                     })}
                   >
                     ✏️
@@ -1504,7 +1511,14 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
             )}
             {cellModal.kind === 'remedy_device' ? (
               <>
-                <label style={lbl}>Карт для нормы на установку (1–30)</label>
+                <label style={lbl}>Название прибора</label>
+                <input
+                  className="fm-input"
+                  value={cellModal.deviceName}
+                  placeholder="Например: Реторта"
+                  onChange={(e) => setCellModal({ ...cellModal, deviceName: e.target.value })}
+                />
+                <label style={{ ...lbl, marginTop: 10 }}>Карт для нормы на установку (1–30)</label>
                 <input
                   className="fm-input"
                   type="number"
@@ -1675,7 +1689,14 @@ export default function FieldEditor({ fieldId, onClose }: Props) {
               </p>
             ) : brush === 'remedy_device' ? (
               <>
-                <label style={lbl}>Карт для нормы на установку (1–30)</label>
+                <label style={lbl}>Название прибора</label>
+                <input
+                  className="fm-input"
+                  value={deviceName}
+                  placeholder="Например: Реторта"
+                  onChange={(e) => setDeviceName(e.target.value)}
+                />
+                <label style={{ ...lbl, marginTop: 10 }}>Карт для нормы на установку (1–30)</label>
                 <input
                   className="fm-input"
                   type="number"

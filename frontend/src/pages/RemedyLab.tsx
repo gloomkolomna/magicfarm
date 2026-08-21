@@ -150,7 +150,7 @@ export default function RemedyLabPage() {
                     <img
                       src={img}
                       alt=""
-                      style={{ position: 'absolute', inset: 2, width: 'calc(100% - 4px)', height: 'calc(100% - 4px)', objectFit: 'contain', pointerEvents: 'none' }}
+                      style={{ position: 'absolute', inset: 4, width: 'calc(100% - 8px)', height: 'calc(100% - 8px)', objectFit: 'cover', borderRadius: 4, pointerEvents: 'none' }}
                     />
                   )}
                   {!dev && !img && (
@@ -161,7 +161,7 @@ export default function RemedyLabPage() {
                   {dev?.build_status === 'building' && (
                     <div
                       style={{
-                        position: 'absolute', bottom: 2, left: 2, right: 2,
+                        position: 'absolute', top: 3, left: 0, right: 0,
                         fontSize: 'clamp(10px,2.4vw,14px)', color: '#ffd9a0', textAlign: 'center', lineHeight: 1.2,
                         textShadow: '0 1px 3px #000', fontWeight: 600,
                         background: img ? 'rgba(20,12,4,0.55)' : 'transparent',
@@ -186,6 +186,23 @@ export default function RemedyLabPage() {
                       <div style={{ fontSize: 'clamp(8px,2vw,11px)', color: '#b8ffb8', fontWeight: 700, textShadow: '0 1px 2px #000' }}>
                         {dev.brew_accumulated}/{dev.brew_required}
                       </div>
+                    </div>
+                  )}
+                  {cell.name && (
+                    <div
+                      style={{
+                        position: 'absolute', left: 0, right: 0, bottom: 0,
+                        fontSize: 'clamp(8px,2vw,11px)', lineHeight: 1.25,
+                        color: '#fff', fontWeight: 600, textAlign: 'center',
+                        textShadow: '0 1px 2px #000',
+                        background: 'linear-gradient(180deg, rgba(18,10,38,0) 0%, rgba(18,10,38,0.82) 55%)',
+                        padding: '8px 3px 3px',
+                        overflow: 'hidden', maxHeight: '50%',
+                        overflowWrap: 'anywhere', pointerEvents: 'none',
+                        borderBottomLeftRadius: 5, borderBottomRightRadius: 5,
+                      }}
+                    >
+                      {cell.name}
                     </div>
                   )}
                 </div>

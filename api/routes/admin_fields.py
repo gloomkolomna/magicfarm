@@ -1560,6 +1560,7 @@ class RemedyDeviceCellOut(BaseModel):
     row2: int
     install_cards: int
     image_url: str | None
+    name: str | None
     remedies: list[DeviceRemedyItemOut]
 
 
@@ -1578,6 +1579,7 @@ def _device_cell_out(cell: RemedyDeviceCell) -> RemedyDeviceCellOut:
         row2=cell.row2 if cell.row2 is not None else cell.row,
         install_cards=cell.install_cards or 10,
         image_url=cell.image_url,
+        name=cell.name,
         remedies=[
             DeviceRemedyItemOut(
                 remedy_id=r.remedy_id,
@@ -1596,11 +1598,13 @@ class RemedyDeviceCellCreate(BaseModel):
     row2: int
     install_cards: int = 10
     remedy_ids: list[int] = []
+    name: str | None = None
 
 
 class RemedyDeviceCellUpdate(BaseModel):
     install_cards: int | None = None
     remedy_ids: list[int] | None = None
+    name: str | None = None
 
 
 def _apply_remedy_ids(cell: RemedyDeviceCell, remedy_ids: list[int], db: Session) -> None:
@@ -1642,7 +1646,11 @@ def create_remedy_device_cell(
             detail=f"Максимум {REMEDY_DEVICE_LIMIT} приборов в аптеке",
         )
 
-    cell = RemedyDeviceCell(field_id=f.id, col=c1, row=r1, col2=c2, row2=r2, install_cards=req.install_cards)
+    cell = RemedyDeviceCell(
+        field_id=f.id, col=c1, row=r1, col2=c2, row2=r2,
+        install_cards=req.install_cards,
+        name=(req.name or "").strip() or None,
+    )
     db.add(cell)
     db.flush()
     _apply_remedy_ids(cell, req.remedy_ids, db)
@@ -1671,6 +1679,8 @@ def update_remedy_device_cell(
         if req.install_cards < 1 or req.install_cards > 30:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Карт на установку: от 1 до 30")
         cell.install_cards = req.install_cards
+    if req.name is not None:
+        cell.name = req.name.strip() or None
     if req.remedy_ids is not None:
         _apply_remedy_ids(cell, req.remedy_ids, db)
     db.commit()

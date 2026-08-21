@@ -74,6 +74,7 @@ class DeviceCellOut(BaseModel):
     row2: int
     install_cards: int
     image_url: str | None
+    name: str | None
     remedies: list[DeviceRemedyOut]
     device: DeviceStateOut | None
 
@@ -170,6 +171,7 @@ def _device_cell_out(cell: RemedyDeviceCell, user_id: int, db: Session) -> Devic
         row2=cell.row2 if cell.row2 is not None else cell.row,
         install_cards=cell.install_cards or 10,
         image_url=cell.image_url,
+        name=cell.name,
         remedies=[
             DeviceRemedyOut(
                 remedy_id=r.remedy_id,
