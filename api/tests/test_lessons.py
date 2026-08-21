@@ -1,10 +1,18 @@
 import io
 
+from PIL import Image
+
 from tests.conftest import make_user_client
 
 
 def _fake_video():
     return io.BytesIO(b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom")
+
+
+def _img_bytes():
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 30), (80, 140, 200)).save(buf, format="PNG")
+    return buf.getvalue()
 
 
 def test_lessons_empty_for_player(player_client):
@@ -42,6 +50,20 @@ def test_admin_upload_lesson_video(admin_client, uploads_tmp):
         listed = c.get("/api/lessons").json()
     assert listed[0]["video_url"] == url
     assert listed[0]["title"] == "Видео-урок"
+
+
+def test_admin_upload_lesson_image(admin_client, uploads_tmp):
+    lesson = admin_client.post("/api/admin/lessons", json={"title": "С картинкой"}).json()
+    res = admin_client.put(
+        f"/api/admin/lessons/{lesson['id']}/image",
+        files={"file": ("img.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+    assert res.status_code == 200
+    url = res.json()["image_url"]
+    assert url and url.startswith("/api/uploads/")
+    with make_user_client(123, "player") as c:
+        listed = c.get("/api/lessons").json()
+    assert listed[0]["image_url"] == url
 
 
 def test_admin_update_and_delete_lesson(admin_client):

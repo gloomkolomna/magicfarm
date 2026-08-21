@@ -40,9 +40,16 @@ export default function LessonsPage() {
         {lesson.video_url ? (
           <video
             src={mediaUrl(lesson.video_url)}
+            poster={lesson.image_url ? mediaUrl(lesson.image_url) : undefined}
             controls
             playsInline
             style={{ width: '100%', maxHeight: '50vh', borderRadius: 10, marginBottom: 10 }}
+          />
+        ) : lesson.image_url ? (
+          <img
+            src={mediaUrl(lesson.image_url)}
+            alt=""
+            style={{ width: '100%', maxHeight: '40vh', objectFit: 'contain', borderRadius: 10, marginBottom: 10 }}
           />
         ) : (
           <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, background: 'rgba(255,255,255,0.04)', borderRadius: 10, marginBottom: 10 }}>🎬</div>

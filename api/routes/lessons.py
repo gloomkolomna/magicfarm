@@ -18,6 +18,7 @@ class LessonOut(BaseModel):
     title: str
     description: str | None
     video_url: str | None
+    image_url: str | None
     sort_order: int
 
 
@@ -36,7 +37,7 @@ class LessonUpdate(BaseModel):
 def _lesson_out(l: Lesson) -> LessonOut:
     return LessonOut(
         id=l.id, title=l.title, description=l.description,
-        video_url=l.video_url, sort_order=l.sort_order or 0,
+        video_url=l.video_url, image_url=l.image_url, sort_order=l.sort_order or 0,
     )
 
 
@@ -122,6 +123,21 @@ def admin_upload_lesson_video(
     return _lesson_out(l)
 
 
+@admin_router.put("/{lesson_id}/image", response_model=LessonOut)
+def admin_upload_lesson_image(
+    lesson_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    l = _get_lesson_or_404(lesson_id, db)
+    remove_upload(l.image_url)
+    l.image_url = save_upload(file, f"lesson_{l.id}", max_size=1200)
+    db.commit()
+    db.refresh(l)
+    return _lesson_out(l)
+
+
 @admin_router.delete("/{lesson_id}", status_code=status.HTTP_204_NO_CONTENT)
 def admin_delete_lesson(
     lesson_id: int,
@@ -130,6 +146,7 @@ def admin_delete_lesson(
 ):
     l = _get_lesson_or_404(lesson_id, db)
     remove_upload(l.video_url)
+    remove_upload(l.image_url)
     db.delete(l)
     db.commit()
     return None

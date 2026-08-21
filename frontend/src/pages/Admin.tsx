@@ -102,11 +102,14 @@ export default function AdminPage() {
   const [dlcLocations, setDlcLocations] = useState<DlcLocation[]>([]);
   const [storyForm, setStoryForm] = useState<{ text: string; sort_order: string; location_code: string }>({ text: '', sort_order: '0', location_code: '' });
   const [storyEditingId, setStoryEditingId] = useState<number | null>(null);
+  const [storyImage, setStoryImage] = useState<File | null>(null);
 
   // ── Видео-уроки ──
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [lessonForm, setLessonForm] = useState<{ title: string; description: string; sort_order: string }>({ title: '', description: '', sort_order: '0' });
   const [lessonEditingId, setLessonEditingId] = useState<number | null>(null);
+  const [lessonVideo, setLessonVideo] = useState<File | null>(null);
+  const [lessonImage, setLessonImage] = useState<File | null>(null);
 
   // ── Карты-локации ──
   const [fields, setFields] = useState<FieldInfo[]>([]);
@@ -2078,10 +2081,19 @@ export default function AdminPage() {
     setBusy(true); setMsg(null);
     try {
       const data = { text: storyForm.text.trim(), sort_order: Number(storyForm.sort_order) || 0, location_code: storyForm.location_code || null };
-      if (storyEditingId) await api.adminUpdateStorySlide(storyEditingId, data);
-      else await api.adminCreateStorySlide(data);
+      let savedId: number;
+      if (storyEditingId) {
+        await api.adminUpdateStorySlide(storyEditingId, data);
+        savedId = storyEditingId;
+      } else {
+        savedId = (await api.adminCreateStorySlide(data)).id;
+      }
+      if (storyImage) {
+        await api.adminUploadStorySlideImage(savedId, storyImage);
+      }
       setMsg('✓ Слайд сохранён');
       setStoryForm({ text: '', sort_order: '0', location_code: '' });
+      setStoryImage(null);
       setStoryEditingId(null);
       setStorySlides(await api.adminStorySlides());
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -2109,10 +2121,19 @@ export default function AdminPage() {
     setBusy(true); setMsg(null);
     try {
       const data = { title: lessonForm.title.trim(), description: lessonForm.description.trim() || null, sort_order: Number(lessonForm.sort_order) || 0 };
-      if (lessonEditingId) await api.adminUpdateLesson(lessonEditingId, data);
-      else await api.adminCreateLesson(data);
+      let savedId: number;
+      if (lessonEditingId) {
+        await api.adminUpdateLesson(lessonEditingId, data);
+        savedId = lessonEditingId;
+      } else {
+        savedId = (await api.adminCreateLesson(data)).id;
+      }
+      if (lessonVideo) await api.adminUploadLessonVideo(savedId, lessonVideo);
+      if (lessonImage) await api.adminUploadLessonImage(savedId, lessonImage);
       setMsg('✓ Урок сохранён');
       setLessonForm({ title: '', description: '', sort_order: '0' });
+      setLessonVideo(null);
+      setLessonImage(null);
       setLessonEditingId(null);
       setLessons(await api.adminLessons());
     } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
@@ -2122,6 +2143,13 @@ export default function AdminPage() {
   async function uploadLessonVideo(id: number, file: File) {
     setBusy(true); setMsg(null);
     try { await api.adminUploadLessonVideo(id, file); setLessons(await api.adminLessons()); setMsg('✓ Видео загружено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  async function uploadLessonImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadLessonImage(id, file); setLessons(await api.adminLessons()); setMsg('✓ Фото загружено'); }
     catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
     finally { setBusy(false); }
   }
@@ -3054,6 +3082,19 @@ export default function AdminPage() {
               <div className="fm-card" style={{ marginBottom: 10 }}>
                 <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Текст слайда</label>
                 <textarea className="fm-input" rows={4} value={storyForm.text} onChange={(e) => setStoryForm({ ...storyForm, text: e.target.value })} placeholder="Текст слайда предыстории…" />
+                <label style={{ display: 'block', fontSize: 13, margin: '8px 0 4px' }}>Картинка слайда</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer', flexShrink: 0 }}>
+                    {storyImage ? '🖼️ Заменить' : '🖼️ Выбрать картинку'}
+                    <input type="file" accept="image/*" hidden onChange={(e) => { setStoryImage(e.target.files?.[0] || null); e.target.value = ''; }} />
+                  </label>
+                  {storyImage && (
+                    <>
+                      <img src={URL.createObjectURL(storyImage)} alt="" style={{ height: 44, maxWidth: 120, objectFit: 'contain', borderRadius: 6 }} />
+                      <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => setStoryImage(null)}>✕</button>
+                    </>
+                  )}
+                </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Локация (DLC)</label>
@@ -3070,7 +3111,7 @@ export default function AdminPage() {
                     {storyEditingId ? '✎ Сохранить' : '➕ Добавить слайд'}
                   </button>
                   {storyEditingId && (
-                    <button type="button" className="fm-btn" onClick={() => { setStoryEditingId(null); setStoryForm({ text: '', sort_order: '0', location_code: '' }); }}>Отмена</button>
+                    <button type="button" className="fm-btn" onClick={() => { setStoryEditingId(null); setStoryForm({ text: '', sort_order: '0', location_code: '' }); setStoryImage(null); }}>Отмена</button>
                   )}
                 </div>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '8px 0 0' }}>
@@ -3084,7 +3125,7 @@ export default function AdminPage() {
                     <strong style={{ display: 'block', marginBottom: 4 }}>#{s.sort_order} {s.location_code ? `· ${s.location_code}` : ''}</strong>
                     <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text-secondary)', marginBottom: 6 }}>{s.text || '—'}</div>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button type="button" className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setStoryEditingId(s.id); setStoryForm({ text: s.text || '', sort_order: String(s.sort_order), location_code: s.location_code || '' }); }}>✎</button>
+                      <button type="button" className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setStoryEditingId(s.id); setStoryForm({ text: s.text || '', sort_order: String(s.sort_order), location_code: s.location_code || '' }); setStoryImage(null); }}>✎</button>
                       <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
                         🖼️
                         <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadStoryImage(s.id, f); e.target.value = ''; }} />
@@ -3107,6 +3148,32 @@ export default function AdminPage() {
                 <input className="fm-input" value={lessonForm.title} onChange={(e) => setLessonForm({ ...lessonForm, title: e.target.value })} placeholder="Например: как сажать растения" />
                 <label style={{ display: 'block', margin: '8px 0 4px', fontSize: 13 }}>Описание</label>
                 <textarea className="fm-input" rows={3} value={lessonForm.description} onChange={(e) => setLessonForm({ ...lessonForm, description: e.target.value })} placeholder="Короткое описание урока…" />
+                <label style={{ display: 'block', fontSize: 13, margin: '8px 0 4px' }}>Видео урока</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer', flexShrink: 0 }}>
+                    {lessonVideo ? '🎬 Заменить' : '🎬 Выбрать видео'}
+                    <input type="file" accept="video/*" hidden onChange={(e) => { setLessonVideo(e.target.files?.[0] || null); e.target.value = ''; }} />
+                  </label>
+                  {lessonVideo && (
+                    <>
+                      <video src={URL.createObjectURL(lessonVideo)} controls playsInline style={{ height: 48, maxWidth: 140, borderRadius: 6 }} />
+                      <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => setLessonVideo(null)}>✕</button>
+                    </>
+                  )}
+                </div>
+                <label style={{ display: 'block', fontSize: 13, margin: '8px 0 4px' }}>Фото-обложка урока</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer', flexShrink: 0 }}>
+                    {lessonImage ? '🖼️ Заменить' : '🖼️ Выбрать фото'}
+                    <input type="file" accept="image/*" hidden onChange={(e) => { setLessonImage(e.target.files?.[0] || null); e.target.value = ''; }} />
+                  </label>
+                  {lessonImage && (
+                    <>
+                      <img src={URL.createObjectURL(lessonImage)} alt="" style={{ height: 48, maxWidth: 120, objectFit: 'contain', borderRadius: 6 }} />
+                      <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => setLessonImage(null)}>✕</button>
+                    </>
+                  )}
+                </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Порядок</label>
@@ -3116,7 +3183,7 @@ export default function AdminPage() {
                     {lessonEditingId ? '✎ Сохранить' : '➕ Добавить урок'}
                   </button>
                   {lessonEditingId && (
-                    <button type="button" className="fm-btn" style={{ marginTop: 18 }} onClick={() => { setLessonEditingId(null); setLessonForm({ title: '', description: '', sort_order: '0' }); }}>Отмена</button>
+                    <button type="button" className="fm-btn" style={{ marginTop: 18 }} onClick={() => { setLessonEditingId(null); setLessonForm({ title: '', description: '', sort_order: '0' }); setLessonVideo(null); setLessonImage(null); }}>Отмена</button>
                   )}
                 </div>
               </div>
@@ -3124,16 +3191,21 @@ export default function AdminPage() {
                 {shownLessons.map((l) => (
                   <div key={l.id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
                     <strong>{l.title}</strong>
+                    {l.image_url && <img src={mediaUrl(l.image_url)} alt="" style={{ width: '100%', maxHeight: 90, objectFit: 'contain', borderRadius: 8, marginTop: 6 }} />}
                     {l.video_url && (
                       <video src={mediaUrl(l.video_url)} controls playsInline style={{ width: '100%', maxHeight: 160, borderRadius: 8, marginTop: 6, marginBottom: 6 }} />
                     )}
                     <div style={{ color: 'var(--text-secondary)', marginTop: 4, whiteSpace: 'pre-wrap' }}>{l.description || '—'}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>#{l.sort_order}</div>
                     <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-                      <button type="button" className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setLessonEditingId(l.id); setLessonForm({ title: l.title, description: l.description || '', sort_order: String(l.sort_order) }); }}>✎</button>
+                      <button type="button" className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setLessonEditingId(l.id); setLessonForm({ title: l.title, description: l.description || '', sort_order: String(l.sort_order) }); setLessonVideo(null); setLessonImage(null); }}>✎</button>
                       <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
                         🎬
                         <input type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLessonVideo(l.id, f); e.target.value = ''; }} />
+                      </label>
+                      <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
+                        🖼️
+                        <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLessonImage(l.id, f); e.target.value = ''; }} />
                       </label>
                       <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteLesson(l.id)}>🗑</button>
                     </div>

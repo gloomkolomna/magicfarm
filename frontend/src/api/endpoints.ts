@@ -230,6 +230,7 @@ export interface Lesson {
   title: string;
   description: string | null;
   video_url: string | null;
+  image_url: string | null;
   sort_order: number;
 }
 
@@ -2248,6 +2249,11 @@ export const api = {
     const form = new FormData();
     form.append('file', file);
     return client.put<Lesson>(`/admin/lessons/${id}/video`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminUploadLessonImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return client.put<Lesson>(`/admin/lessons/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
   adminDeleteLesson: (id: number) =>
     client.delete(`/admin/lessons/${id}`).then((r) => r.data),
