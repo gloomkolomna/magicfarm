@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type TradeOffer, type TradeItemIn } from '../api/endpoints';
+import { api, type PlayerSearchItem, type TradeOffer, type TradeItemIn } from '../api/endpoints';
 import { confirmDialog } from '../components/Confirm';
 import Toast from '../components/Toast';
 
@@ -54,9 +54,22 @@ export default function TradesPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const [toUserId, setToUserId] = useState('');
+  const [recipient, setRecipient] = useState<PlayerSearchItem | null>(null);
+  const [recipientQuery, setRecipientQuery] = useState('');
+  const [recipientResults, setRecipientResults] = useState<PlayerSearchItem[]>([]);
   const [message, setMessage] = useState('');
   const [rows, setRows] = useState<RowForm[]>([{ direction: 'give', kind: 'plant', item_id: '', qty: '' }]);
+
+  useEffect(() => {
+    const q = recipientQuery.trim();
+    if (!q) { setRecipientResults([]); return; }
+    const t = setTimeout(() => {
+      api.playerSearch(q)
+        .then((r) => setRecipientResults(r.slice(0, 8)))
+        .catch(() => setRecipientResults([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [recipientQuery]);
 
   const load = async () => {
     const [inc, out, hist] = await Promise.all([
@@ -89,8 +102,7 @@ export default function TradesPage() {
   }, [items]);
 
   async function submitOffer() {
-    const to = Number(toUserId.trim());
-    if (!to) { setMsg('✗ Укажите ID игрока'); return; }
+    if (!recipient) { setMsg('✗ Выберите игрока из списка'); return; }
     const tradeItems: TradeItemIn[] = [];
     for (const r of rows) {
       const itemId = Number(r.item_id);
@@ -104,9 +116,9 @@ export default function TradesPage() {
     if (!tradeItems.some((i) => i.direction === 'give')) { setMsg('✗ Укажите, что вы отдаёте'); return; }
     setBusy(true); setMsg(null);
     try {
-      await api.createTrade({ to_user_id: to, message: message.trim() || null, items: tradeItems });
+      await api.createTrade({ to_user_id: recipient.vk_id, message: message.trim() || null, items: tradeItems });
       setMsg('✓ Предложение отправлено');
-      setToUserId(''); setMessage('');
+      setRecipient(null); setRecipientQuery(''); setMessage('');
       setRows([{ direction: 'give', kind: 'plant', item_id: '', qty: '' }]);
       await load();
     } catch (e: any) {
@@ -166,8 +178,31 @@ export default function TradesPage() {
 
       {tab === 'create' && (
         <div className="fm-card">
-          <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>ID игрока (найдёте на странице «Фермы игроков»)</label>
-          <input className="fm-input" type="number" value={toUserId} onChange={(e) => setToUserId(e.target.value)} placeholder="Например 795384" style={{ width: 180 }} />
+          <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Игрок (начните вводить имя или ID)</label>
+          {recipient ? (
+            <div className="fm-card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, marginBottom: 8 }}>
+              <span style={{ flex: 1 }}>👤 {recipient.display_name} <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>ID {recipient.vk_id}</span></span>
+              <button className="fm-btn fm-btn-xs fm-btn-outline" onClick={() => { setRecipient(null); setRecipientQuery(''); setRecipientResults([]); }}>✕</button>
+            </div>
+          ) : (
+            <div style={{ position: 'relative' }}>
+              <input
+                className="fm-input"
+                value={recipientQuery}
+                onChange={(e) => setRecipientQuery(e.target.value)}
+                placeholder="Например: Марина или 795384…"
+              />
+              {recipientResults.length > 0 && (
+                <div className="fm-card" style={{ position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 5, padding: 6, marginTop: 4, maxHeight: 240, overflowY: 'auto' }}>
+                  {recipientResults.map((p) => (
+                    <button key={p.vk_id} className="fm-btn fm-btn-outline" style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 4, fontSize: 13 }} onClick={() => setRecipient(p)}>
+                      👤 {p.display_name} <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>ID {p.vk_id} · 🏆 {p.level}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <label style={{ display: 'block', fontSize: 13, margin: '8px 0 2px' }}>Сообщение</label>
           <input className="fm-input" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Короткое сообщение…" />
 
