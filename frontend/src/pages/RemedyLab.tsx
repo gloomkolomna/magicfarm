@@ -126,6 +126,7 @@ export default function RemedyLabPage() {
             {cells.map((cell) => {
               const dev = cell.device;
               const brewing = dev != null && dev.brew_card_id != null;
+              const installed = dev?.build_status === 'built';
               const img = cell.image_url ? mediaUrl(cell.image_url) : null;
               return (
                 <div
@@ -143,6 +144,7 @@ export default function RemedyLabPage() {
                         ? '1px solid rgba(160,120,220,0.65)'
                         : '2px dashed rgba(160,120,220,0.55)',
                     background: brewing ? 'rgba(111,174,74,0.22)' : 'rgba(30,20,50,0.30)',
+                    opacity: installed ? 1 : 0.45,
                     cursor: 'pointer', touchAction: 'manipulation',
                   }}
                 >

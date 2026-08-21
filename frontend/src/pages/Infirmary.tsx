@@ -182,6 +182,7 @@ export function InfirmaryScenePage() {
 
   const [symptoms, setSymptoms] = useState<{ part_code: string; symptoms: string[]; first_time?: boolean; penalty_due?: number } | null>(null);
   const [showHandbook, setShowHandbook] = useState(false);
+  const [penaltyPayOpen, setPenaltyPayOpen] = useState(false);
   const [result, setResult] = useState<DiagnoseResult | null>(null);
   const [showWellbeing, setShowWellbeing] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -391,19 +392,11 @@ export function InfirmaryScenePage() {
       {detail && active && (
         <>
           {(detail.penalty_due ?? 0) > 0 && detail.patient_id != null && (
-            <div style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(64px + var(--vk-inset-bottom, 0px))', zIndex: 30, maxWidth: 560, margin: '0 auto' }}>
-              <div className="fm-card" style={{ background: 'rgba(200,90,90,0.16)', border: '1px solid #c66', padding: 10 }}>
-                <strong style={{ display: 'block', fontSize: 14, color: '#ffb3b3', marginBottom: 4 }}>
-                  ⚠️ Штраф: {detail.penalty_due} ❆ — отшейте его отчётом, чтобы поставить диагноз
-                </strong>
-                <StitchReportForm
-                  contextType="infirmary_penalty"
-                  contextId={detail.patient_id}
-                  required={detail.penalty_due ?? 0}
-                  busy={busy}
-                  onDone={async () => { setMsg('✓ Штраф отшит!'); await load(); }}
-                />
-              </div>
+            <div style={{ position: 'fixed', top: 'calc(44px + var(--vk-inset-top, 0px))', left: 12, right: 12, zIndex: 30, maxWidth: 560, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(200,90,90,0.22)', border: '1px solid #c66', borderRadius: 'var(--radius-md)', padding: '6px 10px', boxShadow: '0 2px 10px rgba(0,0,0,0.35)' }}>
+              <span style={{ flex: 1, fontSize: 13, color: '#ffb3b3', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                ⚠️ Штраф: {detail.penalty_due} ❆ — диагноз после оплаты
+              </span>
+              <button className="fm-btn fm-btn-sm" onClick={() => setPenaltyPayOpen(true)}>💳 Оплатить</button>
             </div>
           )}
 
@@ -491,6 +484,21 @@ export function InfirmaryScenePage() {
               {symptoms.symptoms.map((s, i) => <li key={i}>{s}</li>)}
             </ul>
           )}
+        </Modal>
+      )}
+
+      {penaltyPayOpen && detail && (
+        <Modal title={`⚠️ Штраф: ${detail.penalty_due} ❆`} onClose={() => setPenaltyPayOpen(false)}>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+            Чтобы поставить диагноз, отшейте штраф — {detail.penalty_due} крестиков.
+          </p>
+          <StitchReportForm
+            contextType="infirmary_penalty"
+            contextId={detail.patient_id}
+            required={detail.penalty_due ?? 0}
+            busy={busy}
+            onDone={async () => { setMsg('✓ Штраф отшит!'); setPenaltyPayOpen(false); await load(); }}
+          />
         </Modal>
       )}
 

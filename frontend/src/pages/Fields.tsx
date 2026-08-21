@@ -94,7 +94,7 @@ export default function FieldsPage() {
             <div style={{ marginTop: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
               ⚗️ Зелий для активации: {unactivated.length}
               <span style={{ color: 'var(--text-muted)' }}>
-                {' '}({unactivated.map((p: any) => p.bonus_code || p.potion_name).filter(Boolean).join(', ')})
+                {' '}({unactivated.map((p: any) => p.bonus_description || p.potion_name).filter(Boolean).join(', ')})
               </span>
             </div>
           )}
