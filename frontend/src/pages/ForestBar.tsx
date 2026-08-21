@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import type { Swiper as SwiperInstance } from 'swiper';
+import 'swiper/css';
 import { useSession } from '../context/SessionContext';
-import { api, type BarZone, type CocktailRecipe, type FieldDetail, type FieldInfo, type Shaker } from '../api/endpoints';
+import { api, type BarZone, type FieldDetail, type FieldInfo, type Shaker } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import LocationMap from '../components/LocationMap';
 import Toast from '../components/Toast';
@@ -101,7 +104,9 @@ export function ForestBarScenePage() {
 
   const [showBook, setShowBook] = useState(false);
   const [shakerModal, setShakerModal] = useState(false);
-  const [cardModal, setCardModal] = useState<CocktailRecipe | null>(null);
+  const [swiper, setSwiper] = useState<SwiperInstance | null>(null);
+  const [bookPage, setBookPage] = useState(0);
+  const [bookInitialSlide, setBookInitialSlide] = useState(0);
   const [mixVideoUrl, setMixVideoUrl] = useState<string | null>(null);
   const [mixVideoOpen, setMixVideoOpen] = useState(false);
   const [pendingMixMsg, setPendingMixMsg] = useState<string | null>(null);
@@ -142,7 +147,13 @@ export function ForestBarScenePage() {
   const bookZone = barZones.find((z) => z.zone_kind === 'book') ?? null;
   const cardZones = barZones.filter((z) => z.zone_kind === 'cocktail_card');
   const recipes = field?.cocktail_recipes ?? [];
-  const activeRecipe = recipes.find((r) => r.id === activeShaker?.cocktail_recipe_id) ?? null;
+
+  function openBook(recipeId?: number) {
+    const idx = recipeId == null ? 0 : Math.max(0, recipes.findIndex((r) => r.id === recipeId));
+    setBookInitialSlide(idx);
+    setBookPage(idx);
+    setShowBook(true);
+  }
 
   async function installShaker(recipeId: number) {
     setBusy(true); setMsg(null);
@@ -197,7 +208,7 @@ export function ForestBarScenePage() {
         {field && (
           <>
             {shakerZone && (
-              <ZoneRect cols={field.cols} rows={field.rows} zone={shakerZone} onClick={() => (activeShaker ? setShakerModal(true) : setShowBook(true))}>
+              <ZoneRect cols={field.cols} rows={field.rows} zone={shakerZone} onClick={() => (activeShaker ? setShakerModal(true) : openBook())}>
                 {activeShaker && shakerZone.image_url ? (
                   <img src={mediaUrl(shakerZone.image_url)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
                 ) : (
@@ -210,8 +221,12 @@ export function ForestBarScenePage() {
             )}
 
             {bookZone && (
-              <ZoneRect cols={field.cols} rows={field.rows} zone={bookZone} onClick={() => setShowBook(true)}>
-                <div style={{ fontSize: 'clamp(24px,8vw,52px)', lineHeight: 1 }}>📖</div>
+              <ZoneRect cols={field.cols} rows={field.rows} zone={bookZone} onClick={() => openBook()}>
+                {bookZone.image_url ? (
+                  <img src={mediaUrl(bookZone.image_url)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                ) : (
+                  <div style={{ fontSize: 'clamp(24px,8vw,52px)', lineHeight: 1 }}>📖</div>
+                )}
                 <div style={{ position: 'absolute', left: 2, right: 2, bottom: 1, fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe6c0', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600, background: 'rgba(10,16,8,0.45)', borderRadius: 4, padding: '0 4px' }}>
                   Книга коктейлей
                 </div>
@@ -219,13 +234,13 @@ export function ForestBarScenePage() {
             )}
 
             {cardZones.map((z) => {
-              const cardImg = activeRecipe?.card_image_url || activeRecipe?.image_url || null;
+              const cocktailImg = z.recipe_image || null;
               return (
-                <ZoneRect key={z.id} cols={field.cols} rows={field.rows} zone={z} onClick={() => (activeRecipe ? setCardModal(activeRecipe) : setShowBook(true))}>
-                  {cardImg ? (
-                    <img src={mediaUrl(cardImg)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                <ZoneRect key={z.id} cols={field.cols} rows={field.rows} zone={z} onClick={() => openBook(z.cocktail_recipe_id ?? undefined)}>
+                  {cocktailImg ? (
+                    <img src={mediaUrl(cocktailImg)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
                   ) : (
-                    <div style={{ fontSize: 'clamp(24px,8vw,52px)', lineHeight: 1 }}>🃏</div>
+                    <div style={{ fontSize: 'clamp(24px,8vw,52px)', lineHeight: 1 }}>🍹</div>
                   )}
                 </ZoneRect>
               );
@@ -246,28 +261,61 @@ export function ForestBarScenePage() {
           {recipes.length === 0 ? (
             <div className="fm-card" style={{ color: 'var(--text-muted)' }}>В этом баре нет привязанных коктейлей.</div>
           ) : (
-            <div className="fm-grid">
-              {recipes.map((r) => (
-                <div
-                  key={r.id}
-                  className="fm-card fm-rise"
-                  style={{ textAlign: 'center', cursor: activeShaker || !r.unlocked ? 'default' : 'pointer', opacity: activeShaker ? 0.6 : r.unlocked ? 1 : 0.5 }}
-                  onClick={() => { if (!activeShaker && r.unlocked) installShaker(r.id); }}
-                >
-                  {r.image_url && <img src={mediaUrl(r.image_url)} alt="" style={{ height: 72, maxWidth: '100%', objectFit: 'contain', marginBottom: 6 }} />}
-                  <strong style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>{r.unlocked ? '' : '🔒 '}{r.name}</strong>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>🪙 {r.reward_coins}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                    {r.items.map((i) => COCKTAIL_KIND_ICON[i.kind] || '❓').join(' ')} · {r.items.length} ингр.
-                  </div>
-                  {!r.unlocked && r.patient_name && (
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                      Вылечите «{r.patient_name}»
+            <>
+              <Swiper
+                onSwiper={setSwiper}
+                onSlideChange={(s) => setBookPage(s.activeIndex)}
+                slidesPerView={1}
+                spaceBetween={0}
+                initialSlide={bookInitialSlide}
+                style={{ paddingBottom: 4 }}
+              >
+                {recipes.map((r) => (
+                  <SwiperSlide key={r.id}>
+                    <div style={{ textAlign: 'center' }}>
+                      {(r.card_image_url || r.image_url) ? (
+                        <img
+                          src={mediaUrl(r.card_image_url || r.image_url!)}
+                          alt={r.name}
+                          onClick={() => setZoomedImg(mediaUrl(r.card_image_url || r.image_url!))}
+                          style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 10, objectFit: 'contain', cursor: 'zoom-in' }}
+                        />
+                      ) : (
+                        <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 64, background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>🍹</div>
+                      )}
+                      <div style={{ marginTop: 10 }}>
+                        <strong style={{ fontSize: 17 }}>{r.unlocked ? '' : '🔒 '}{r.name}</strong>
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--accent-warm)', fontWeight: 600, marginTop: 4 }}>
+                        🪙 Награда: {r.reward_coins}
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+                        Состав: {r.items.map((i) => `${i.name || COCKTAIL_KIND_LABEL[i.kind]} ×${i.qty}`).join(', ')}
+                      </div>
+                      {r.description && <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0' }}>{r.description}</p>}
+                      {!r.unlocked && r.patient_name && (
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                          Вылечите «{r.patient_name}»
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                  </SwiperSlide>
+                ))}
+              </Swiper>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                <button className="fm-btn fm-btn-outline" style={{ minWidth: 60 }} disabled={!swiper || swiper.isBeginning} onClick={() => swiper?.slidePrev()}>◀</button>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{bookPage + 1} / {recipes.length}</span>
+                <button className="fm-btn fm-btn-outline" style={{ minWidth: 60 }} disabled={!swiper || swiper.isEnd} onClick={() => swiper?.slideNext()}>▶</button>
+              </div>
+              <button
+                className="fm-btn"
+                style={{ width: '100%', marginTop: 12 }}
+                disabled={busy || !!activeShaker || !recipes[bookPage]?.unlocked}
+                onClick={() => installShaker(recipes[bookPage].id)}
+              >
+                {recipes[bookPage]?.unlocked ? '🍸 Установить шейкер' : '🔒 Рецепт закрыт'}
+              </button>
+            </>
           )}
         </Modal>
       )}
@@ -299,24 +347,6 @@ export function ForestBarScenePage() {
           ) : (
             <div className="fm-card" style={{ fontSize: 13, color: 'var(--text-muted)' }}>Не хватает ингредиентов.</div>
           )}
-        </Modal>
-      )}
-
-      {cardModal && (
-        <Modal title={`🃏 ${cardModal.name}`} onClose={() => setCardModal(null)}>
-          {(cardModal.card_image_url || cardModal.image_url) && (
-            <img
-              src={mediaUrl(cardModal.card_image_url || cardModal.image_url!)}
-              alt=""
-              style={{ width: '100%', maxHeight: 260, objectFit: 'contain', marginBottom: 10, borderRadius: 8, cursor: 'zoom-in' }}
-              onClick={() => setZoomedImg(mediaUrl(cardModal.card_image_url || cardModal.image_url!))}
-            />
-          )}
-          <div style={{ fontSize: 13, color: 'var(--accent-warm)', fontWeight: 600, marginBottom: 6 }}>🪙 Награда: {cardModal.reward_coins}</div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
-            Состав: {cardModal.items.map((i) => `${i.name || COCKTAIL_KIND_LABEL[i.kind]} ×${i.qty}`).join(', ')}
-          </div>
-          {cardModal.description && <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0' }}>{cardModal.description}</p>}
         </Modal>
       )}
 
