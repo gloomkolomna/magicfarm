@@ -167,19 +167,19 @@ def test_gift_plant_uses_grown_image():
     with make_user_client(123, "player") as a:
         res = a.post("/api/gifts", json={"to_user_id": 7001, "kind": "plant", "item_id": 1, "qty": 1})
         assert res.status_code == 201
-        assert res.json()["item_image_url"] == "/api/uploads/grown.png"
+        assert res.json()["item_image_url"] == "/api/uploads/harvested.png"
 
     s = TestingSessionLocal()
     try:
         p = s.query(Plant).filter(Plant.id == 1).first()
-        p.image_grown_url = None
+        p.image_harvested_url = None
         s.commit()
     finally:
         s.close()
     _give_plant(123, 1, 1)
     with make_user_client(123, "player") as a:
         res = a.post("/api/gifts", json={"to_user_id": 7001, "kind": "plant", "item_id": 1, "qty": 1})
-        assert res.json()["item_image_url"] == "/api/uploads/harvested.png"
+        assert res.json()["item_image_url"] == "/api/uploads/grown.png"
 
 
 def test_gift_product_and_ingredient():

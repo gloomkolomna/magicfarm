@@ -1,4 +1,12 @@
+import { useEffect } from 'react';
+
 export default function Toast({ text, onClose }: { text: string | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!text) return;
+    const t = setTimeout(onClose, 3000);
+    return () => clearTimeout(t);
+  }, [text, onClose]);
+
   if (!text) return null;
   return (
     <div

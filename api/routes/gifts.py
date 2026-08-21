@@ -45,7 +45,7 @@ def _gift_meta(db: Session, kind: str, item_id: int) -> tuple[str, str | None, s
         p = db.query(Plant).filter(Plant.id == item_id).first()
         image = None
         if p is not None:
-            image = p.image_grown_url or p.image_harvested_url or p.image_url
+            image = p.image_harvested_url or p.image_grown_url or p.image_url
         return (p.name if p else "?", p.emoji if p else None, image)
     if kind == "product":
         p = db.query(Product).filter(Product.id == item_id).first()
