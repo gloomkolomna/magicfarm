@@ -25,6 +25,8 @@ class ChatMessageOut(BaseModel):
     text: str
     created_at: str
     read: bool
+    kind: str = "text"
+    gift_id: int | None = None
 
 
 class ConversationOut(BaseModel):
@@ -48,6 +50,7 @@ def _msg_out(m: ChatMessage) -> ChatMessageOut:
         id=m.id, from_user_id=m.from_user_id, to_user_id=m.to_user_id,
         text=m.text, created_at=m.created_at.isoformat(),
         read=m.read_at is not None,
+        kind=m.kind or "text", gift_id=m.gift_id,
     )
 
 

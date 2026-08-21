@@ -1405,8 +1405,23 @@ class ChatMessage(Base):
     from_user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
     to_user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
     text = Column(Text, nullable=False)
+    kind = Column(String, nullable=False, default="text", server_default="text")
+    gift_id = Column(Integer, ForeignKey("gifts.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
     read_at = Column(DateTime, nullable=True)
+
+
+class Gift(Base):
+    __tablename__ = "gifts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    from_user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    to_user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    kind = Column(String, nullable=False)
+    item_id = Column(Integer, nullable=False)
+    qty = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+    claimed_at = Column(DateTime, nullable=True)
 
 
 class Notification(Base):

@@ -334,6 +334,8 @@ export interface ChatMessage {
   text: string;
   created_at: string;
   read: boolean;
+  kind?: string;
+  gift_id?: number | null;
 }
 
 export interface Conversation {
@@ -349,6 +351,21 @@ export interface Notification {
   text: string;
   created_at: string;
   read: boolean;
+}
+
+export interface Gift {
+  id: number;
+  from_user_id: number;
+  from_name: string;
+  to_user_id: number;
+  kind: string;
+  item_id: number;
+  item_name: string;
+  item_emoji: string | null;
+  item_image_url: string | null;
+  qty: number;
+  created_at: string | null;
+  claimed: boolean;
 }
 
 export interface Animal {
@@ -2293,4 +2310,11 @@ export const api = {
   notifications: () => client.get<Notification[]>('/notifications').then((r) => r.data),
   notificationUnreadCount: () => client.get<{ count: number }>('/notifications/unread-count').then((r) => r.data),
   markNotificationsRead: () => client.post<{ ok: boolean }>('/notifications/read').then((r) => r.data),
+
+  // ── Подарки ──
+  sendGift: (data: { to_user_id: number; kind: string; item_id: number; qty: number }) =>
+    client.post<Gift>('/gifts', data).then((r) => r.data),
+  receivedGifts: () => client.get<Gift[]>('/gifts/received').then((r) => r.data),
+  giftDetail: (id: number) => client.get<Gift>(`/gifts/${id}`).then((r) => r.data),
+  claimGift: (id: number) => client.post<Gift>(`/gifts/${id}/claim`).then((r) => r.data),
 };

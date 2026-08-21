@@ -4,6 +4,16 @@ import { api, type FieldDetail, type PlayerFarm, type PlayerSearchItem } from '.
 import FieldGridView from '../components/FieldGridView';
 import Toast from '../components/Toast';
 
+interface GiftItem {
+  kind: 'plant' | 'product' | 'ingredient';
+  item_id: number;
+  name: string;
+  emoji: string | null;
+  qty: number;
+}
+
+const GIFT_KIND_LABEL: Record<string, string> = { plant: 'Растение', product: 'Товар', ingredient: 'Ингредиент' };
+
 const PLOT_STATUS_LABEL: Record<string, string> = {
   planted: 'посажено',
   grown: 'выросло',
@@ -23,9 +33,48 @@ export default function FarmsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  const [giftTarget, setGiftTarget] = useState<PlayerSearchItem | null>(null);
+  const [giftItems, setGiftItems] = useState<GiftItem[]>([]);
+  const [giftKind, setGiftKind] = useState<'plant' | 'product' | 'ingredient'>('plant');
+  const [giftItemId, setGiftItemId] = useState('');
+  const [giftQty, setGiftQty] = useState('1');
+
   useEffect(() => {
     api.playerSearch('', 100).then(setAllPlayers).catch(() => {});
   }, []);
+
+  async function openGift(target: PlayerSearchItem) {
+    setGiftTarget(target);
+    setGiftKind('plant');
+    setGiftItemId('');
+    setGiftQty('1');
+    try {
+      const [inv, aph] = await Promise.all([api.inventory(), api.apothecary()]);
+      const all: GiftItem[] = [
+        ...inv.filter((i) => i.item_kind === 'plant').map((i) => ({ kind: 'plant' as const, item_id: i.item_id, name: i.item_name, emoji: i.item_emoji, qty: i.qty })),
+        ...inv.filter((i) => i.item_kind === 'product').map((i) => ({ kind: 'product' as const, item_id: i.item_id, name: i.item_name, emoji: i.item_emoji, qty: i.qty })),
+        ...aph.map((i) => ({ kind: 'ingredient' as const, item_id: i.ingredient_id, name: i.name, emoji: null, qty: i.qty })),
+      ].filter((i) => i.qty > 0);
+      setGiftItems(all);
+    } catch { /* ignore */ }
+  }
+
+  async function sendGift() {
+    if (!giftTarget) return;
+    const itemId = Number(giftItemId);
+    const qty = Number(giftQty) || 1;
+    if (!itemId || qty < 1) { setMsg('✗ Выберите предмет и количество'); return; }
+    const avail = giftItems.find((i) => i.kind === giftKind && i.item_id === itemId);
+    if (avail && qty > avail.qty) { setMsg(`✗ У вас только ${avail.qty} «${avail.name}»`); return; }
+    setBusy(true); setMsg(null);
+    try {
+      await api.sendGift({ to_user_id: giftTarget.vk_id, kind: giftKind, item_id: itemId, qty });
+      setMsg(`✓ Подарок отправлен игроку ${giftTarget.display_name} — он появится у него в чате`);
+      setGiftTarget(null);
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
 
   const results = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -93,7 +142,8 @@ export default function FarmsPage() {
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>ID: {p.vk_id}</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                     <button className="fm-btn fm-btn-sm" style={{ flex: '1 1 45%', minWidth: 0 }} onClick={(e) => { e.stopPropagation(); openFarm(p.vk_id); }}>👁 Смотреть</button>
-                    <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ flex: '1 1 45%', minWidth: 0 }} onClick={(e) => { e.stopPropagation(); writeTo(p.vk_id); }}>💬 Написать</button>
+                    <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ flex: '1 1 45%', minWidth: 0 }} onClick={(e) => { e.stopPropagation(); openGift(p); }}>🎁 Подарок</button>
+                    <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ flex: '1 1 100%', minWidth: 0 }} onClick={(e) => { e.stopPropagation(); writeTo(p.vk_id); }}>💬 Написать</button>
                   </div>
                 </div>
               ))}
@@ -105,6 +155,7 @@ export default function FarmsPage() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
             <button className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy} onClick={() => setFarm(null)}>← Назад</button>
             <button className="fm-btn fm-btn-sm" disabled={busy} onClick={() => writeTo(farm.vk_id)}>💬 Написать</button>
+            <button className="fm-btn fm-btn-sm" disabled={busy} onClick={() => openGift({ vk_id: farm.vk_id, display_name: farm.display_name, level: farm.level, coins: farm.coins, crosses_total: farm.crosses_total })}>🎁 Отправить подарок</button>
           </div>
           <div className="fm-card" style={{ marginBottom: 10 }}>
             <strong style={{ fontSize: 17 }}>👤 {farm.display_name}</strong>
@@ -212,6 +263,35 @@ export default function FarmsPage() {
           </div>
           <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
             <FieldGridView field={viewField} />
+          </div>
+        </div>
+      )}
+
+      {giftTarget && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setGiftTarget(null)}>
+          <div className="fm-card fm-rise" style={{ maxWidth: 420, width: '100%' }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 4px' }}>🎁 Подарок для {giftTarget.display_name}</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>Предмет спишется с вашего склада сразу и появится у игрока в чате.</p>
+            <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Тип</label>
+            <select className="fm-input" value={giftKind} onChange={(e) => { setGiftKind(e.target.value as 'plant' | 'product' | 'ingredient'); setGiftItemId(''); }}>
+              {(['plant', 'product', 'ingredient'] as const).map((k) => <option key={k} value={k}>{GIFT_KIND_LABEL[k]}</option>)}
+            </select>
+            <label style={{ display: 'block', fontSize: 13, margin: '8px 0 2px' }}>Предмет</label>
+            <select className="fm-input" value={giftItemId} onChange={(e) => setGiftItemId(e.target.value)}>
+              <option value="">— выберите —</option>
+              {giftItems.filter((i) => i.kind === giftKind).map((i) => (
+                <option key={`${i.kind}-${i.item_id}`} value={String(i.item_id)}>{i.emoji || ''} {i.name} ({i.qty})</option>
+              ))}
+            </select>
+            {giftItems.filter((i) => i.kind === giftKind).length === 0 && (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>У вас нет таких предметов на складе.</div>
+            )}
+            <label style={{ display: 'block', fontSize: 13, margin: '8px 0 2px' }}>Количество</label>
+            <input className="fm-input" type="number" min={1} value={giftQty} onChange={(e) => setGiftQty(e.target.value)} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+              <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ flex: 1 }} disabled={busy} onClick={() => setGiftTarget(null)}>Отмена</button>
+              <button className="fm-btn fm-btn-sm" style={{ flex: 1 }} disabled={busy || !giftItemId} onClick={sendGift}>🎁 Отправить</button>
+            </div>
           </div>
         </div>
       )}
