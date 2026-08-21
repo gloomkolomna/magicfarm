@@ -51,6 +51,8 @@ const DlcStoryGate = lazy(() =>
 ) as unknown as ComponentType<{ locationCode: string; name: string; emoji: string; children: ReactNode }>;
 const LessonsPage = lazyPage(() => import('./pages/Lessons'));
 const FarmsPage = lazyPage(() => import('./pages/Farms'));
+const TradesPage = lazyPage(() => import('./pages/Trades'));
+const ChatPage = lazyPage(() => import('./pages/Chat'));
 
 const zoomed = { zoom: 'var(--app-scale)', width: 'calc(100% / var(--app-scale))', margin: '0 auto' } as const;
 
@@ -198,6 +200,8 @@ function App() {
           <Route path="/story" element={<MiniAppShell><PrehistoryPage /></MiniAppShell>} />
           <Route path="/lessons" element={<MiniAppShell><LessonsPage /></MiniAppShell>} />
           <Route path="/farms" element={<MiniAppShell><FarmsPage /></MiniAppShell>} />
+          <Route path="/trades" element={<MiniAppShell><TradesPage /></MiniAppShell>} />
+          <Route path="/chat" element={<MiniAppShell><ChatPage /></MiniAppShell>} />
           <Route path="/orders" element={<MiniAppShell><OrdersPage /></MiniAppShell>} />
           <Route path="/orders/catalog" element={<MiniAppShell><OrderCatalogPage /></MiniAppShell>} />
           <Route path="/profile" element={<MiniAppShell><ProfilePage /></MiniAppShell>} />

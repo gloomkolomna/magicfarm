@@ -26,6 +26,8 @@ const BASE_TABS: Tab[] = [
   { path: '/bonuses', label: '⚡ Бонусы', location: 'brewery', hideWhenLocked: true },
   { path: '/inventory', label: '📦 Склад' },
   { path: '/farms', label: '🌾 Фермы игроков' },
+  { path: '/trades', label: '🤝 Бартер' },
+  { path: '/chat', label: '💬 Чат' },
   { path: '/orders', label: '🧺 Заказы' },
   { path: '/achievements', label: '🏆 Достижения' },
   { path: '/collection', label: '🃏 Коллекция', location: 'infirmary', hideWhenLocked: true },

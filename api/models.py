@@ -1358,3 +1358,41 @@ class Lesson(Base):
     video_url = Column(String, nullable=True)
     sort_order = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+
+class TradeOffer(Base):
+    __tablename__ = "trade_offers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    from_user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    to_user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, nullable=False, default="open", server_default="open")
+    message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+    accepted_at = Column(DateTime, nullable=True)
+
+    items = relationship("TradeOfferItem", back_populates="offer", cascade="all, delete-orphan")
+
+
+class TradeOfferItem(Base):
+    __tablename__ = "trade_offer_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    offer_id = Column(Integer, ForeignKey("trade_offers.id", ondelete="CASCADE"), nullable=False)
+    kind = Column(String, nullable=False)
+    item_id = Column(Integer, nullable=False)
+    qty = Column(Integer, nullable=False)
+    direction = Column(String, nullable=False)
+
+    offer = relationship("TradeOffer", back_populates="items")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    from_user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    to_user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+    read_at = Column(DateTime, nullable=True)

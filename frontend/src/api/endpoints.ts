@@ -284,6 +284,53 @@ export interface PlayerFarm {
   pets: FarmPet[];
 }
 
+export interface TradeItemIn {
+  kind: 'plant' | 'product' | 'ingredient';
+  item_id: number;
+  qty: number;
+  direction: 'give' | 'want';
+}
+
+export interface TradeOfferItem {
+  id: number;
+  kind: string;
+  item_id: number;
+  item_name: string;
+  item_emoji: string | null;
+  qty: number;
+  direction: string;
+}
+
+export interface TradeOffer {
+  id: number;
+  from_user_id: number;
+  from_name: string;
+  to_user_id: number;
+  to_name: string;
+  status: string;
+  message: string | null;
+  created_at: string | null;
+  accepted_at: string | null;
+  items: TradeOfferItem[];
+}
+
+export interface ChatMessage {
+  id: number;
+  from_user_id: number;
+  to_user_id: number;
+  text: string;
+  created_at: string;
+  read: boolean;
+}
+
+export interface Conversation {
+  vk_id: number;
+  display_name: string;
+  last_message: string;
+  last_message_at: string | null;
+  unread_count: number;
+}
+
 export interface Animal {
   id: number;
   code: string;
@@ -2198,4 +2245,20 @@ export const api = {
     client.get<PlayerSearchItem[]>('/players/search', { params: { q } }).then((r) => r.data),
   playerFarm: (vkId: number) =>
     client.get<PlayerFarm>(`/players/${vkId}/farm`).then((r) => r.data),
+
+  // ── Бартер ──
+  tradeIncoming: () => client.get<TradeOffer[]>('/trades/incoming').then((r) => r.data),
+  tradeOutgoing: () => client.get<TradeOffer[]>('/trades/outgoing').then((r) => r.data),
+  tradeHistory: () => client.get<TradeOffer[]>('/trades/history').then((r) => r.data),
+  createTrade: (data: { to_user_id: number; message?: string | null; items: TradeItemIn[] }) =>
+    client.post<TradeOffer>('/trades', data).then((r) => r.data),
+  acceptTrade: (id: number) => client.post<TradeOffer>(`/trades/${id}/accept`).then((r) => r.data),
+  cancelTrade: (id: number) => client.post<TradeOffer>(`/trades/${id}/cancel`).then((r) => r.data),
+  rejectTrade: (id: number) => client.post<TradeOffer>(`/trades/${id}/reject`).then((r) => r.data),
+
+  // ── Чат ──
+  chatConversations: () => client.get<Conversation[]>('/chat/conversations').then((r) => r.data),
+  chatThread: (vkId: number) => client.get<ChatMessage[]>(`/chat/with/${vkId}`).then((r) => r.data),
+  sendChatMessage: (vkId: number, text: string) =>
+    client.post<ChatMessage>(`/chat/with/${vkId}`, { text }).then((r) => r.data),
 };
