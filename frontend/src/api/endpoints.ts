@@ -258,6 +258,7 @@ export interface FarmProduction {
 }
 
 export interface FarmItem {
+  item_id: number;
   name: string;
   emoji: string | null;
   qty: number;

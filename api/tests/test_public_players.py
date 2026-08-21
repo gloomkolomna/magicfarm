@@ -75,9 +75,11 @@ def test_farm_returns_read_only_snapshot(player_client):
     assert data["plots"][0]["status"] == "planted"
     assert data["plots"][0]["required"] == 100
     assert len(data["plants"]) == 1
+    assert data["plants"][0]["item_id"] == 1
     assert data["plants"][0]["name"] == "Джекобоб"
     assert data["plants"][0]["qty"] == 3
     assert len(data["products"]) == 1
+    assert data["products"][0]["item_id"] == 1
     assert data["products"][0]["name"] == "Яд"
     assert data["products"][0]["qty"] == 2
 
