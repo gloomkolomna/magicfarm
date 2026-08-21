@@ -43,7 +43,10 @@ class GiftOut(BaseModel):
 def _gift_meta(db: Session, kind: str, item_id: int) -> tuple[str, str | None, str | None]:
     if kind == "plant":
         p = db.query(Plant).filter(Plant.id == item_id).first()
-        return (p.name if p else "?", p.emoji if p else None, p.image_grown_url if p else None)
+        image = None
+        if p is not None:
+            image = p.image_grown_url or p.image_harvested_url or p.image_url
+        return (p.name if p else "?", p.emoji if p else None, image)
     if kind == "product":
         p = db.query(Product).filter(Product.id == item_id).first()
         return (p.name if p else "?", p.emoji if p else None, p.image_url if p else None)
@@ -95,8 +98,8 @@ def get_gift(
     user: User = Depends(get_current_user),
 ):
     g = _get_gift(db, gift_id)
-    if g.to_user_id != user.vk_id and g.from_user_id != user.vk_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Подарок не ваш")
+    if g.to_user_id != user.vk_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Открыть подарок может только получатель")
     return _gift_out(db, g)
 
 

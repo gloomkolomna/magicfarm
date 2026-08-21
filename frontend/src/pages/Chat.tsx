@@ -158,20 +158,28 @@ export default function ChatPage() {
                       border: '1px solid rgba(255,255,255,0.08)',
                     }}>
                       {isGift ? (
-                        <button
-                          onClick={() => openGiftClaim(m.gift_id!)}
-                          style={{
-                            display: 'block', textAlign: 'center', padding: '12px 16px',
-                            background: 'linear-gradient(180deg, rgba(224,168,62,0.18), rgba(224,168,62,0.06))',
-                            border: 'none', borderRadius: 12, cursor: 'pointer', color: 'inherit', width: '100%',
-                          }}
-                        >
-                          <div style={{ fontSize: 40, lineHeight: 1 }}>🎁</div>
-                          <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6, color: '#ffe9b0' }}>
-                            {mine ? 'Вы отправили подарок' : 'Вам пришёл подарок'}
+                        mine ? (
+                          <div style={{ textAlign: 'center', padding: '12px 16px' }}>
+                            <div style={{ fontSize: 40, lineHeight: 1 }}>🎁</div>
+                            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6, color: '#ffe9b0' }}>Вы отправили подарок</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Открыть его может получатель</div>
                           </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Нажмите, чтобы открыть</div>
-                        </button>
+                        ) : (
+                          <button
+                            onClick={() => openGiftClaim(m.gift_id!)}
+                            style={{
+                              display: 'block', textAlign: 'center', padding: '12px 16px',
+                              background: 'linear-gradient(180deg, rgba(224,168,62,0.18), rgba(224,168,62,0.06))',
+                              border: 'none', borderRadius: 12, cursor: 'pointer', color: 'inherit', width: '100%',
+                            }}
+                          >
+                            <div style={{ fontSize: 40, lineHeight: 1 }}>🎁</div>
+                            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6, color: '#ffe9b0' }}>
+                              Вам пришёл подарок
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Нажмите, чтобы открыть</div>
+                          </button>
+                        )
                       ) : (
                         <div style={{ fontSize: 14, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
                       )}
@@ -240,7 +248,11 @@ export default function ChatPage() {
               {giftData.kind === 'plant' ? 'Выращенное растение' : giftData.kind === 'product' ? 'Товар' : 'Ингредиент'} — добавлено на склад
             </div>
             {giftData.claimed ? (
-              <div style={{ marginTop: 12, color: 'var(--success)', fontWeight: 700 }}>✅ Подарок получен!</div>
+              <div style={{ marginTop: 12, color: 'var(--success)', fontWeight: 700 }}>✅ Подарок получен</div>
+            ) : giftData.from_user_id === user?.vk_id ? (
+              <div style={{ marginTop: 12, color: 'var(--text-secondary)', fontSize: 13 }}>
+                🎁 Подарок отправлен — открыть его может получатель
+              </div>
             ) : (
               <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={claimGift}>🎉 Открыть подарок</button>
             )}

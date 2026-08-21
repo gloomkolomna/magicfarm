@@ -141,11 +141,45 @@ def test_claim_gift_requires_recipient():
     _give_plant(123, 1, 2)
     with make_user_client(123, "player") as a:
         gid = a.post("/api/gifts", json={"to_user_id": 7001, "kind": "plant", "item_id": 1, "qty": 1}).json()["id"]
-    with make_user_client(123, "player") as a:
+        assert a.get(f"/api/gifts/{gid}").status_code == 403
         assert a.post(f"/api/gifts/{gid}/claim").status_code == 403
     with make_user_client(7002, "player") as c:
         assert c.post(f"/api/gifts/{gid}/claim").status_code == 403
         assert c.get(f"/api/gifts/{gid}").status_code == 403
+    with make_user_client(7001, "player") as b:
+        assert b.get(f"/api/gifts/{gid}").status_code == 200
+
+
+def test_gift_plant_uses_grown_image():
+    from models import Plant
+
+    _add_user(7001)
+    s = TestingSessionLocal()
+    try:
+        p = s.query(Plant).filter(Plant.id == 1).first()
+        p.image_url = "/api/uploads/main.png"
+        p.image_grown_url = "/api/uploads/grown.png"
+        p.image_harvested_url = "/api/uploads/harvested.png"
+        s.commit()
+    finally:
+        s.close()
+    _give_plant(123, 1, 1)
+    with make_user_client(123, "player") as a:
+        res = a.post("/api/gifts", json={"to_user_id": 7001, "kind": "plant", "item_id": 1, "qty": 1})
+        assert res.status_code == 201
+        assert res.json()["item_image_url"] == "/api/uploads/grown.png"
+
+    s = TestingSessionLocal()
+    try:
+        p = s.query(Plant).filter(Plant.id == 1).first()
+        p.image_grown_url = None
+        s.commit()
+    finally:
+        s.close()
+    _give_plant(123, 1, 1)
+    with make_user_client(123, "player") as a:
+        res = a.post("/api/gifts", json={"to_user_id": 7001, "kind": "plant", "item_id": 1, "qty": 1})
+        assert res.json()["item_image_url"] == "/api/uploads/harvested.png"
 
 
 def test_gift_product_and_ingredient():
