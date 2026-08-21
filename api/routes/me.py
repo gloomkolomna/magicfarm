@@ -27,6 +27,7 @@ class MeResponse(BaseModel):
     unlocked_plot_level: int
     unlocked_garden_level: int
     onboarding_done: bool
+    story_seen: bool
     plots_placed: int
     locked_locations: list[str]
 
@@ -51,6 +52,7 @@ def get_me(
         unlocked_plot_level=user.unlocked_plot_level or 1,
         unlocked_garden_level=user.unlocked_garden_level or 0,
         onboarding_done=bool(user.onboarding_done),
+        story_seen=bool(user.story_seen),
         plots_placed=count_route_plots(db, user.vk_id),
         locked_locations=locked_locations_for(user, db),
     )

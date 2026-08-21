@@ -15,6 +15,7 @@ export interface MeUser {
   unlocked_plot_level: number;
   unlocked_garden_level: number;
   onboarding_done: boolean;
+  story_seen: boolean;
   plots_placed: number;
   locked_locations: string[];
 }

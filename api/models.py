@@ -82,6 +82,7 @@ class User(Base):
     production_norm_l2 = Column(Integer, nullable=True)
     production_norm_l3 = Column(Integer, nullable=True)
     onboarding_done = Column(Boolean, nullable=False, default=False, server_default="0")
+    story_seen = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     plots = relationship("Plot", back_populates="user", cascade="all, delete-orphan")
@@ -1322,3 +1323,38 @@ class Shaker(Base):
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     recipe = relationship("CocktailRecipe")
+
+
+class StorySlide(Base):
+    __tablename__ = "story_slides"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    image_url = Column(String, nullable=True)
+    text = Column(Text, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0, server_default="0")
+    location_code = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+
+class UserDlcStoryView(Base):
+    __tablename__ = "user_dlc_story_views"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    location_code = Column(String, nullable=False)
+    seen_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "location_code", name="uq_userdlcstoryview_user_location"),
+    )
+
+
+class Lesson(Base):
+    __tablename__ = "lessons"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    video_url = Column(String, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)

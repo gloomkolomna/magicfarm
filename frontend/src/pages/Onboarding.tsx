@@ -104,7 +104,12 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
       .finally(() => setBusy(false));
   }
 
-  const allFilled = COLORS.every((c) => Number(norms[c.color].norm) >= 1) && Number(diceNorm) >= 1;
+  const allFilled =
+    COLORS.every((c) => Number(norms[c.color].norm) >= 1) &&
+    Number(diceNorm) >= 1 &&
+    Number(animalProductNorm) >= 1 &&
+    ([1, 2, 3] as const).every((lvl) => Number(studyNorms[`level${lvl}`]) >= 1) &&
+    ([1, 2, 3] as const).every((lvl) => Number(productionNorms[`level${lvl}`]) >= 1);
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
@@ -266,7 +271,7 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
           </button>
           {!allFilled && (
             <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: 6 }}>
-              Заполните норму каждого цвета (от 1) и норму кубика (от 1).
+              Заполните все поля: норму каждого цвета (от 1), норму кубика, продукцию животного, нормы изучения и производства (ур. 1–3) — иначе продолжить игру нельзя.
             </p>
           )}
         </>

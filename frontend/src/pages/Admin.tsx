@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, BODY_PARTS, BODY_PART_LABELS, LOCATION_TITLES, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type AllowedPlayer, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CocktailItemIn, type CocktailRecipeAdmin, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient, type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport } from '../api/endpoints';
+import { api, BODY_PARTS, BODY_PART_LABELS, LOCATION_TITLES, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type AllowedPlayer, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CocktailItemIn, type CocktailRecipeAdmin, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient,   type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport, type StorySlide, type Lesson, type DlcLocation } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import Toast from '../components/Toast';
@@ -66,7 +66,7 @@ function matchesAny(item: unknown, q: string): boolean {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'cocktail-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs' | 'ingredients' | 'infirmary'>('players');
+  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'cocktail-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs' | 'ingredients' | 'infirmary' | 'story' | 'lessons'>('players');
   const [players, setPlayers] = useState<Player[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
@@ -95,6 +95,17 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  // ── Предыстория ──
+  const [storySlides, setStorySlides] = useState<StorySlide[]>([]);
+  const [dlcLocations, setDlcLocations] = useState<DlcLocation[]>([]);
+  const [storyForm, setStoryForm] = useState<{ text: string; sort_order: string; location_code: string }>({ text: '', sort_order: '0', location_code: '' });
+  const [storyEditingId, setStoryEditingId] = useState<number | null>(null);
+
+  // ── Видео-уроки ──
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [lessonForm, setLessonForm] = useState<{ title: string; description: string; sort_order: string }>({ title: '', description: '', sort_order: '0' });
+  const [lessonEditingId, setLessonEditingId] = useState<number | null>(null);
 
   // ── Карты-локации ──
   const [fields, setFields] = useState<FieldInfo[]>([]);
@@ -152,6 +163,12 @@ export default function AdminPage() {
     }
     if (tab === 'productions' && !r.has('productions')) { r.add('productions'); api.adminProductionTemplates().then(setProdTemplates).catch(() => {}); }
     if (tab === 'media' && !r.has('media')) { r.add('media'); api.adminGameMedia().then(setGameMedia).catch(() => {}); }
+    if (tab === 'story' && !r.has('story')) {
+      r.add('story');
+      api.adminStorySlides().then(setStorySlides).catch(() => {});
+      api.adminDlcLocations().then(setDlcLocations).catch(() => {});
+    }
+    if (tab === 'lessons' && !r.has('lessons')) { r.add('lessons'); api.adminLessons().then(setLessons).catch(() => {}); }
     if (tab === 'crystal-cards' && !r.has('crystal-cards')) { r.add('crystal-cards'); api.adminCrystalCards().then(setCrystalCards).catch(() => {}); }
     if ((tab === 'orders' || tab === 'customers') && !r.has('orders')) {
       r.add('orders');
@@ -2054,6 +2071,68 @@ export default function AdminPage() {
     finally { setBusy(false); }
   }
 
+  // ── Предыстория ──
+  async function saveStorySlide() {
+    if (!storyForm.text.trim()) { setMsg('✗ Введите текст'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const data = { text: storyForm.text.trim(), sort_order: Number(storyForm.sort_order) || 0, location_code: storyForm.location_code || null };
+      if (storyEditingId) await api.adminUpdateStorySlide(storyEditingId, data);
+      else await api.adminCreateStorySlide(data);
+      setMsg('✓ Слайд сохранён');
+      setStoryForm({ text: '', sort_order: '0', location_code: '' });
+      setStoryEditingId(null);
+      setStorySlides(await api.adminStorySlides());
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  async function uploadStoryImage(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadStorySlideImage(id, file); setStorySlides(await api.adminStorySlides()); setMsg('✓ Картинка загружена'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  async function deleteStorySlide(id: number) {
+    if (!(await confirmDialog('Удалить слайд предыстории?'))) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeleteStorySlide(id); setStorySlides(await api.adminStorySlides()); setMsg('✓ Удалено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  // ── Видео-уроки ──
+  async function saveLesson() {
+    if (!lessonForm.title.trim()) { setMsg('✗ Введите название'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const data = { title: lessonForm.title.trim(), description: lessonForm.description.trim() || null, sort_order: Number(lessonForm.sort_order) || 0 };
+      if (lessonEditingId) await api.adminUpdateLesson(lessonEditingId, data);
+      else await api.adminCreateLesson(data);
+      setMsg('✓ Урок сохранён');
+      setLessonForm({ title: '', description: '', sort_order: '0' });
+      setLessonEditingId(null);
+      setLessons(await api.adminLessons());
+    } catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  async function uploadLessonVideo(id: number, file: File) {
+    setBusy(true); setMsg(null);
+    try { await api.adminUploadLessonVideo(id, file); setLessons(await api.adminLessons()); setMsg('✓ Видео загружено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
+  async function deleteLesson(id: number) {
+    if (!(await confirmDialog('Удалить урок?'))) return;
+    setBusy(true); setMsg(null);
+    try { await api.adminDeleteLesson(id); setLessons(await api.adminLessons()); setMsg('✓ Удалено'); }
+    catch (e: any) { setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')); }
+    finally { setBusy(false); }
+  }
+
   async function uploadCrystalCardImage(id: number, file: File) {
     setBusy(true); setMsg(null);
     try { await api.adminUploadCrystalCardImage(id, file); setCrystalCards(await api.adminCrystalCards()); setMsg('✓ Картинка загружена'); }
@@ -2128,6 +2207,8 @@ export default function AdminPage() {
   const shownMedia = fl(gameMedia);
   const shownCards = fl(crystalCards);
   const shownAchievements = fl(achievements);
+  const shownStorySlides = fl(storySlides);
+  const shownLessons = fl(lessons);
   const shownSettings = fl(SETTING_FIELDS);
 
   const totals: Record<string, { total: number; shown: number }> = {
@@ -2147,6 +2228,8 @@ export default function AdminPage() {
     media: { total: gameMedia.length, shown: shownMedia.length },
     'crystal-cards': { total: crystalCards.length, shown: shownCards.length },
     achievements: { total: achievements.length, shown: shownAchievements.length },
+    story: { total: storySlides.length, shown: shownStorySlides.length },
+    lessons: { total: lessons.length, shown: shownLessons.length },
     settings: { total: SETTING_FIELDS.length, shown: shownSettings.length },
   };
 
@@ -2172,6 +2255,8 @@ export default function AdminPage() {
         <TabBtn active={tab === 'ingredients'} onClick={() => { setTab('ingredients'); loadIngredients(); }}>⚗️ Ингредиенты</TabBtn>
         <TabBtn active={tab === 'infirmary'} onClick={() => { setTab('infirmary'); loadInfirmary(); }}>🌲 Лечебница</TabBtn>
         <TabBtn active={tab === 'media'} onClick={() => setTab('media')}>🎬 Медиа</TabBtn>
+        <TabBtn active={tab === 'story'} onClick={() => setTab('story')}>📜 Предыстория</TabBtn>
+        <TabBtn active={tab === 'lessons'} onClick={() => setTab('lessons')}>🎬 Уроки</TabBtn>
         <TabBtn active={tab === 'crystal-cards'} onClick={() => setTab('crystal-cards')}>🃏 Карты</TabBtn>
         <TabBtn active={tab === 'achievements'} onClick={() => { setTab('achievements'); loadAchievements(); }}>🏆 Достижения</TabBtn>
         <TabBtn active={tab === 'logs'} onClick={() => setTab('logs')}>📜 Логи</TabBtn>
@@ -2673,6 +2758,7 @@ export default function AdminPage() {
                             <option value="shop">🛒 Городская лавка</option>
                             <option value="infirmary">🌲 Лесная лечебница</option>
                             <option value="remedy_lab">⚗️ Лаборатория снадобий</option>
+                            <option value="forest_bar">🍹 Лесной бар</option>
                           </select>
                         </div>
                         <div style={{ marginTop: 8 }}>
@@ -2957,6 +3043,103 @@ export default function AdminPage() {
               </div>
               {gameMedia.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Медиа пока нет. Выберите тип из списка и создайте запись для загрузки файла.</div>}
               {qActive && shownMedia.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{NO_MATCH}</div>}
+            </div>
+          )}
+
+          {tab === 'story' && (
+            <div>
+              <h2 style={{ marginTop: 0 }}>📜 Предыстория</h2>
+              <div className="fm-card" style={{ marginBottom: 10 }}>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Текст слайда</label>
+                <textarea className="fm-input" rows={4} value={storyForm.text} onChange={(e) => setStoryForm({ ...storyForm, text: e.target.value })} placeholder="Текст слайда предыстории…" />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Локация (DLC)</label>
+                    <select className="fm-input" value={storyForm.location_code} onChange={(e) => setStoryForm({ ...storyForm, location_code: e.target.value })} style={{ width: 200 }}>
+                      <option value="">— общая предыстория —</option>
+                      {dlcLocations.map((l) => <option key={l.code} value={l.code}>{l.name} ({l.code})</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Порядок</label>
+                    <input className="fm-input" type="number" min={0} value={storyForm.sort_order} onChange={(e) => setStoryForm({ ...storyForm, sort_order: e.target.value })} style={{ width: 90 }} />
+                  </div>
+                  <button type="button" className="fm-btn" disabled={busy} onClick={saveStorySlide}>
+                    {storyEditingId ? '✎ Сохранить' : '➕ Добавить слайд'}
+                  </button>
+                  {storyEditingId && (
+                    <button type="button" className="fm-btn" onClick={() => { setStoryEditingId(null); setStoryForm({ text: '', sort_order: '0', location_code: '' }); }}>Отмена</button>
+                  )}
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '8px 0 0' }}>
+                  «Общая предыстория» показывается игроку один раз при входе, до настройки норм. Слайды DLC-локации показываются при первом открытии дополнения.
+                </p>
+              </div>
+              <div className="fm-grid">
+                {shownStorySlides.map((s) => (
+                  <div key={s.id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
+                    {s.image_url && <img src={mediaUrl(s.image_url)} alt="" style={{ width: '100%', maxHeight: 120, objectFit: 'contain', borderRadius: 'var(--radius-sm)', marginBottom: 6 }} />}
+                    <strong style={{ display: 'block', marginBottom: 4 }}>#{s.sort_order} {s.location_code ? `· ${s.location_code}` : ''}</strong>
+                    <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text-secondary)', marginBottom: 6 }}>{s.text || '—'}</div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button type="button" className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setStoryEditingId(s.id); setStoryForm({ text: s.text || '', sort_order: String(s.sort_order), location_code: s.location_code || '' }); }}>✎</button>
+                      <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
+                        🖼️
+                        <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadStoryImage(s.id, f); e.target.value = ''; }} />
+                      </label>
+                      <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteStorySlide(s.id)}>🗑</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {storySlides.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Слайдов пока нет — добавьте предысторию.</div>}
+              {qActive && shownStorySlides.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{NO_MATCH}</div>}
+            </div>
+          )}
+
+          {tab === 'lessons' && (
+            <div>
+              <h2 style={{ marginTop: 0 }}>🎬 Видео-уроки</h2>
+              <div className="fm-card" style={{ marginBottom: 10 }}>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Название</label>
+                <input className="fm-input" value={lessonForm.title} onChange={(e) => setLessonForm({ ...lessonForm, title: e.target.value })} placeholder="Например: как сажать растения" />
+                <label style={{ display: 'block', margin: '8px 0 4px', fontSize: 13 }}>Описание</label>
+                <textarea className="fm-input" rows={3} value={lessonForm.description} onChange={(e) => setLessonForm({ ...lessonForm, description: e.target.value })} placeholder="Короткое описание урока…" />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Порядок</label>
+                    <input className="fm-input" type="number" min={0} value={lessonForm.sort_order} onChange={(e) => setLessonForm({ ...lessonForm, sort_order: e.target.value })} style={{ width: 90 }} />
+                  </div>
+                  <button type="button" className="fm-btn" disabled={busy} onClick={saveLesson} style={{ marginTop: 18 }}>
+                    {lessonEditingId ? '✎ Сохранить' : '➕ Добавить урок'}
+                  </button>
+                  {lessonEditingId && (
+                    <button type="button" className="fm-btn" style={{ marginTop: 18 }} onClick={() => { setLessonEditingId(null); setLessonForm({ title: '', description: '', sort_order: '0' }); }}>Отмена</button>
+                  )}
+                </div>
+              </div>
+              <div className="fm-grid">
+                {shownLessons.map((l) => (
+                  <div key={l.id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
+                    <strong>{l.title}</strong>
+                    {l.video_url && (
+                      <video src={mediaUrl(l.video_url)} controls playsInline style={{ width: '100%', maxHeight: 160, borderRadius: 8, marginTop: 6, marginBottom: 6 }} />
+                    )}
+                    <div style={{ color: 'var(--text-secondary)', marginTop: 4, whiteSpace: 'pre-wrap' }}>{l.description || '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>#{l.sort_order}</div>
+                    <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+                      <button type="button" className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setLessonEditingId(l.id); setLessonForm({ title: l.title, description: l.description || '', sort_order: String(l.sort_order) }); }}>✎</button>
+                      <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
+                        🎬
+                        <input type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLessonVideo(l.id, f); e.target.value = ''; }} />
+                      </label>
+                      <button type="button" className="fm-btn fm-btn-xs fm-btn-danger" disabled={busy} onClick={() => deleteLesson(l.id)}>🗑</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {lessons.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Уроков пока нет.</div>}
+              {qActive && shownLessons.length === 0 && <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{NO_MATCH}</div>}
             </div>
           )}
 

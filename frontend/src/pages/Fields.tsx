@@ -20,7 +20,7 @@ const FIELD_KIND_LABEL: Record<string, string> = {
   default: '🗺️ Поля',
 };
 
-const HIDDEN_KINDS = new Set(['meadow', 'shop', 'infirmary', 'remedy_lab', 'brewery']);
+const HIDDEN_KINDS = new Set(['meadow', 'shop', 'infirmary', 'remedy_lab', 'brewery', 'forest_bar']);
 
 function groupByCategory(fields: FieldInfo[]): { category: string; items: FieldInfo[] }[] {
   const map = new Map<string, FieldInfo[]>();

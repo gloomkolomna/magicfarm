@@ -207,6 +207,83 @@ export interface CrystalNormsMine {
   production_norms: LevelNorms;
 }
 
+export interface StorySlide {
+  id: number;
+  image_url: string | null;
+  text: string | null;
+  sort_order: number;
+  location_code?: string | null;
+}
+
+export interface DlcStory {
+  slides: StorySlide[];
+  seen: boolean;
+}
+
+export interface DlcLocation {
+  code: string;
+  name: string;
+}
+
+export interface Lesson {
+  id: number;
+  title: string;
+  description: string | null;
+  video_url: string | null;
+  sort_order: number;
+}
+
+export interface PlayerSearchItem {
+  vk_id: number;
+  display_name: string;
+  level: number;
+  coins: number;
+  crosses_total: number;
+}
+
+export interface FarmPlot {
+  plant_name: string | null;
+  plant_emoji: string | null;
+  status: string;
+  accumulated: number;
+  required: number;
+}
+
+export interface FarmProduction {
+  kind: string;
+  name: string;
+  status: string;
+  accumulated: number;
+  required: number;
+}
+
+export interface FarmItem {
+  name: string;
+  emoji: string | null;
+  qty: number;
+}
+
+export interface FarmPet {
+  name: string;
+  emoji: string | null;
+}
+
+export interface PlayerFarm {
+  vk_id: number;
+  display_name: string;
+  level: number;
+  coins: number;
+  crosses_total: number;
+  round: number;
+  achievements_total: number;
+  plots: FarmPlot[];
+  productions: FarmProduction[];
+  plants: FarmItem[];
+  products: FarmItem[];
+  ingredients: FarmItem[];
+  pets: FarmPet[];
+}
+
 export interface Animal {
   id: number;
   code: string;
@@ -2081,4 +2158,44 @@ export const api = {
     client.post<InfirmaryZone>(`/admin/fields/${fieldId}/infirmary-zones`, data).then((r) => r.data),
   adminDeleteInfirmaryZone: (fieldId: number, id: number) =>
     client.delete(`/admin/fields/${fieldId}/infirmary-zones/${id}`).then((r) => r.data),
+
+  // ── Предыстория ──
+  storySlides: () => client.get<StorySlide[]>('/story/slides').then((r) => r.data),
+  markStorySeen: () => client.post<{ ok: boolean }>('/story/seen').then((r) => r.data),
+  storyDlc: (code: string) => client.get<DlcStory>(`/story/dlc/${code}`).then((r) => r.data),
+  markStoryDlcSeen: (code: string) => client.post<{ ok: boolean }>(`/story/dlc/${code}/seen`).then((r) => r.data),
+  adminStorySlides: () => client.get<StorySlide[]>('/admin/story/slides').then((r) => r.data),
+  adminDlcLocations: () => client.get<DlcLocation[]>('/admin/story/dlc-locations').then((r) => r.data),
+  adminCreateStorySlide: (data: { text?: string | null; sort_order: number; location_code?: string | null }) =>
+    client.post<StorySlide>('/admin/story/slides', data).then((r) => r.data),
+  adminUpdateStorySlide: (id: number, data: { text?: string | null; sort_order?: number; location_code?: string | null }) =>
+    client.put<StorySlide>(`/admin/story/slides/${id}`, data).then((r) => r.data),
+  adminUploadStorySlideImage: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return client.put<StorySlide>(`/admin/story/slides/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminDeleteStorySlide: (id: number) =>
+    client.delete(`/admin/story/slides/${id}`).then((r) => r.data),
+
+  // ── Видео-уроки ──
+  lessons: () => client.get<Lesson[]>('/lessons').then((r) => r.data),
+  adminLessons: () => client.get<Lesson[]>('/admin/lessons').then((r) => r.data),
+  adminCreateLesson: (data: { title: string; description?: string | null; sort_order: number }) =>
+    client.post<Lesson>('/admin/lessons', data).then((r) => r.data),
+  adminUpdateLesson: (id: number, data: { title?: string; description?: string | null; sort_order?: number }) =>
+    client.put<Lesson>(`/admin/lessons/${id}`, data).then((r) => r.data),
+  adminUploadLessonVideo: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return client.put<Lesson>(`/admin/lessons/${id}/video`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  adminDeleteLesson: (id: number) =>
+    client.delete(`/admin/lessons/${id}`).then((r) => r.data),
+
+  // ── Чужие фермы (только просмотр) ──
+  playerSearch: (q: string) =>
+    client.get<PlayerSearchItem[]>('/players/search', { params: { q } }).then((r) => r.data),
+  playerFarm: (vkId: number) =>
+    client.get<PlayerFarm>(`/players/${vkId}/farm`).then((r) => r.data),
 };

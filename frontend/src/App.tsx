@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode, type ComponentType } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useVkBridge } from './context/VkBridgeContext';
 import { useSession } from './context/SessionContext';
@@ -44,6 +44,13 @@ const ForestBarScenePage = lazyPage(() => import('./pages/ForestBar').then((m) =
 const BonusesPage = lazyPage(() => import('./pages/Bonuses'));
 const AchievementsPage = lazyPage(() => import('./pages/Achievements'));
 const Onboarding = lazyPage(() => import('./pages/Onboarding'));
+const PrehistoryPage = lazyPage(() => import('./pages/Prehistory').then((m) => ({ default: m.PrehistoryPage })));
+const Prehistory = lazyPage(() => import('./pages/Prehistory')) as unknown as ComponentType<{ onDone?: () => void }>;
+const DlcStoryGate = lazy(() =>
+  import('./pages/Prehistory').then((m) => ({ default: m.DlcStoryGate as unknown as ComponentType })).catch(reloadOnStaleChunk),
+) as unknown as ComponentType<{ locationCode: string; name: string; emoji: string; children: ReactNode }>;
+const LessonsPage = lazyPage(() => import('./pages/Lessons'));
+const FarmsPage = lazyPage(() => import('./pages/Farms'));
 
 const zoomed = { zoom: 'var(--app-scale)', width: 'calc(100% / var(--app-scale))', margin: '0 auto' } as const;
 
@@ -105,7 +112,7 @@ function StubPage() {
 
 function App() {
   const { vkUserId, loading } = useVkBridge();
-  const { user, loading: sessionLoading, error: sessionError } = useSession();
+  const { user, loading: sessionLoading, error: sessionError, refresh } = useSession();
 
   useEffect(() => { installGlobalErrorReporters(); }, []);
 
@@ -140,7 +147,20 @@ function App() {
       </>
     );
   }
-  if (user && !user.onboarding_done) {
+  if (user && !user.story_seen) {
+    return (
+      <>
+        <Background />
+        <div style={zoomed}>
+          <div style={{ maxWidth: 'calc(var(--shell-max-width) * 0.8)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
+            <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>📜 Предыстория</h1>
+            <Suspense fallback={<Skeleton />}><Prehistory onDone={() => refresh()} /></Suspense>
+          </div>
+        </div>
+      </>
+    );
+  }
+  if (user && user.story_seen && !user.onboarding_done) {
     return (
       <>
         <Background />
@@ -161,12 +181,12 @@ function App() {
           <Route path="/field/:id" element={<FieldPage />} />
           <Route path="/meadow/:id" element={<MeadowPage />} />
           <Route path="/shop/:id" element={<ShopPage />} />
-          <Route path="/infirmary" element={<LocationGate location="infirmary"><MiniAppShell><InfirmaryPage /></MiniAppShell></LocationGate>} />
-          <Route path="/infirmary/:id" element={<LocationGate location="infirmary"><InfirmaryScenePage /></LocationGate>} />
+          <Route path="/infirmary" element={<LocationGate location="infirmary"><DlcStoryGate locationCode="infirmary" name="Лесная лечебница" emoji="🌲"><MiniAppShell><InfirmaryPage /></MiniAppShell></DlcStoryGate></LocationGate>} />
+          <Route path="/infirmary/:id" element={<LocationGate location="infirmary"><DlcStoryGate locationCode="infirmary" name="Лесная лечебница" emoji="🌲"><InfirmaryScenePage /></DlcStoryGate></LocationGate>} />
           <Route path="/remedy-lab/:id" element={<LocationGate location="infirmary"><RemedyLabPage /></LocationGate>} />
           <Route path="/meadow/:id" element={<LocationGate location="infirmary"><MeadowPage /></LocationGate>} />
-          <Route path="/brewery" element={<LocationGate location="brewery"><MiniAppShell><BreweryHubPage /></MiniAppShell></LocationGate>} />
-          <Route path="/brewery/:id" element={<LocationGate location="brewery"><BreweryScenePage /></LocationGate>} />
+          <Route path="/brewery" element={<LocationGate location="brewery"><DlcStoryGate locationCode="brewery" name="Зельеварение" emoji="🧪"><MiniAppShell><BreweryHubPage /></MiniAppShell></DlcStoryGate></LocationGate>} />
+          <Route path="/brewery/:id" element={<LocationGate location="brewery"><DlcStoryGate locationCode="brewery" name="Зельеварение" emoji="🧪"><BreweryScenePage /></DlcStoryGate></LocationGate>} />
           <Route path="/forest-bar" element={<LocationGate location="infirmary"><MiniAppShell><ForestBarHubPage /></MiniAppShell></LocationGate>} />
           <Route path="/forest-bar/:id" element={<LocationGate location="infirmary"><ForestBarScenePage /></LocationGate>} />
           <Route path="/potions" element={<Navigate to="/brewery" replace />} />
@@ -175,6 +195,9 @@ function App() {
           <Route path="/library" element={<MiniAppShell><LibraryPage /></MiniAppShell>} />
           <Route path="/bonuses" element={<LocationGate location="brewery"><MiniAppShell><BonusesPage /></MiniAppShell></LocationGate>} />
           <Route path="/achievements" element={<MiniAppShell><AchievementsPage /></MiniAppShell>} />
+          <Route path="/story" element={<MiniAppShell><PrehistoryPage /></MiniAppShell>} />
+          <Route path="/lessons" element={<MiniAppShell><LessonsPage /></MiniAppShell>} />
+          <Route path="/farms" element={<MiniAppShell><FarmsPage /></MiniAppShell>} />
           <Route path="/orders" element={<MiniAppShell><OrdersPage /></MiniAppShell>} />
           <Route path="/orders/catalog" element={<MiniAppShell><OrderCatalogPage /></MiniAppShell>} />
           <Route path="/profile" element={<MiniAppShell><ProfilePage /></MiniAppShell>} />

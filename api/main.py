@@ -38,6 +38,9 @@ from routes.shop import router as shop_router
 from routes.admin_infirmary import router as admin_infirmary_router
 from routes.infirmary import router as infirmary_router
 from routes.remedy_lab import router as remedy_lab_router
+from routes.story import router as story_router, admin_router as admin_story_router
+from routes.lessons import router as lessons_router, admin_router as admin_lessons_router
+from routes.public_players import router as public_players_router
 
 init_db()
 
@@ -100,6 +103,11 @@ app.include_router(shop_router)
 app.include_router(admin_infirmary_router)
 app.include_router(infirmary_router)
 app.include_router(remedy_lab_router)
+app.include_router(story_router)
+app.include_router(admin_story_router)
+app.include_router(lessons_router)
+app.include_router(admin_lessons_router)
+app.include_router(public_players_router)
 
 
 @app.get("/api/")
