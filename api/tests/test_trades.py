@@ -140,6 +140,15 @@ def test_trade_flow_accept_transfers():
         oid = created.json()["id"]
         assert created.json()["message"] == "Меняемся?"
         assert [o["id"] for o in a.get("/api/trades/outgoing").json()] == [oid]
+        give_items = [i for i in created.json()["items"] if i["direction"] == "give"]
+        assert len(give_items) == 2 and all(i["reserved"] for i in give_items)
+
+    s = TestingSessionLocal()
+    try:
+        assert s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).first().qty == 3
+        assert s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.product_id == 1).first().qty == 1
+    finally:
+        s.close()
 
     with make_user_client(7002, "player") as b:
         assert [o["id"] for o in b.get("/api/trades/incoming").json()] == [oid]
@@ -188,20 +197,97 @@ def test_cancel_by_offerer():
         assert any(o["id"] == oid and o["status"] == "cancelled" for o in hist)
 
 
-def test_accept_fails_when_giver_stock_gone():
+def test_accept_fails_when_recipient_want_gone():
+    from models import TradeHold
+
     _add_user(7001)
     _add_user(7002)
-    _give_plant(7001, 1, 1)
+    ing_id = _make_ingredient()
+    _give_plant(7001, 1, 2)
+    _give_ingredient(7002, ing_id, 1)
     with make_user_client(7001, "player") as a:
         oid = a.post("/api/trades", json=_offer_payload(
-            7002, [{"kind": "plant", "item_id": 1, "qty": 1, "direction": "give"}],
+            7002, [
+                {"kind": "plant", "item_id": 1, "qty": 1, "direction": "give"},
+                {"kind": "ingredient", "item_id": ing_id, "qty": 1, "direction": "want"},
+            ],
         )).json()["id"]
     s = TestingSessionLocal()
     try:
-        row = s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).first()
+        row = s.query(UserIngredient).filter(
+            UserIngredient.user_id == 7002, UserIngredient.ingredient_id == ing_id
+        ).first()
         row.qty = 0
         s.commit()
     finally:
         s.close()
     with make_user_client(7002, "player") as b:
-        assert b.post(f"/api/trades/{oid}/accept").status_code == 400
+        res = b.post(f"/api/trades/{oid}/accept")
+        assert res.status_code == 400
+    s = TestingSessionLocal()
+    try:
+        assert s.query(TradeHold).filter(TradeHold.offer_id == oid).count() == 1
+        assert s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).first().qty == 1
+    finally:
+        s.close()
+
+
+def test_create_reserves_give_items():
+    from models import TradeHold
+
+    _add_user(7001)
+    _add_user(7002)
+    _give_plant(7001, 1, 3)
+    with make_user_client(7001, "player") as a:
+        oid = a.post("/api/trades", json=_offer_payload(
+            7002, [{"kind": "plant", "item_id": 1, "qty": 2, "direction": "give"}],
+        )).json()["id"]
+    s = TestingSessionLocal()
+    try:
+        row = s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).first()
+        assert row is not None and row.qty == 1
+        hold = s.query(TradeHold).filter(TradeHold.offer_id == oid).first()
+        assert hold is not None and hold.qty == 2 and hold.kind == "plant"
+    finally:
+        s.close()
+
+
+def test_cancel_restores_reserved_items():
+    from models import TradeHold
+
+    _add_user(7001)
+    _add_user(7002)
+    _give_plant(7001, 1, 3)
+    with make_user_client(7001, "player") as a:
+        oid = a.post("/api/trades", json=_offer_payload(
+            7002, [{"kind": "plant", "item_id": 1, "qty": 2, "direction": "give"}],
+        )).json()["id"]
+        assert a.post(f"/api/trades/{oid}/cancel").status_code == 200
+    s = TestingSessionLocal()
+    try:
+        row = s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).first()
+        assert row is not None and row.qty == 3
+        assert s.query(TradeHold).filter(TradeHold.offer_id == oid).count() == 0
+    finally:
+        s.close()
+
+
+def test_reject_restores_reserved_items():
+    from models import TradeHold
+
+    _add_user(7001)
+    _add_user(7002)
+    _give_plant(7001, 1, 3)
+    with make_user_client(7001, "player") as a:
+        oid = a.post("/api/trades", json=_offer_payload(
+            7002, [{"kind": "plant", "item_id": 1, "qty": 2, "direction": "give"}],
+        )).json()["id"]
+    with make_user_client(7002, "player") as b:
+        assert b.post(f"/api/trades/{oid}/reject").status_code == 200
+    s = TestingSessionLocal()
+    try:
+        row = s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).first()
+        assert row is not None and row.qty == 3
+        assert s.query(TradeHold).filter(TradeHold.offer_id == oid).count() == 0
+    finally:
+        s.close()

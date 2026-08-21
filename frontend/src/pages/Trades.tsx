@@ -29,7 +29,7 @@ function TradeItems({ items, isMine }: { items: TradeOffer['items']; isMine: boo
       {give.length > 0 && (
         <div style={{ marginBottom: 4 }}>
           <strong style={{ fontSize: 12, color: 'var(--text-muted)' }}>{isMine ? 'Я отдаю' : 'Отдаёт'}:</strong>
-          <div style={{ marginTop: 2 }}>{give.map((i) => <span key={i.id} className="fm-chip">{i.item_emoji || '📦'} {i.item_name}</span>)}</div>
+          <div style={{ marginTop: 2 }}>{give.map((i) => <span key={i.id} className="fm-chip">{i.item_emoji || '📦'} {i.item_name}{i.reserved ? ' 🔒' : ''}</span>)}</div>
         </div>
       )}
       {want.length > 0 && (

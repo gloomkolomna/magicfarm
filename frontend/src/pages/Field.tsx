@@ -46,7 +46,9 @@ function PlantPickerCards({ plants, selected, onSelect, lockOf, busy }: {
               opacity: lock ? 0.5 : 1,
             }}
           >
-            {p.image_harvested_url ? (
+            {p.image_grown_url ? (
+              <img src={mediaUrl(p.image_grown_url)} alt="" style={{ height: 44, maxWidth: '100%', objectFit: 'contain', display: 'block', margin: '0 auto 4px' }} />
+            ) : p.image_harvested_url ? (
               <img src={mediaUrl(p.image_harvested_url)} alt="" style={{ height: 44, maxWidth: '100%', objectFit: 'contain', display: 'block', margin: '0 auto 4px' }} />
             ) : (
               <div style={{ fontSize: 22, marginBottom: 2 }}>{p.emoji || '🌿'}</div>

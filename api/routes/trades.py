@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user
 from models import (
-    Inventory, TradeOffer, TradeOfferItem, User, UserIngredient,
+    Inventory, TradeHold, TradeOffer, TradeOfferItem, User, UserIngredient,
 )
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
@@ -39,6 +39,7 @@ class TradeItemOut(BaseModel):
     item_emoji: str | None
     qty: int
     direction: str
+    reserved: bool = False
 
 
 class TradeOfferOut(BaseModel):
@@ -115,10 +116,18 @@ def _offer_out(db: Session, offer: TradeOffer) -> TradeOfferOut:
                 item_name=_item_meta(db, it.kind, it.item_id)[0],
                 item_emoji=_item_meta(db, it.kind, it.item_id)[1],
                 qty=it.qty, direction=it.direction,
+                reserved=offer.status == "open" and it.direction == "give",
             )
             for it in offer.items
         ],
     )
+
+
+def _release_holds(db: Session, offer_id: int, to_user_id: int) -> None:
+    """Возвращает зарезервированные предметы «отдаю» обратно отправителю."""
+    for hold in db.query(TradeHold).filter(TradeHold.offer_id == offer_id).all():
+        _transfer(db, to_user_id, hold.kind, hold.item_id, hold.qty)
+        db.delete(hold)
 
 
 def _validate_items(db: Session, user_id: int, items: list[TradeItemIn]) -> None:
@@ -249,6 +258,11 @@ def create_trade(
             offer_id=offer.id, kind=it.kind, item_id=it.item_id,
             qty=it.qty, direction=it.direction,
         ))
+        if it.direction == "give":
+            _transfer(db, user.vk_id, it.kind, it.item_id, -it.qty)
+            db.add(TradeHold(
+                offer_id=offer.id, kind=it.kind, item_id=it.item_id, qty=it.qty,
+            ))
     db.commit()
     db.refresh(offer)
     return _offer_out(db, offer)
@@ -266,19 +280,19 @@ def accept_trade(
 
     for it in offer.items:
         if it.direction == "give":
-            if _stock_qty(db, offer.from_user_id, it.kind, it.item_id) < it.qty:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У отправителя уже нет достаточного количества предметов")
-        else:
-            if _stock_qty(db, offer.to_user_id, it.kind, it.item_id) < it.qty:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У вас уже нет запрошенных предметов")
+            continue
+        if _stock_qty(db, offer.to_user_id, it.kind, it.item_id) < it.qty:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У вас уже нет запрошенных предметов")
 
     for it in offer.items:
         if it.direction == "give":
-            _transfer(db, offer.from_user_id, it.kind, it.item_id, -it.qty)
             _transfer(db, offer.to_user_id, it.kind, it.item_id, it.qty)
         else:
             _transfer(db, offer.to_user_id, it.kind, it.item_id, -it.qty)
             _transfer(db, offer.from_user_id, it.kind, it.item_id, it.qty)
+
+    for hold in db.query(TradeHold).filter(TradeHold.offer_id == offer.id).all():
+        db.delete(hold)
 
     offer.status = "accepted"
     offer.accepted_at = datetime.datetime.utcnow()
@@ -296,6 +310,7 @@ def cancel_trade(
     offer = _get_open_offer(db, offer_id)
     if offer.from_user_id != user.vk_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Отменить может только отправитель")
+    _release_holds(db, offer.id, offer.from_user_id)
     offer.status = "cancelled"
     db.commit()
     db.refresh(offer)
@@ -311,6 +326,7 @@ def reject_trade(
     offer = _get_open_offer(db, offer_id)
     if offer.to_user_id != user.vk_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Отклонить может только получатель")
+    _release_holds(db, offer.id, offer.from_user_id)
     offer.status = "rejected"
     db.commit()
     db.refresh(offer)

@@ -310,6 +310,7 @@ export interface TradeOfferItem {
   item_emoji: string | null;
   qty: number;
   direction: string;
+  reserved?: boolean;
 }
 
 export interface TradeOffer {

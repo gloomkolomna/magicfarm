@@ -10,6 +10,7 @@ interface Tab {
   locked?: boolean;
   hideWhenLocked?: boolean;
   unread?: number;
+  section?: string;
 }
 
 interface Props {
@@ -22,8 +23,6 @@ const BASE_TABS: Tab[] = [
   { path: '/', label: '🗺️ Поля' },
   { path: '/infirmary', label: '🌲 Лечебница', location: 'infirmary' },
   { path: '/library', label: '📖 Библиотека' },
-  { path: '/story', label: '📜 Предыстория' },
-  { path: '/lessons', label: '🎬 Уроки' },
   { path: '/brewery', label: '🧪 Зельеварение', location: 'brewery' },
   { path: '/bonuses', label: '⚡ Бонусы', location: 'brewery', hideWhenLocked: true },
   { path: '/inventory', label: '📦 Склад' },
@@ -33,7 +32,8 @@ const BASE_TABS: Tab[] = [
   { path: '/orders', label: '🧺 Заказы' },
   { path: '/achievements', label: '🏆 Достижения' },
   { path: '/collection', label: '🃏 Коллекция', location: 'infirmary', hideWhenLocked: true },
-  { path: '/profile', label: '👤 Профиль' },
+  { path: '/profile', label: '👤 Профиль', section: 'profile' },
+  { path: '/lessons', label: '🎬 Уроки', section: 'profile' },
 ];
 
 function MiniAppShell({ children }: Props) {
@@ -179,28 +179,38 @@ function MiniAppShell({ children }: Props) {
               marginTop: 16,
             }}
           >
-            {tabs.map((t) => (
-              <button
-                key={t.path}
-                onClick={() => (t.locked ? undefined : go(t.path))}
-                disabled={t.locked}
-                className={active?.path === t.path && !t.locked ? 'fm-btn' : 'fm-btn fm-btn-outline'}
-                style={{
-                  padding: '16px 18px',
-                  fontSize: 17,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  justifyContent: 'space-between',
-                  ...(t.locked ? { opacity: 0.55, cursor: 'not-allowed' } : {}),
-                }}
-              >
-                <span>{t.label}</span>
-                {t.unread ? (
-                  <span style={{ flexShrink: 0, background: '#e5484d', color: '#fff', borderRadius: 999, fontSize: 13, padding: '2px 9px', fontWeight: 700 }}>{t.unread}</span>
-                ) : null}
-              </button>
-            ))}
+            {tabs.map((t, idx) => {
+              const prevSection = idx > 0 ? tabs[idx - 1].section : undefined;
+              const showHeader = !!t.section && t.section !== prevSection;
+              return (
+                <div key={t.path} style={{ display: 'contents' }}>
+                  {showHeader && (
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginTop: idx > 0 ? 12 : 0, textAlign: 'center' }}>
+                      {t.section === 'profile' ? '👤 Профиль' : t.section}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => (t.locked ? undefined : go(t.path))}
+                    disabled={t.locked}
+                    className={active?.path === t.path && !t.locked ? 'fm-btn' : 'fm-btn fm-btn-outline'}
+                    style={{
+                      padding: '16px 18px',
+                      fontSize: 17,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      justifyContent: 'space-between',
+                      ...(t.locked ? { opacity: 0.55, cursor: 'not-allowed' } : {}),
+                    }}
+                  >
+                    <span>{t.label}</span>
+                    {t.unread ? (
+                      <span style={{ flexShrink: 0, background: '#e5484d', color: '#fff', borderRadius: 999, fontSize: 13, padding: '2px 9px', fontWeight: 700 }}>{t.unread}</span>
+                    ) : null}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

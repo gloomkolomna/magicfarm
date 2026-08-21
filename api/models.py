@@ -1387,6 +1387,16 @@ class TradeOfferItem(Base):
     offer = relationship("TradeOffer", back_populates="items")
 
 
+class TradeHold(Base):
+    __tablename__ = "trade_holds"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    offer_id = Column(Integer, ForeignKey("trade_offers.id", ondelete="CASCADE"), nullable=False)
+    kind = Column(String, nullable=False)
+    item_id = Column(Integer, nullable=False)
+    qty = Column(Integer, nullable=False)
+
+
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
