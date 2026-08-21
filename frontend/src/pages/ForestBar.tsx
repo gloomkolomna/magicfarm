@@ -147,6 +147,8 @@ export function ForestBarScenePage() {
   const bookZone = barZones.find((z) => z.zone_kind === 'book') ?? null;
   const cardZones = barZones.filter((z) => z.zone_kind === 'cocktail_card');
   const recipes = field?.cocktail_recipes ?? [];
+  const activeRecipeId = activeShaker?.cocktail_recipe_id ?? null;
+  const activeRecipe = activeRecipeId != null ? recipes.find((r) => r.id === activeRecipeId) ?? null : null;
 
   function openBook(recipeId?: number) {
     const idx = recipeId == null ? 0 : Math.max(0, recipes.findIndex((r) => r.id === recipeId));
@@ -234,7 +236,8 @@ export function ForestBarScenePage() {
             )}
 
             {cardZones.map((z) => {
-              const cocktailImg = z.recipe_card_image || z.recipe_image || null;
+              const brewing = activeRecipeId != null && z.cocktail_recipe_id === activeRecipeId;
+              const cocktailImg = (brewing && (activeRecipe?.card_image_url || activeRecipe?.image_url)) || z.recipe_card_image || z.recipe_image || null;
               return (
                 <ZoneRect key={z.id} cols={field.cols} rows={field.rows} zone={z} onClick={() => openBook(z.cocktail_recipe_id ?? undefined)}>
                   {cocktailImg ? (
