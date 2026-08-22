@@ -125,6 +125,9 @@ function StubPage() {
           <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
             Мы готовим волшебство ✨
           </p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+            Игра будет доступна только для донов нашего междусобойчика
+          </p>
         </div>
       </div>
     </div>
