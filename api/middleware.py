@@ -22,6 +22,25 @@ def _extract_user_id(request: Request) -> int | None:
     return None
 
 
+def _extract_vk_id_from_body(body: bytes) -> int | None:
+    if not body:
+        return None
+    try:
+        payload = json.loads(body.decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    params = payload.get("params")
+    vk_id = params.get("vk_user_id") if isinstance(params, dict) else payload.get("vk_user_id")
+    if vk_id is None:
+        return None
+    try:
+        return int(vk_id)
+    except (ValueError, TypeError):
+        return None
+
+
 def _extract_detail(raw: bytes) -> tuple[str | None, dict]:
     text = raw.decode("utf-8", errors="replace").strip()
     body_preview = text[:MAX_BODY_LOG] if text else None
@@ -66,6 +85,15 @@ async def log_failed_requests(request: Request, call_next):
     user_id = _extract_user_id(request) if should_log else None
     session_factory = getattr(request.app.state, "session_factory", None)
 
+    body_vk_id = None
+    if should_log and user_id is None and request.method == "POST" and path == "/api/auth/session":
+        try:
+            body_vk_id = _extract_vk_id_from_body(await request.body())
+        except Exception:
+            body_vk_id = None
+
+    log_user_id = user_id if user_id is not None else body_vk_id
+
     try:
         response = await call_next(request)
     except Exception:
@@ -74,7 +102,7 @@ async def log_failed_requests(request: Request, call_next):
                 source="server", level="error", event="exception",
                 method=request.method, path=path, message="Unhandled exception",
                 details={"traceback": traceback.format_exc()},
-                user_id=user_id, client_ip=client_ip, session_factory=session_factory,
+                user_id=log_user_id, client_ip=client_ip, session_factory=session_factory,
             )
         raise
 
@@ -102,6 +130,6 @@ async def log_failed_requests(request: Request, call_next):
                 source="server", level=level, event="http_request",
                 method=request.method, path=path, status_code=status_code,
                 message=message, details=details or None,
-                user_id=user_id, client_ip=client_ip, session_factory=session_factory,
+                user_id=log_user_id, client_ip=client_ip, session_factory=session_factory,
             )
     return response

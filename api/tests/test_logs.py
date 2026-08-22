@@ -23,6 +23,28 @@ def test_middleware_logs_4xx_as_warn(admin_client):
     assert any(r["status_code"] == 404 and r["source"] == "server" for r in rows)
 
 
+def test_middleware_logs_vk_id_on_denied_session(admin_client):
+    from models import User
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        u = s.query(User).filter(User.vk_id == 77001).first()
+        if u is None:
+            u = User(vk_id=77001, role="player", status="blocked")
+            s.add(u)
+        s.commit()
+    finally:
+        s.close()
+
+    res = admin_client.post("/api/auth/session", json={"params": {"vk_user_id": "77001"}})
+    assert res.status_code == 403
+
+    rows = admin_client.get("/api/admin/logs", params={"level": "warn"}).json()
+    match = [r for r in rows if r["path"] == "/api/auth/session" and r["status_code"] == 403]
+    assert match
+    assert match[0]["user_id"] == 77001
+
+
 def test_vk_log_requires_auth(client):
     assert client.post("/api/logs/vk", json={"level": "info", "event": "x"}).status_code == 401
 
