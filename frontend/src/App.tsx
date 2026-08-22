@@ -183,7 +183,7 @@ function App() {
       <>
         <Background />
         <div style={zoomed}>
-          <div style={{ maxWidth: 'calc(var(--shell-max-width) * 0.8)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
+          <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
             <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>📜 Предыстория</h1>
             <Suspense fallback={<Skeleton />}><Prehistory onDone={() => refresh()} /></Suspense>
           </div>

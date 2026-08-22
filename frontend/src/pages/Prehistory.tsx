@@ -32,7 +32,7 @@ function SlidePager({ slides, finishLabel, onFinish }: { slides: StorySlide[]; f
         ) : (
           <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, background: 'rgba(255,255,255,0.04)', borderRadius: 12, marginBottom: 12 }}>📜</div>
         )}
-        <div style={{ fontSize: 15, lineHeight: 1.55, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', background: 'linear-gradient(180deg, rgba(10,16,8,0.60) 0%, rgba(10,16,8,0.48) 100%)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px 16px', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
+        <div style={{ fontSize: 15, lineHeight: 1.55, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-word', background: 'linear-gradient(180deg, rgba(10,16,8,0.60) 0%, rgba(10,16,8,0.48) 100%)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px 16px', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
           {slide.text || ''}
         </div>
       </div>
