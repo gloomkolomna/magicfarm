@@ -124,6 +124,20 @@ def test_list_products(player_client):
     assert any(r["code"] == "poison" for r in rows)
 
 
+def test_products_craftable_requires_studied_recipe(player_client):
+    prod_id = _product_id(player_client)
+    rows = player_client.get("/api/farm/products").json()
+    row = next(r for r in rows if r["id"] == prod_id)
+    assert row["craftable"] is False
+
+    plant_id = _plant_id_of_product(player_client)
+    _seed_studied_recipe(PLAYER_VK, plant_id, prod_id)
+
+    rows = player_client.get("/api/farm/products").json()
+    row = next(r for r in rows if r["id"] == prod_id)
+    assert row["craftable"] is True
+
+
 def test_list_productions_empty(player_client):
     prods = player_client.get("/api/farm/productions").json()
     assert [p for p in prods if p["kind"] != "kassa"] == []

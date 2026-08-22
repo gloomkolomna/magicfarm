@@ -53,6 +53,45 @@ def test_mark_read(player_client):
     assert listed[0]["read"] is True
 
 
+def test_mark_one_read(player_client):
+    from models import Notification
+    s = TestingSessionLocal()
+    try:
+        s.add(Notification(user_id=123, text="Первое"))
+        s.add(Notification(user_id=123, text="Второе"))
+        s.commit()
+        ids = [n.id for n in s.query(Notification).filter(Notification.user_id == 123).order_by(Notification.id).all()]
+    finally:
+        s.close()
+
+    assert player_client.post(f"/api/notifications/{ids[0]}/read").json()["ok"] is True
+    assert player_client.get("/api/notifications/unread-count").json()["count"] == 1
+
+    listed = player_client.get("/api/notifications").json()
+    by_id = {n["id"]: n for n in listed}
+    assert by_id[ids[0]]["read"] is True
+    assert by_id[ids[1]]["read"] is False
+
+
+def test_mark_one_read_foreign(player_client):
+    from models import Notification
+    s = TestingSessionLocal()
+    try:
+        n = Notification(user_id=999, text="Чужое")
+        s.add(n)
+        s.commit()
+        s.refresh(n)
+        nid = n.id
+    finally:
+        s.close()
+
+    assert player_client.post(f"/api/notifications/{nid}/read").status_code == 404
+
+
+def test_mark_one_read_unknown(player_client):
+    assert player_client.post("/api/notifications/999999/read").status_code == 404
+
+
 def test_trade_accept_notifies_offerer():
     _add_user(7001)
     _add_user(7002)

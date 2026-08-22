@@ -232,7 +232,7 @@ def test_craft_in_barnyard_insufficient_produce(admin_client):
         assert "продукции животного" in res.json()["detail"]
 
 
-def test_craft_in_barnyard_recipe_not_studied(admin_client):
+def test_craft_in_barnyard_no_study_required(admin_client):
     wool_id, fabric_id = _make_barnyard_pair(admin_client)
     admin_client.post("/api/admin/catalog/recipes", json={
         "source_product_id": wool_id, "product_id": fabric_id, "level": 1,
@@ -244,8 +244,27 @@ def test_craft_in_barnyard_recipe_not_studied(admin_client):
         res = c.post(f"/api/farm/productions/{pr_id}/craft", json={
             "product_id": fabric_id, "qty": 1,
         })
-        assert res.status_code == 400
-        assert "Рецепт не изучен" in res.json()["detail"]
+        assert res.status_code == 200, res.text
+        assert res.json()["craft_session_id"] > 0
+
+
+def test_products_craftable_barnyard_requires_source_stock(admin_client):
+    wool_id, fabric_id = _make_barnyard_pair(admin_client)
+    admin_client.post("/api/admin/catalog/recipes", json={
+        "source_product_id": wool_id, "product_id": fabric_id, "level": 1,
+    })
+
+    with make_user_client(PLAYER_VK, "player") as c:
+        rows = c.get("/api/farm/products").json()
+        fabric = next(r for r in rows if r["id"] == fabric_id)
+        assert fabric["craftable"] is False
+
+    _seed_product_inventory(PLAYER_VK, wool_id, 3)
+
+    with make_user_client(PLAYER_VK, "player") as c:
+        rows = c.get("/api/farm/products").json()
+        fabric = next(r for r in rows if r["id"] == fabric_id)
+        assert fabric["craftable"] is True
 
 
 def test_craft_in_wrong_tent_rejected(admin_client):

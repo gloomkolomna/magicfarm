@@ -162,28 +162,28 @@ export default function LibraryPage() {
                         <SourceView r={r} size={32} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, overflowWrap: 'anywhere' }}>
                           {r.source_kind === 'animal_product' ? r.source_product_name : r.plant_name}
                         </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>
                           {r.status === 'studied' ? 'изучен' : r.status === 'studying' ? 'изучается… · нажмите для отчёта' : 'закрыт'}
                         </div>
                       </div>
 
                       <div style={{ fontSize: 20, color: 'var(--text-muted)', flexShrink: 0 }}>→</div>
 
-                      <div style={{ width: 60, textAlign: 'center', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <div style={{ width: 72, minWidth: 56, textAlign: 'center', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                         {r.status === 'studied' ? (
                           <>
                             <ProductView r={r} size={28} />
-                            <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.15 }}>
+                            <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.15, overflowWrap: 'anywhere', maxWidth: '100%' }}>
                               {r.product_name}
                             </div>
                           </>
                         ) : r.status === 'studying' ? (
                           <>
                             <ProductView r={r} size={28} dim />
-                            <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.15 }}>
+                            <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.15, overflowWrap: 'anywhere', maxWidth: '100%' }}>
                               {r.product_name}
                             </div>
                           </>

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -82,5 +82,23 @@ def mark_all_read(
     for n in rows:
         n.read_at = now
     if rows:
+        db.commit()
+    return OkOut()
+
+
+@router.post("/{notification_id}/read", response_model=OkOut)
+def mark_one_read(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    n = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.user_id == user.vk_id,
+    ).first()
+    if n is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Уведомление не найдено")
+    if n.read_at is None:
+        n.read_at = datetime.datetime.utcnow()
         db.commit()
     return OkOut()

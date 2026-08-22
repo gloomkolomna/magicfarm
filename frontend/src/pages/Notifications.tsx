@@ -16,11 +16,13 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     api.notifications()
-      .then((n) => { setItems(n); api.markNotificationsRead().catch(() => {}); })
+      .then((n) => setItems(n.filter((x) => !x.read)))
       .catch(() => setMsg('Ошибка загрузки уведомлений'));
   }, []);
 
   function open(n: Notification) {
+    setItems((prev) => (prev ? prev.filter((x) => x.id !== n.id) : prev));
+    api.markNotificationRead(n.id).catch(() => {});
     if (n.peer_vk_id != null) {
       nav(`/chat/${n.peer_vk_id}`);
     }

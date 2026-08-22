@@ -79,11 +79,12 @@ export default function RemedyLabPage() {
     } finally { setBusy(false); }
   }
 
-  async function doBrew(card: RemedyCard) {
+  async function doBrew(card: RemedyCard, cellId?: number) {
     if (!lab) return;
-    const cell = (lab.device_cells ?? []).find(
-      (c) => c.device?.build_status === 'built' && c.remedies.some((r) => r.remedy_id === card.remedy_id),
-    );
+    const cell = (lab.device_cells ?? []).find((c) => {
+      if (cellId != null && c.id !== cellId) return false;
+      return c.device?.build_status === 'built' && c.remedies.some((r) => r.remedy_id === card.remedy_id);
+    });
     if (!cell) {
       setMsg('✗ Нет установленного прибора для этого лекарства');
       return;
@@ -291,14 +292,46 @@ export default function RemedyLabPage() {
           )}
 
           {deviceModal.device?.build_status === 'built' && deviceModal.device.brew_card_id == null && (
-            <div className="fm-card" style={{ fontSize: 13 }}>
-              ⚗️ Прибор готов. Выберите рецепт (кнопка «📋 Рецепты») и сварите лекарство здесь.
-              {deviceModal.remedies.length > 0 && (
-                <div style={{ marginTop: 6 }}>
-                  Производит: {deviceModal.remedies.map((r) => r.remedy_name).join(', ')}
-                </div>
-              )}
-            </div>
+            <>
+              <div className="fm-card" style={{ fontSize: 13, marginBottom: 8 }}>
+                ⚗️ Прибор готов. Выберите рецепт и сварите лекарство.
+                {deviceModal.remedies.length > 0 && (
+                  <div style={{ marginTop: 6 }}>
+                    Производит: {deviceModal.remedies.map((r) => r.remedy_name).join(', ')}
+                  </div>
+                )}
+              </div>
+              {(() => {
+                const brewable = cards.filter((card) =>
+                  deviceModal.remedies.some((r) => r.remedy_id === card.remedy_id),
+                );
+                if (brewable.length === 0) {
+                  return <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Нет рецептов для этого прибора.</div>;
+                }
+                return brewable.map((card) => {
+                  const ready = card.recipe_items.every((i) => i.have >= i.qty);
+                  return (
+                    <div key={card.id} className="fm-card" style={{ fontSize: 13, marginBottom: 8 }}>
+                      <strong>{card.patient_name}</strong>
+                      <div style={{ color: 'var(--text-muted)', margin: '4px 0' }}>{card.remedy_name}</div>
+                      {card.recipe_items.map((i, idx) => (
+                        <div key={idx} style={{ fontSize: 12, color: i.have >= i.qty ? 'var(--success)' : 'var(--danger, #e08080)' }}>
+                          {i.ingredient_name || i.plant_name}: {i.have}/{i.qty}
+                        </div>
+                      ))}
+                      <button
+                        className="fm-btn fm-btn-sm fm-btn-wrap"
+                        style={{ width: '100%', marginTop: 8 }}
+                        disabled={busy || !ready}
+                        onClick={() => doBrew(card, deviceModal.id)}
+                      >
+                        ⚗️ Сварить (2 кубика)
+                      </button>
+                    </div>
+                  );
+                });
+              })()}
+            </>
           )}
 
           {deviceModal.device?.brew_card_id != null && deviceModal.device && (
@@ -348,28 +381,17 @@ export default function RemedyLabPage() {
             <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Актуальных рецептов нет — поставьте диагнозы в лечебнице.</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
-              {cards.map((card) => {
-                const ready = card.recipe_items.every((i) => i.have >= i.qty);
-                return (
-                  <div key={card.id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
-                    <strong>{card.patient_name}</strong>
-                    <div style={{ color: 'var(--text-muted)', margin: '4px 0' }}>{card.remedy_name}</div>
-                    {card.recipe_items.map((i, idx) => (
-                      <div key={idx} style={{ fontSize: 12, color: i.have >= i.qty ? 'var(--success)' : 'var(--danger, #e08080)' }}>
-                        {i.ingredient_name || i.plant_name}: {i.have}/{i.qty}
-                      </div>
-                    ))}
-                    <button
-                      className="fm-btn fm-btn-sm fm-btn-wrap"
-                      style={{ width: '100%', marginTop: 8 }}
-                      disabled={busy || !ready}
-                      onClick={() => { setShowCards(false); doBrew(card); }}
-                    >
-                      ⚗️ Сварить (2 кубика)
-                    </button>
-                  </div>
-                );
-              })}
+              {cards.map((card) => (
+                <div key={card.id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
+                  <strong>{card.patient_name}</strong>
+                  <div style={{ color: 'var(--text-muted)', margin: '4px 0' }}>{card.remedy_name}</div>
+                  {card.recipe_items.map((i, idx) => (
+                    <div key={idx} style={{ fontSize: 12, color: i.have >= i.qty ? 'var(--success)' : 'var(--danger, #e08080)' }}>
+                      {i.ingredient_name || i.plant_name}: {i.have}/{i.qty}
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
           )}
         </Modal>

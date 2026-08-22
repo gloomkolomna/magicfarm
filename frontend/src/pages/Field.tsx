@@ -5,7 +5,6 @@ import { api, type Animal, type BarnyardCollectResult, type BarnyardTentStorage,
 import { mediaUrl } from '../api/media';
 import StitchReportForm from '../components/StitchReportForm';
 import Toast from '../components/Toast';
-import { confirmDialog } from '../components/Confirm';
 import LocationMap from '../components/LocationMap';
 import plotUrl from '../assets/plot.png';
 
@@ -521,22 +520,6 @@ export default function FieldPage() {
     } finally { setBusy(false); }
   }
 
-  async function doBarnyardRelease() {
-    if (!barnyardCell?.barnyard) return;
-    if (!(await confirmDialog('Выселить животное? Загон освободится, прогресс будет потерян.'))) return;
-    setBusy(true); setMsg(null);
-    try {
-      await api.barnyardReleasePen(barnyardCell.barnyard.slot_id);
-      setMsg('✓ Животное выселено');
-      setBarnyardCell(null);
-      setBarnyardCollect(null);
-      await load();
-      await refresh();
-    } catch (e: any) {
-      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
-    } finally { setBusy(false); }
-  }
-
   async function reloadBarnyardStorage() {
     try {
       setBarnyardStorage(await api.barnyardTentStorage());
@@ -582,8 +565,10 @@ export default function FieldPage() {
       const res = await api.petForest(otterInfo.pet_id, paid);
       if (res.task_id) {
         setMsg(`🦦 Выдра ждёт: вышейте ${res.required ?? 200} крестиков и отправьте фото-отчёт`);
-      } else {
+      } else if (res.ingredient_id != null) {
         setMsg(`🦦 Выдра принесла из леса: ${res.ingredient_name} (на складе ×${res.apothecary_qty})`);
+      } else {
+        setMsg('🦦 Выдра вернулась с пустыми лапами');
       }
       const pets = await api.userPets();
       const own = pets.find((p) => p.pet_id === otterInfo.pet_id);
@@ -658,7 +643,7 @@ export default function FieldPage() {
     setTentCardResult(null);
     setTentShowVideo(false);
     if (t.build_status === 'built') {
-      const first = products.find((x) => x.production_kind === t.kind && x.available !== false);
+      const first = products.find((x) => x.production_kind === t.kind && x.craftable);
       void selectCraftProduct(first ? first.id : null);
       void reloadCraftSessions();
       if (t.kind === 'barnyard') {
@@ -1514,7 +1499,7 @@ export default function FieldPage() {
               <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Новый крафт</label>
               <select className="fm-input" value={craftProduct ?? ''} onChange={(e) => void selectCraftProduct(Number(e.target.value))}>
                 <option value="">— выберите —</option>
-                {products.filter((p) => p.production_kind === tentModal.kind && p.available !== false).map((p) => (
+                {products.filter((p) => p.production_kind === tentModal.kind && p.craftable).map((p) => (
                   <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>
                 ))}
               </select>
@@ -1917,15 +1902,7 @@ export default function FieldPage() {
                 Продукция хранится на складе шатра скотного двора. Забрать её на общий склад
                 (и продать через заказы) можно в шатре скотного двора.
               </p>
-              <button className="fm-btn fm-btn-outline" style={{ width: '100%', marginTop: 10 }} disabled={busy} onClick={doBarnyardRelease}>
-                🚪 Выселить животное
-              </button>
             </>
-          )}
-          {barnyardCell.barnyard && barnyardCell.barnyard.animal_id != null && barnyardCell.barnyard.status !== 'ready' && (
-            <button className="fm-btn fm-btn-outline" style={{ width: '100%', marginTop: 10 }} disabled={busy} onClick={doBarnyardRelease}>
-              🚪 Выселить животное
-            </button>
           )}
         </Modal>
       )}
@@ -1993,7 +1970,7 @@ export default function FieldPage() {
                       busy={busy}
                       buttonText="Отправить фото-отчёт"
                       onDone={async () => {
-                        setMsg('🦦 Выдра принесла ингредиент из леса!');
+                        setMsg('🦦 Выдра вернулась из леса!');
                         const pets = await api.userPets();
                         const own = pets.find((p) => p.pet_id === otterInfo.pet_id);
                         setOtterInfo(own && (own.code === 'vydra' || own.code === 'otter') ? own : null);

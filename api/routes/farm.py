@@ -371,17 +371,6 @@ def craft_product(
             detail="У товара нет источника для крафта",
         )
 
-    studied = db.query(UserRecipe).filter(
-        UserRecipe.user_id == user.vk_id,
-        UserRecipe.recipe_id == recipe.id,
-        UserRecipe.status == "studied",
-    ).first()
-    if studied is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Рецепт не изучен",
-        )
-
     source_inv = db.query(Inventory).filter(
         Inventory.user_id == user.vk_id, Inventory.product_id == recipe.source_product_id
     ).first()
@@ -540,6 +529,7 @@ class ProductOut(BaseModel):
     production_kind: str | None
     image_url: str | None
     available: bool = True
+    craftable: bool = True
 
 
 @router.get("/products", response_model=list[ProductOut])
@@ -550,15 +540,48 @@ def list_products(
     from services.availability import product_lock_reason
 
     rows = db.query(Product).order_by(Product.id.asc()).all()
-    return [
-        ProductOut(
+
+    studied_recipe_ids = {
+        ur.recipe_id
+        for ur in db.query(UserRecipe).filter(
+            UserRecipe.user_id == user.vk_id,
+            UserRecipe.status == "studied",
+        ).all()
+    }
+    plant_recipe_by_product: dict[int, Recipe] = {}
+    animal_recipe_by_product: dict[int, Recipe] = {}
+    for r in db.query(Recipe).all():
+        if r.plant_id is not None:
+            plant_recipe_by_product[r.product_id] = r
+        elif r.source_product_id is not None:
+            animal_recipe_by_product[r.product_id] = r
+
+    source_stock = {
+        inv.product_id: inv.qty
+        for inv in db.query(Inventory).filter(
+            Inventory.user_id == user.vk_id,
+            Inventory.product_id.isnot(None),
+            Inventory.qty > 0,
+        ).all()
+    }
+
+    out: list[ProductOut] = []
+    for p in rows:
+        available = product_lock_reason(p, user, db) is None
+        craftable = False
+        if p.plant_id is not None:
+            recipe = plant_recipe_by_product.get(p.id)
+            craftable = available and recipe is not None and recipe.id in studied_recipe_ids
+        else:
+            recipe = animal_recipe_by_product.get(p.id)
+            if recipe is not None:
+                craftable = available and source_stock.get(recipe.source_product_id, 0) > 0
+        out.append(ProductOut(
             id=p.id, code=p.code, name=p.name, emoji=p.emoji,
             stars=p.stars, production_kind=p.production_kind,
-            image_url=p.image_url,
-            available=product_lock_reason(p, user, db) is None,
-        )
-        for p in rows
-    ]
+            image_url=p.image_url, available=available, craftable=craftable,
+        ))
+    return out
 
 
 class SellRequest(BaseModel):

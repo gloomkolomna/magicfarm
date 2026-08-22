@@ -527,6 +527,7 @@ export interface Product {
   production_kind: string | null;
   image_url: string | null;
   available?: boolean;
+  craftable?: boolean;
 }
 
 export interface AdminRecipe {
@@ -2311,6 +2312,7 @@ export const api = {
   notifications: () => client.get<Notification[]>('/notifications').then((r) => r.data),
   notificationUnreadCount: () => client.get<{ count: number }>('/notifications/unread-count').then((r) => r.data),
   markNotificationsRead: () => client.post<{ ok: boolean }>('/notifications/read').then((r) => r.data),
+  markNotificationRead: (id: number) => client.post<{ ok: boolean }>(`/notifications/${id}/read`).then((r) => r.data),
 
   // ── Подарки ──
   sendGift: (data: { to_user_id: number; kind: string; item_id: number; qty: number }) =>
