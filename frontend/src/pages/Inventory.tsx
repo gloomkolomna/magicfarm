@@ -139,6 +139,9 @@ export default function InventoryPage() {
                     }}
                   >
                     <span className="fm-chip">×{i.qty}</span>
+                    {i.item_kind === 'product' && i.sell_price !== null && (
+                      <span className="fm-chip" title="Цена продажи за 1 штуку">💰 {i.sell_price}/шт</span>
+                    )}
                   </div>
                   {i.item_kind !== 'potion' && (
                     <button
@@ -166,6 +169,9 @@ export default function InventoryPage() {
             </div>
             <p style={{ fontSize: 14, marginBottom: 10 }}>
               {sellItem.item_emoji} {sellItem.item_name} — на складе: <strong>×{sellItem.qty}</strong>
+              {sellItem.item_kind === 'product' && sellItem.sell_price !== null && (
+                <> · цена: <strong>💰 {sellItem.sell_price}/шт</strong></>
+              )}
             </p>
             {sellResult !== null ? (
               <div className="fm-card" style={{ background: 'rgba(127,255,127,0.12)', fontSize: 14, marginBottom: 10 }}>

@@ -735,6 +735,22 @@ class BarnyardWithdrawal(Base):
     product = relationship("Product")
 
 
+class UserAnimalOpening(Base):
+    __tablename__ = "user_animal_openings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    animal_id = Column(Integer, ForeignKey("animals.id", ondelete="CASCADE"), nullable=False)
+    opening_order = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    animal = relationship("Animal")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "animal_id", name="uq_user_animal_openings"),
+    )
+
+
 class GameMedia(Base):
     __tablename__ = "game_media"
 

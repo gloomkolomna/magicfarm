@@ -51,6 +51,7 @@ class BarnyardCellOut(BaseModel):
     status: str
     accumulated: int
     required: int
+    opening_order: int | None = None
     image_empty_pen_url: str | None = None
     image_pen_url: str | None = None
 
@@ -188,6 +189,7 @@ def _cell_detail(c: FieldCell, db: Session, user: User, plot: Plot | None = None
                 animal_emoji=slot.animal.emoji if slot.animal else None,
                 status=slot.status, accumulated=slot.accumulated,
                 required=slot.required,
+                opening_order=slot.opening_order,
                 image_empty_pen_url=slot.animal.image_empty_pen_url if slot.animal else None,
                 image_pen_url=slot.animal.image_pen_url if slot.animal else None,
             )

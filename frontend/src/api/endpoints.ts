@@ -448,6 +448,7 @@ export interface InventoryItem {
   qty: number;
   ingredient_type: string | null;
   ingredient_icon: string | null;
+  sell_price: number | null;
 }
 
 export interface Ingredient {
@@ -689,6 +690,7 @@ export interface BarnyardCell {
   status: string;
   accumulated: number;
   required: number;
+  opening_order: number | null;
   image_empty_pen_url: string | null;
   image_pen_url: string | null;
 }
@@ -1350,6 +1352,7 @@ export interface BarnyardStorageItem {
   product_emoji: string | null;
   product_image_url: string | null;
   qty: number;
+  price_per_unit: number | null;
 }
 
 export interface BarnyardWithdrawal {

@@ -102,6 +102,7 @@ class InventoryOut(BaseModel):
     qty: int
     ingredient_type: str | None
     ingredient_icon: str | None
+    sell_price: int | None = None
 
 
 def _inv_to_out(inv: Inventory) -> InventoryOut:
@@ -496,7 +497,15 @@ def list_inventory(
             q = q.filter(Inventory.plant_id.isnot(None))
         elif item_kind == "product":
             q = q.filter(Inventory.product_id.isnot(None))
-        result = [_inv_to_out(i) for i in q.all()]
+        from services.pricing import animal_product_unit_price
+        result = []
+        for i in q.all():
+            out = _inv_to_out(i)
+            if out.item_kind == "product" and i.product is not None:
+                out.sell_price = animal_product_unit_price(
+                    db, user.vk_id, i.product.animal_id, i.product.production_kind
+                )
+            result.append(out)
 
     if item_kind in (None, "potion"):
         from services.availability import location_lock_reason
@@ -612,11 +621,14 @@ def sell_surplus(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недостаточно на складе")
 
     from routes.settings import get_sale_price_ratio
-    from services.pricing import PLANT_BASE_PRICES, calculate_product_price
+    from services.pricing import (
+        PLANT_BASE_PRICES, animal_opening_bonus, calculate_product_price, get_animal_opening_order,
+    )
     from models import Plant as PlantModel, Product as ProductModel
 
     ratio = get_sale_price_ratio(db)
     qty = req.qty
+    animal_bonus = 0
 
     if req.item_kind == "plant":
         plant = db.query(PlantModel).filter(PlantModel.id == req.item_id).first()
@@ -631,8 +643,11 @@ def sell_surplus(
         plant_level = plant.level if plant else 1
         prod_kind = prod.production_kind or "alchemy"
         full_price = calculate_product_price(plant_level, prod_kind, qty, db)
+        if prod.animal_id is not None:
+            opening_order = get_animal_opening_order(db, user.vk_id, prod.animal_id)
+            animal_bonus = animal_opening_bonus(opening_order, qty)
 
-    reward = int(full_price * ratio)
+    reward = int(full_price * ratio) + animal_bonus
 
     inv.qty = (inv.qty or 0) - req.qty
     if inv.qty <= 0:

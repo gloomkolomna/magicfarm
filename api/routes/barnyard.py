@@ -4,6 +4,7 @@ import random
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -11,6 +12,7 @@ from deps import get_current_user
 from models import (
     Animal, BarnyardSlot, BarnyardStorage, BarnyardWithdrawal,
     Field, FieldAnimal, FieldCell, Inventory, Product, User,
+    UserAnimalOpening,
 )
 from routes.admin_catalog import AnimalOut, _animal_out
 from routes.settings import get_animal_product_norm
@@ -145,15 +147,26 @@ def install_animal_on_cell(
 
     _check_barnyard_limit(db, user)
 
+    opening = db.query(UserAnimalOpening).filter(
+        UserAnimalOpening.user_id == user.vk_id,
+        UserAnimalOpening.animal_id == animal.id,
+    ).first()
+    if opening is None:
+        max_order = db.query(func.max(UserAnimalOpening.opening_order)).filter(
+            UserAnimalOpening.user_id == user.vk_id
+        ).scalar() or 0
+        opening = UserAnimalOpening(
+            user_id=user.vk_id, animal_id=animal.id, opening_order=max_order + 1
+        )
+        db.add(opening)
+        db.flush()
+
     slot.animal_id = animal.id
     slot.status = "placed"
     slot.required = 0
     slot.accumulated = 0
     slot.drawn_cards_json = None
-    slot.opening_order = db.query(BarnyardSlot).filter(
-        BarnyardSlot.user_id == user.vk_id,
-        BarnyardSlot.animal_id.isnot(None),
-    ).count() + 1
+    slot.opening_order = opening.opening_order
 
     db.commit()
     db.refresh(slot)
@@ -264,6 +277,7 @@ class StorageItemOut(BaseModel):
     product_emoji: str | None
     product_image_url: str | None = None
     qty: int
+    price_per_unit: int | None = None
 
 
 class WithdrawalOut(BaseModel):
@@ -298,6 +312,7 @@ def tent_storage(
     pending = db.query(BarnyardWithdrawal).filter(
         BarnyardWithdrawal.user_id == user.vk_id, BarnyardWithdrawal.status == "pending"
     ).order_by(BarnyardWithdrawal.id.asc()).all()
+    from services.pricing import animal_product_unit_price
     return {
         "items": [
             StorageItemOut(
@@ -306,6 +321,10 @@ def tent_storage(
                 product_emoji=i.product.emoji if i.product else None,
                 product_image_url=i.product.image_url if i.product else None,
                 qty=i.qty,
+                price_per_unit=animal_product_unit_price(
+                    db, user.vk_id, i.product.animal_id if i.product else None,
+                    i.product.production_kind if i.product else None,
+                ),
             ).model_dump()
             for i in items
         ],

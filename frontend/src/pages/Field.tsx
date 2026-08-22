@@ -861,6 +861,11 @@ export default function FieldPage() {
                           {cell.barnyard?.status === 'ready' && (
                             <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 14, color: '#7fff7f', pointerEvents: 'none' }}>✓</div>
                           )}
+                          {cell.barnyard?.animal_id != null && cell.barnyard.opening_order != null && (
+                            <div style={{ position: 'absolute', top: 2, left: 3, fontSize: 11, fontWeight: 700, color: '#ffe9b0', textShadow: '0 1px 2px #000', background: 'rgba(10,16,8,0.45)', borderRadius: 6, padding: '0 4px', pointerEvents: 'none' }}>
+                              №{cell.barnyard.opening_order}
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -1427,7 +1432,12 @@ export default function FieldPage() {
                       {barnyardStorage.items.map((it) => (
                         <div key={it.product_id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
                           <span>{it.product_emoji || '📦'} {it.product_name}</span>
-                          <span className="fm-chip">×{it.qty}</span>
+                          <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            {it.price_per_unit !== null && (
+                              <span className="fm-chip" title="Цена продажи за 1 штуку">💰 {it.price_per_unit}/шт</span>
+                            )}
+                            <span className="fm-chip">×{it.qty}</span>
+                          </span>
                         </div>
                       ))}
                       {barnyardStorage.pending.length > 0 && (
@@ -1923,7 +1933,12 @@ export default function FieldPage() {
               ) : (
                 <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6 }}>{barnyardCell.barnyard.animal_emoji || '🐾'}</div>
               )}
-              <div style={{ fontWeight: 600, marginBottom: 10 }}>{barnyardCell.barnyard.animal_name}</div>
+              <div style={{ fontWeight: 600, marginBottom: 10 }}>
+                {barnyardCell.barnyard.opening_order != null && (
+                  <span className="fm-chip" style={{ marginRight: 6 }} title="Номер животного по порядку вылупления (от него зависит цена продукции)">№{barnyardCell.barnyard.opening_order}</span>
+                )}
+                {barnyardCell.barnyard.animal_name}
+              </div>
               <button className="fm-btn" style={{ width: '100%', marginBottom: 10 }} disabled={busy} onClick={doBarnyardCollect}>
                 🧺 Собрать продукцию
               </button>
