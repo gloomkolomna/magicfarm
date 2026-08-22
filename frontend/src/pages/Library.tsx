@@ -152,51 +152,53 @@ export default function LibraryPage() {
                       }}
                       style={{
                         cursor: r.status === 'studied' ? 'default' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
                         opacity: r.status === 'studied' ? 1 : r.status === 'studying' ? 0.75 : 1,
                       }}
                     >
-                      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-                        <SourceView r={r} size={32} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, overflowWrap: 'anywhere' }}>
-                          {r.source_kind === 'animal_product' ? r.source_product_name : r.plant_name}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, overflowWrap: 'anywhere' }}>
+                            {r.source_kind === 'animal_product' ? r.source_product_name : r.plant_name}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>
+                            {r.status === 'studied' ? 'изучен' : r.status === 'studying' ? 'изучается… · нажмите для отчёта' : 'закрыт'}
+                          </div>
                         </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>
-                          {r.status === 'studied' ? 'изучен' : r.status === 'studying' ? 'изучается… · нажмите для отчёта' : 'закрыт'}
-                        </div>
-                      </div>
-
-                      <div style={{ fontSize: 20, color: 'var(--text-muted)', flexShrink: 0 }}>→</div>
-
-                      <div style={{ width: 72, minWidth: 56, textAlign: 'center', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                        {r.status === 'studied' ? (
-                          <>
-                            <ProductView r={r} size={28} />
-                            <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.15, overflowWrap: 'anywhere', maxWidth: '100%' }}>
-                              {r.product_name}
-                            </div>
-                          </>
-                        ) : r.status === 'studying' ? (
-                          <>
-                            <ProductView r={r} size={28} dim />
-                            <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.15, overflowWrap: 'anywhere', maxWidth: '100%' }}>
-                              {r.product_name}
-                            </div>
-                          </>
-                        ) : (
-                          <div style={{ fontSize: 24, color: 'var(--text-muted)' }}>?</div>
+                        {tent && (
+                          <div style={{ fontSize: 16, color: 'var(--text-muted)', flexShrink: 0 }} title={prod?.production_kind ?? ''}>
+                            {tent}
+                          </div>
                         )}
                       </div>
-
-                      {tent && (
-                        <div style={{ fontSize: 16, color: 'var(--text-muted)', flexShrink: 0 }} title={prod?.production_kind ?? ''}>
-                          {tent}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                          <SourceView r={r} size={32} />
                         </div>
-                      )}
+                        <div style={{ fontSize: 18, color: 'var(--text-muted)', flexShrink: 0 }}>→</div>
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {r.status === 'studied' ? (
+                            <>
+                              <div style={{ flexShrink: 0 }}>
+                                <ProductView r={r} size={28} />
+                              </div>
+                              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                                {r.product_name}
+                              </div>
+                            </>
+                          ) : r.status === 'studying' ? (
+                            <>
+                              <div style={{ flexShrink: 0 }}>
+                                <ProductView r={r} size={28} dim />
+                              </div>
+                              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                                {r.product_name}
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ fontSize: 24, color: 'var(--text-muted)' }}>?</div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
