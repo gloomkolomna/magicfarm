@@ -69,6 +69,23 @@ def test_get_field_detail(admin_client, monkeypatch):
     assert any(p["id"] == pid for p in d["plants"])
 
 
+def test_field_detail_plants_include_images(admin_client, monkeypatch):
+    fid, pid = _setup_field_with_plants(admin_client, monkeypatch)
+    r = admin_client.put(
+        f"/api/admin/catalog/plants/{pid}/image-harvested",
+        files={"image": ("h.png", io.BytesIO(_img_bytes()), "image/png")},
+    )
+    assert r.status_code == 200
+    harvested_url = r.json()["image_harvested_url"]
+    with _player() as c:
+        res = c.get(f"/api/fields/{fid}")
+    assert res.status_code == 200
+    d = res.json()
+    plant = next(p for p in d["plants"] if p["id"] == pid)
+    assert plant["image_harvested_url"] == harvested_url
+    assert plant["category"] is not None
+
+
 def test_get_field_not_found(admin_client):
     with _player() as c:
         assert c.get("/api/fields/9999").status_code == 404

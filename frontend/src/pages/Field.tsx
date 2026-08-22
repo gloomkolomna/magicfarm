@@ -61,6 +61,40 @@ function PlantPickerCards({ plants, selected, onSelect, lockOf, busy }: {
   );
 }
 
+function AnimalPickerCards({ animals, selected, onSelect, busy }: {
+  animals: Animal[];
+  selected: number | null;
+  onSelect: (id: number) => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="fm-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+      {animals.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          className="fm-card fm-rise"
+          disabled={busy}
+          onClick={() => onSelect(a.id)}
+          style={{
+            padding: 8, textAlign: 'center', cursor: 'pointer',
+            border: selected === a.id ? '2px solid var(--accent-warm)' : '1px solid var(--border)',
+          }}
+        >
+          {a.image_pen_url ? (
+            <img src={mediaUrl(a.image_pen_url)} alt="" style={{ height: 44, maxWidth: '100%', objectFit: 'contain', display: 'block', margin: '0 auto 4px' }} />
+          ) : a.image_url ? (
+            <img src={mediaUrl(a.image_url)} alt="" style={{ height: 44, maxWidth: '100%', objectFit: 'contain', display: 'block', margin: '0 auto 4px' }} />
+          ) : (
+            <div style={{ fontSize: 22, marginBottom: 2 }}>{a.emoji || '🐾'}</div>
+          )}
+          <div style={{ fontSize: 11 }}>{a.name}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function FieldPage() {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
@@ -1803,9 +1837,12 @@ export default function FieldPage() {
               {barnyardAnimals.length === 0 ? (
                 <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет доступных животных. Обратитесь к админу.</div>
               ) : (
-                <select className="fm-input" value={barnyardSel ?? ''} onChange={(e) => setBarnyardSel(Number(e.target.value))}>
-                  {barnyardAnimals.map((a) => <option key={a.id} value={a.id}>{a.emoji} {a.name}</option>)}
-                </select>
+                <AnimalPickerCards
+                  animals={barnyardAnimals}
+                  selected={barnyardSel}
+                  onSelect={setBarnyardSel}
+                  busy={busy}
+                />
               )}
               <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || barnyardSel == null} onClick={doBarnyardInstall}>
                 🐄 Поместить животное
