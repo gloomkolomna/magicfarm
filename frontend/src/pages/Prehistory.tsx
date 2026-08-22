@@ -6,6 +6,11 @@ import { mediaUrl } from '../api/media';
 
 function SlidePager({ slides, finishLabel, onFinish }: { slides: StorySlide[]; finishLabel: string; onFinish: () => void }) {
   const [page, setPage] = useState(0);
+  const [zoomImg, setZoomImg] = useState<string | null>(null);
+  const [zoomScale, setZoomScale] = useState(1);
+  const [zoomPan, setZoomPan] = useState({ x: 0, y: 0 });
+  const zoomBoxRef = useRef<HTMLDivElement>(null);
+  const zoomImgRef = useRef<HTMLImageElement>(null);
   const list = slides;
   const slide = list[Math.max(0, Math.min(page, list.length - 1))];
 
@@ -21,12 +26,13 @@ function SlidePager({ slides, finishLabel, onFinish }: { slides: StorySlide[]; f
           <img
             src={mediaUrl(slide.image_url)}
             alt=""
-            style={{ width: '100%', maxHeight: '45vh', objectFit: 'contain', borderRadius: 12, marginBottom: 12 }}
+            onClick={() => { setZoomImg(mediaUrl(slide.image_url)); setZoomScale(1); setZoomPan({ x: 0, y: 0 }); }}
+            style={{ width: '100%', maxHeight: '45vh', objectFit: 'contain', borderRadius: 12, marginBottom: 12, cursor: 'zoom-in' }}
           />
         ) : (
           <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, background: 'rgba(255,255,255,0.04)', borderRadius: 12, marginBottom: 12 }}>📜</div>
         )}
-        <div style={{ fontSize: 15, lineHeight: 1.55, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
+        <div style={{ fontSize: 15, lineHeight: 1.55, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', background: 'linear-gradient(180deg, rgba(10,16,8,0.60) 0%, rgba(10,16,8,0.48) 100%)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px 16px', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
           {slide.text || ''}
         </div>
       </div>
@@ -39,6 +45,81 @@ function SlidePager({ slides, finishLabel, onFinish }: { slides: StorySlide[]; f
       <button className="fm-btn" style={{ width: '100%', marginTop: 12 }} onClick={next}>
         {page < list.length - 1 ? 'Далее →' : finishLabel}
       </button>
+
+      {zoomImg && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.92)', display: 'flex', flexDirection: 'column', padding: 16 }}
+          onClick={() => setZoomImg(null)}
+        >
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center', marginBottom: 10 }} onClick={(e) => e.stopPropagation()}>
+            <button className="fm-btn fm-btn-outline" onClick={() => { setZoomScale((s) => Math.min(4, s + 0.5)); setZoomPan({ x: 0, y: 0 }); }}>＋</button>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)', minWidth: 44, textAlign: 'center' }}>{Math.round(zoomScale * 100)}%</span>
+            <button className="fm-btn fm-btn-outline" onClick={() => { setZoomScale(1); setZoomPan({ x: 0, y: 0 }); }}>⤢</button>
+            <button className="fm-btn fm-btn-outline" onClick={() => { setZoomScale((s) => Math.max(0.5, s - 0.5)); setZoomPan({ x: 0, y: 0 }); }}>−</button>
+            <button className="fm-btn fm-btn-outline" onClick={() => setZoomImg(null)}>✕</button>
+          </div>
+          <div
+            ref={zoomBoxRef}
+            style={{ flex: 1, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, touchAction: 'none', cursor: zoomScale > 1 ? 'grab' : 'default' }}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              if (zoomScale <= 1) return;
+              e.preventDefault();
+              const startX = e.clientX;
+              const startY = e.clientY;
+              const baseX = zoomPan.x;
+              const baseY = zoomPan.y;
+              const onMove = (ev: PointerEvent) => {
+                const dx = ev.clientX - startX;
+                const dy = ev.clientY - startY;
+                const box = zoomBoxRef.current;
+                const img = zoomImgRef.current;
+                let maxX = 0;
+                let maxY = 0;
+                if (box && img) {
+                  maxX = Math.max(0, (img.clientWidth * zoomScale - box.clientWidth) / 2);
+                  maxY = Math.max(0, (img.clientHeight * zoomScale - box.clientHeight) / 2);
+                }
+                setZoomPan({
+                  x: Math.max(-maxX, Math.min(maxX, baseX + dx)),
+                  y: Math.max(-maxY, Math.min(maxY, baseY + dy)),
+                });
+              };
+              const onUp = () => {
+                window.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+                window.removeEventListener('pointercancel', onUp);
+              };
+              window.addEventListener('pointermove', onMove);
+              window.addEventListener('pointerup', onUp);
+              window.addEventListener('pointercancel', onUp);
+            }}
+          >
+            <img
+              ref={zoomImgRef}
+              src={zoomImg}
+              alt=""
+              draggable={false}
+              style={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain',
+                transform: `translate(${zoomPan.x}px, ${zoomPan.y}px) scale(${zoomScale})`,
+                transition: 'transform 0.15s ease',
+                borderRadius: 10,
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                pointerEvents: 'none',
+              }}
+            />
+          </div>
+          {zoomScale > 1 && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: 8 }}>
+              Тяните изображение, чтобы рассмотреть детали
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
