@@ -306,6 +306,7 @@ export default function AdminPage() {
     { code: 'potion_brew', kind: 'video', label: '🧪 Видео варки зелья' },
     { code: 'infirmary_book', kind: 'image', label: '📖 Иконка книги лечебницы' },
     { code: 'remedy_heal', kind: 'video', label: '💊 Видео лечения животного' },
+    { code: 'cocktail_mix', kind: 'video', label: '🍸 Видео приготовления коктейля (лесной бар)' },
   ];
 
   const [gameMedia, setGameMedia] = useState<GameMedia[]>([]);

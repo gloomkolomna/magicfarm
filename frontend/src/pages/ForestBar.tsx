@@ -207,7 +207,7 @@ export function ForestBarScenePage() {
 
   return (
     <>
-      <LocationMap mapUrl={field?.map_url ?? null} name={field?.name ?? ''} emoji="🍹" onBack={() => nav('/forest-bar')} backLabel="Лесной бар">
+      <LocationMap mapUrl={field?.map_url ?? null} name={field?.name ?? ''} emoji="🍹" onBack={() => nav('/infirmary')} backLabel="Лечебница">
         {field && (
           <>
             {shakerZone && (
