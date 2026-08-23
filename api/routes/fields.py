@@ -389,7 +389,8 @@ def get_field(
             ))
         potion_recipes = [_recipe_out(fpr.recipe, fpr.recipe.level in unlocked_levels) for fpr in f.potion_recipes]
         c = db.query(Cauldron).filter(
-            Cauldron.user_id == user.vk_id, Cauldron.status != "done"
+            Cauldron.user_id == user.vk_id, Cauldron.status != "done",
+            Cauldron.field_id == f.id,
         ).first()
         if c is not None:
             active_cauldron = _cauldron_detail(c, db)

@@ -40,27 +40,22 @@ export default function FieldsPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [bgUrl, setBgUrl] = useState('');
   const [page, setPage] = useState(0);
-  const [potions, setPotions] = useState<any[]>([]);
   const [levels, setLevels] = useState<LevelGate[]>([]);
 
   useEffect(() => {
     Promise.all([
       api.fields(),
       api.getBackground().catch(() => ({ url: '' })),
-      api.userPotions().catch(() => [] as any[]),
-      api.levels().catch(() => [] as any[]),
+      api.levels().catch(() => [] as LevelGate[]),
     ])
-      .then(([flds, bg, pots, lvls]) => {
+      .then(([flds, bg, lvls]) => {
         setFields(flds);
         setBgUrl(bg.url);
-        setPotions(pots);
         setLevels(lvls);
       })
       .catch((e) => setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка')))
       .finally(() => setLoading(false));
   }, []);
-
-  const unactivated = potions.filter((p: any) => p.activated === false);
 
   const visibleFields = fields.filter((f) => !HIDDEN_KINDS.has(f.field_kind ?? ''));
   const categories = useMemo(() => groupByCategory(visibleFields), [visibleFields]);
@@ -90,14 +85,6 @@ export default function FieldsPage() {
             <span>🪙 {user.coins ?? 0}</span>
             <span>🧵 {user.crosses_total ?? 0}</span>
           </div>
-          {unactivated.length > 0 && (
-            <div style={{ marginTop: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
-              ⚗️ Зелий для активации: {unactivated.length}
-              <span style={{ color: 'var(--text-muted)' }}>
-                {' '}({unactivated.map((p: any) => p.bonus_description || p.potion_name).filter(Boolean).join(', ')})
-              </span>
-            </div>
-          )}
         </div>
       )}
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}

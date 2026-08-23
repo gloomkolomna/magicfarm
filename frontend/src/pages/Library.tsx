@@ -13,6 +13,14 @@ const TENT_KINDS: Record<string, string> = {
 
 const LEVEL_LABELS: Record<number, string> = { 1: 'I', 2: 'II', 3: 'III' };
 
+type StatusFilter = 'all' | 'studied' | 'unstudied';
+
+const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
+  { key: 'all', label: 'Все' },
+  { key: 'studied', label: '✅ Изучены' },
+  { key: 'unstudied', label: '📖 Не изучены' },
+];
+
 function SourceView({ r, size }: { r: LibraryRecipe; size: number }) {
   const url = r.source_kind === 'animal_product' ? r.source_product_image : r.plant_image;
   if (url) {
@@ -39,6 +47,7 @@ export default function LibraryPage() {
 
   const [studyRecipe, setStudyRecipe] = useState<LibraryRecipe | null>(null);
   const [finishRecipe, setFinishRecipe] = useState<LibraryRecipe | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const load = async () => {
     setLoading(true);
@@ -92,7 +101,12 @@ export default function LibraryPage() {
     return TENT_KINDS[kind] || '⛺';
   }
 
-  const grouped = recipes.reduce<Record<number, LibraryRecipe[]>>((acc, r) => {
+  const studiedCount = recipes.filter((r) => r.status === 'studied').length;
+  const filteredRecipes = recipes.filter((r) =>
+    statusFilter === 'all' ? true : statusFilter === 'studied' ? r.status === 'studied' : r.status !== 'studied',
+  );
+
+  const grouped = filteredRecipes.reduce<Record<number, LibraryRecipe[]>>((acc, r) => {
     if (!acc[r.level]) acc[r.level] = [];
     acc[r.level].push(r);
     return acc;
@@ -129,83 +143,108 @@ export default function LibraryPage() {
           Рецептов пока нет. Администратор добавит их позже.
         </div>
       ) : (
-        [1, 2, 3].map((lvl) => {
-          const items = grouped[lvl];
-          if (!items || items.length === 0) return null;
-          return (
-            <div key={lvl} style={{ marginBottom: 16 }}>
-              <h2 style={{ fontSize: 16, marginBottom: 8, color: 'var(--text-secondary)' }}>
-                Уровень {LEVEL_LABELS[lvl]}
-              </h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {items.map((r) => {
-                  const prod = findProduct(r);
-                  const tent = tentIcon(prod?.production_kind);
-
-                  return (
-                    <div
-                      key={r.id}
-                      className={`fm-card fm-rise ${r.status === 'locked' ? '' : 'fm-card-studied'}`}
-                      onClick={() => {
-                        if (r.status === 'locked') setStudyRecipe(r);
-                        else if (r.status === 'studying') setFinishRecipe(r);
-                      }}
-                      style={{
-                        cursor: r.status === 'studied' ? 'default' : 'pointer',
-                        opacity: r.status === 'studied' ? 1 : r.status === 'studying' ? 0.75 : 1,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, overflowWrap: 'anywhere' }}>
-                            {r.source_kind === 'animal_product' ? r.source_product_name : r.plant_name}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>
-                            {r.status === 'studied' ? 'изучен' : r.status === 'studying' ? 'изучается… · нажмите для отчёта' : 'закрыт'}
-                          </div>
-                        </div>
-                        {tent && (
-                          <div style={{ fontSize: 16, color: 'var(--text-muted)', flexShrink: 0 }} title={prod?.production_kind ?? ''}>
-                            {tent}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-                          <SourceView r={r} size={32} />
-                        </div>
-                        <div style={{ fontSize: 18, color: 'var(--text-muted)', flexShrink: 0 }}>→</div>
-                        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          {r.status === 'studied' ? (
-                            <>
-                              <div style={{ flexShrink: 0 }}>
-                                <ProductView r={r} size={28} />
-                              </div>
-                              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.2, overflowWrap: 'anywhere' }}>
-                                {r.product_name}
-                              </div>
-                            </>
-                          ) : r.status === 'studying' ? (
-                            <>
-                              <div style={{ flexShrink: 0 }}>
-                                <ProductView r={r} size={28} dim />
-                              </div>
-                              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.2, overflowWrap: 'anywhere' }}>
-                                {r.product_name}
-                              </div>
-                            </>
-                          ) : (
-                            <div style={{ fontSize: 24, color: 'var(--text-muted)' }}>?</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+        <>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+            {STATUS_FILTERS.map((f) => {
+              const count = f.key === 'all' ? recipes.length
+                : f.key === 'studied' ? studiedCount
+                : recipes.length - studiedCount;
+              const active = statusFilter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  className={`fm-btn fm-btn-sm ${active ? '' : 'fm-btn-outline'}`}
+                  onClick={() => setStatusFilter(f.key)}
+                >
+                  {f.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+          {filteredRecipes.length === 0 ? (
+            <div className="fm-card" style={{ color: 'var(--text-muted)', textAlign: 'center' }}>
+              Нет рецептов в этой категории.
             </div>
-          );
-        })
+          ) : (
+            [1, 2, 3].map((lvl) => {
+              const items = grouped[lvl];
+              if (!items || items.length === 0) return null;
+              return (
+                <div key={lvl} style={{ marginBottom: 16 }}>
+                  <h2 style={{ fontSize: 16, marginBottom: 8, color: 'var(--text-secondary)' }}>
+                    Уровень {LEVEL_LABELS[lvl]}
+                  </h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {items.map((r) => {
+                      const prod = findProduct(r);
+                      const tent = tentIcon(prod?.production_kind);
+
+                      return (
+                        <div
+                          key={r.id}
+                          className={`fm-card fm-rise ${r.status === 'locked' ? '' : 'fm-card-studied'}`}
+                          onClick={() => {
+                            if (r.status === 'locked') setStudyRecipe(r);
+                            else if (r.status === 'studying') setFinishRecipe(r);
+                          }}
+                          style={{
+                            cursor: r.status === 'studied' ? 'default' : 'pointer',
+                            opacity: r.status === 'studied' ? 1 : r.status === 'studying' ? 0.75 : 1,
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 600, overflowWrap: 'anywhere' }}>
+                                {r.source_kind === 'animal_product' ? r.source_product_name : r.plant_name}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>
+                                {r.status === 'studied' ? 'изучен' : r.status === 'studying' ? 'изучается… · нажмите для отчёта' : 'закрыт'}
+                              </div>
+                            </div>
+                            {tent && (
+                              <div style={{ fontSize: 16, color: 'var(--text-muted)', flexShrink: 0 }} title={prod?.production_kind ?? ''}>
+                                {tent}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                              <SourceView r={r} size={32} />
+                            </div>
+                            <div style={{ fontSize: 18, color: 'var(--text-muted)', flexShrink: 0 }}>→</div>
+                            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {r.status === 'studied' ? (
+                                <>
+                                  <div style={{ flexShrink: 0 }}>
+                                    <ProductView r={r} size={28} />
+                                  </div>
+                                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                                    {r.product_name}
+                                  </div>
+                                </>
+                              ) : r.status === 'studying' ? (
+                                <>
+                                  <div style={{ flexShrink: 0 }}>
+                                    <ProductView r={r} size={28} dim />
+                                  </div>
+                                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                                    {r.product_name}
+                                  </div>
+                                </>
+                              ) : (
+                                <div style={{ fontSize: 24, color: 'var(--text-muted)' }}>?</div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </>
       )}
 
       {studyRecipe && (

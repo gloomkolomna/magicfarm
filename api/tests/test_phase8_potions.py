@@ -51,20 +51,26 @@ def test_cauldron_returns_zone_image(admin_client):
     from tests.conftest import TestingSessionLocal
     s = TestingSessionLocal()
     try:
-        f = Field(code="brew_field_test", name="Зельеварня", cols=3, rows=2)
+        f = Field(code="brew_field_test", name="Зельеварня", cols=3, rows=2, field_kind="brewery")
         s.add(f)
         s.flush()
         s.add(BreweryZone(field_id=f.id, zone_kind="cauldron", col1=0, row1=0, col2=1, row2=1,
                           image_url="/api/uploads/cauldron.png"))
         s.commit()
+        fid = f.id
     finally:
         s.close()
 
+    r = admin_client.put(f"/api/admin/fields/{fid}/potion-recipes", json={"recipe_ids": [1]})
+    assert r.status_code == 200, r.text
+
     with make_user_client(123, "player") as c:
-        c.post("/api/potions/cauldrons", json={"recipe_id": 1})
+        r = c.post("/api/potions/cauldrons", json={"recipe_id": 1})
+        assert r.status_code == 201, r.text
+        assert r.json()["image_url"] == "/api/uploads/cauldron.png"
         r = c.get("/api/potions/cauldrons/active")
         assert r.status_code == 200
-        assert r.json()["image_url"] == "/api/uploads/cauldron.png"
+        assert r.json()[0]["image_url"] == "/api/uploads/cauldron.png"
 
 
 def test_cauldron_conflict(admin_client):
@@ -168,7 +174,7 @@ def test_active_cauldron_none(admin_client):
     with make_user_client(123, "player") as c:
         r = c.get("/api/potions/cauldrons/active")
         assert r.status_code == 200
-        assert r.json() is None
+        assert r.json() == []
 
 
 def test_active_cauldron_returns_created(admin_client):
@@ -176,9 +182,11 @@ def test_active_cauldron_returns_created(admin_client):
         c.post("/api/potions/cauldrons", json={"recipe_id": 1})
         r = c.get("/api/potions/cauldrons/active")
         assert r.status_code == 200
-        assert r.json()["recipe_id"] == 1
-        assert r.json()["status"] == "empty"
-        assert len(r.json()["slots"]) == 4
+        assert isinstance(r.json(), list)
+        assert len(r.json()) == 1
+        assert r.json()[0]["recipe_id"] == 1
+        assert r.json()[0]["status"] == "empty"
+        assert len(r.json()[0]["slots"]) == 4
 
 
 def test_active_cauldron_null_after_brew(admin_client):
@@ -194,7 +202,7 @@ def test_active_cauldron_null_after_brew(admin_client):
         c.post(f"/api/potions/cauldrons/{cid}/brew")
         r = c.get("/api/potions/cauldrons/active")
         assert r.status_code == 200
-        assert r.json() is None
+        assert r.json() == []
 
 
 def test_active_cauldron_requires_auth(client):
@@ -208,7 +216,7 @@ def test_active_cauldron_isolated_between_players(admin_client):
     with make_user_client(124, "player") as c:
         r = c.get("/api/potions/cauldrons/active")
         assert r.status_code == 200
-        assert r.json() is None
+        assert r.json() == []
 
 
 _recipe_seq = 0

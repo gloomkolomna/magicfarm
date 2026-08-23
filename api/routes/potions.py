@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_location, require_role
-from models import BreweryZone, Cauldron, CauldronSlot, Inventory, Plant, PotionRecipe, Product, User, UserPotion
+from models import BreweryZone, Cauldron, CauldronSlot, Field, FieldPotionRecipe, Inventory, Plant, PotionRecipe, Product, User, UserPotion
 from services.achievements import check_and_award
 from services.potion_bonuses import CONDITIONAL_BONUSES, INSTANT_BONUSES
 from services.uploads import remove_upload, save_upload
@@ -115,11 +115,14 @@ class CauldronOut(BaseModel):
     id: int
     recipe_id: int | None
     recipe_name: str | None
+    field_id: int | None = None
+    field_name: str | None = None
     material: str
     capacity: int
     status: str
     slots: list[dict]
     image_url: str | None = None
+    created_at: str | None = None
 
 
 class UserPotionOut(BaseModel):
@@ -155,6 +158,45 @@ def list_recipes(
 
 class CreateCauldronRequest(BaseModel):
     recipe_id: int
+    field_id: int | None = None
+
+
+def _check_field_level_gate(field: Field, user: User) -> None:
+    if field.min_level is not None and (user.level or 0) < field.min_level:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Эта зельеварня пока недоступна",
+        )
+
+
+def _resolve_cauldron_field(req: CreateCauldronRequest, recipe: PotionRecipe, user: User, db: Session) -> int | None:
+    if req.field_id is not None:
+        field = db.query(Field).filter(Field.id == req.field_id).first()
+        if field is None or field.field_kind != "brewery":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Котёл можно установить только в зельеварне",
+            )
+        bound = db.query(FieldPotionRecipe).filter(
+            FieldPotionRecipe.field_id == field.id, FieldPotionRecipe.recipe_id == recipe.id
+        ).first()
+        if bound is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Это зелье не привязано к данной зельеварне",
+            )
+        _check_field_level_gate(field, user)
+        return field.id
+
+    binding = db.query(FieldPotionRecipe).filter(
+        FieldPotionRecipe.recipe_id == recipe.id
+    ).order_by(FieldPotionRecipe.field_id.asc()).first()
+    if binding is None:
+        return None
+    field = db.query(Field).filter(Field.id == binding.field_id).first()
+    if field is not None:
+        _check_field_level_gate(field, user)
+    return binding.field_id
 
 
 @router.post("/cauldrons", response_model=CauldronOut, status_code=status.HTTP_201_CREATED)
@@ -173,11 +215,15 @@ def create_cauldron(
             detail="Рецепты этого уровня ещё не открыты. Сварите все зелья предыдущего уровня.",
         )
 
+    field_id = _resolve_cauldron_field(req, recipe, user, db)
+
     existing = db.query(Cauldron).filter(
-        Cauldron.user_id == user.vk_id, Cauldron.status != "done"
+        Cauldron.user_id == user.vk_id, Cauldron.status != "done",
+        Cauldron.field_id == field_id,
     ).first()
     if existing is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Уже есть активный котёл")
+        detail = "В этой зельеварне уже стоит котёл" if field_id is not None else "Уже есть активный котёл"
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
     slots = json.loads(recipe.ingredient_slots) if recipe.ingredient_slots else []
     capacity = len(slots)
@@ -187,7 +233,7 @@ def create_cauldron(
     elif capacity >= 5:
         material = "silver"
 
-    c = Cauldron(user_id=user.vk_id, recipe_id=recipe.id, material=material,
+    c = Cauldron(user_id=user.vk_id, recipe_id=recipe.id, field_id=field_id, material=material,
                  capacity=capacity, status="empty")
     db.add(c)
     db.flush()
@@ -201,15 +247,15 @@ def create_cauldron(
     return _cauldron_detail(c, db)
 
 
-@router.get("/cauldrons/active", response_model=CauldronOut | None)
-def get_active_cauldron(
+@router.get("/cauldrons/active", response_model=list[CauldronOut])
+def get_active_cauldrons(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    c = db.query(Cauldron).filter(
+    rows = db.query(Cauldron).filter(
         Cauldron.user_id == user.vk_id, Cauldron.status != "done"
-    ).first()
-    return _cauldron_detail(c, db) if c is not None else None
+    ).order_by(Cauldron.created_at.asc(), Cauldron.id.asc()).all()
+    return [_cauldron_detail(c, db) for c in rows]
 
 
 @router.get("/cauldrons/{cauldron_id}", response_model=CauldronOut)
@@ -224,13 +270,18 @@ def get_cauldron(
     return _cauldron_detail(c, db)
 
 
-def _cauldron_zone_image(db: Session) -> str | None:
-    z = db.query(BreweryZone).filter(BreweryZone.zone_kind == "cauldron").order_by(BreweryZone.id.asc()).first()
+def _cauldron_zone_image(db: Session, field_id: int | None) -> str | None:
+    if field_id is None:
+        return None
+    z = db.query(BreweryZone).filter(
+        BreweryZone.field_id == field_id, BreweryZone.zone_kind == "cauldron"
+    ).order_by(BreweryZone.id.asc()).first()
     return z.image_url if z else None
 
 
 def _cauldron_detail(c: Cauldron, db: Session) -> CauldronOut:
     recipe = db.query(PotionRecipe).filter(PotionRecipe.id == c.recipe_id).first() if c.recipe_id else None
+    field = db.query(Field).filter(Field.id == c.field_id).first() if c.field_id else None
     slots = db.query(CauldronSlot).filter(CauldronSlot.cauldron_id == c.id).order_by(CauldronSlot.slot_index).all()
     slot_data = []
     for s in slots:
@@ -252,8 +303,10 @@ def _cauldron_detail(c: Cauldron, db: Session) -> CauldronOut:
         slot_data.append(d)
     return CauldronOut(
         id=c.id, recipe_id=c.recipe_id, recipe_name=recipe.name if recipe else None,
+        field_id=c.field_id, field_name=field.name if field else None,
         material=c.material, capacity=c.capacity, status=c.status, slots=slot_data,
-        image_url=_cauldron_zone_image(db),
+        image_url=_cauldron_zone_image(db, c.field_id),
+        created_at=c.created_at.isoformat() if c.created_at else None,
     )
 
 

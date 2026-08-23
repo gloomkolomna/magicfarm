@@ -143,11 +143,14 @@ export interface Cauldron {
   id: number;
   recipe_id: number;
   recipe_name: string;
+  field_id?: number | null;
+  field_name?: string | null;
   material: string;
   capacity: number;
   status: string;
   slots: CauldronSlot[];
   image_url: string | null;
+  created_at?: string | null;
 }
 
 export interface SlotWarehouseItem {
@@ -1956,12 +1959,12 @@ export const api = {
   // ── Зелья: игрок ──
   potionRecipes: (level?: string) =>
     client.get<PotionRecipe[]>('/potions/recipes', { params: { level } }).then((r) => r.data),
-  createCauldron: (recipeId: number) =>
-    client.post<Cauldron>('/potions/cauldrons', { recipe_id: recipeId }).then((r) => r.data),
+  createCauldron: (recipeId: number, fieldId?: number) =>
+    client.post<Cauldron>('/potions/cauldrons', { recipe_id: recipeId, field_id: fieldId ?? null }).then((r) => r.data),
   getCauldron: (id: number) =>
     client.get<Cauldron>(`/potions/cauldrons/${id}`).then((r) => r.data),
-  activeCauldron: () =>
-    client.get<Cauldron | null>('/potions/cauldrons/active').then((r) => r.data),
+  activeCauldrons: () =>
+    client.get<Cauldron[]>('/potions/cauldrons/active').then((r) => r.data),
   cauldronSlotWarehouse: (cauldronId: number, slotIndex: number) =>
     client.get<SlotWarehouseItem[]>(`/potions/cauldrons/${cauldronId}/slot/${slotIndex}/warehouse`).then((r) => r.data),
   fillCauldronSlot: (cauldronId: number, slotIndex: number, itemKind: string, itemId: number) =>

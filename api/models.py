@@ -797,6 +797,7 @@ class Cauldron(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
     recipe_id = Column(Integer, ForeignKey("potion_recipes.id", ondelete="CASCADE"), nullable=True)
+    field_id = Column(Integer, ForeignKey("fields.id", ondelete="CASCADE"), nullable=True)
     material = Column(String, nullable=False, default="tin", server_default="tin")
     capacity = Column(Integer, nullable=False, default=4, server_default="4")
     status = Column(String, nullable=False, default="empty", server_default="empty")

@@ -128,7 +128,8 @@ const CAULDRON_STATUS: Record<string, { label: string; color: string }> = {
 function PotionsCatalog() {
   const { loading: sessionLoading } = useSession();
   const [recipes, setRecipes] = useState<PotionRecipe[]>([]);
-  const [cauldron, setCauldron] = useState<Cauldron | null>(null);
+  const [cauldrons, setCauldrons] = useState<Cauldron[]>([]);
+  const [cauldronIdx, setCauldronIdx] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -156,10 +157,11 @@ function PotionsCatalog() {
     try {
       const [rec, active] = await Promise.all([
         api.potionRecipes(),
-        api.activeCauldron().catch(() => null),
+        api.activeCauldrons().catch(() => [] as Cauldron[]),
       ]);
       setRecipes(rec);
-      setCauldron(active);
+      setCauldrons(active);
+      setCauldronIdx(Math.max(0, active.length - 1));
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка загрузки'));
     } finally {
@@ -180,8 +182,8 @@ function PotionsCatalog() {
     setBusy(true);
     setMsg(null);
     try {
-      const c = await api.createCauldron(recipeId);
-      setCauldron(c);
+      await api.createCauldron(recipeId);
+      await load();
       setMsg('✓ Котёл установлен!');
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -198,6 +200,7 @@ function PotionsCatalog() {
     ? groupedByLevel[currentLevel].every((r) => r.unlocked)
     : false;
 
+  const cauldron = cauldrons[cauldronIdx] ?? null;
   const cauldronStatus = cauldron ? CAULDRON_STATUS[cauldron.status] || { label: cauldron.status, color: 'var(--text-muted)' } : null;
 
   return (
@@ -208,6 +211,16 @@ function PotionsCatalog() {
         <div className="fm-card">Загрузка рецептов…</div>
       ) : (
         <>
+          {cauldrons.length > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, background: 'linear-gradient(180deg, var(--leaf) 0%, var(--grass) 100%)', border: '1px solid var(--grass-deep)', borderRadius: 'var(--radius-md)', padding: '6px 10px', color: '#1a2414' }}>
+              <button disabled={cauldronIdx === 0} onClick={() => setCauldronIdx(cauldronIdx - 1)} style={{ cursor: cauldronIdx === 0 ? 'default' : 'pointer', opacity: cauldronIdx === 0 ? 0.4 : 1, padding: '4px 12px', fontSize: 16, background: 'transparent', border: 'none', color: 'inherit' }}>◀</button>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>
+                🍲 {cauldron?.field_name || 'Котёл'} · {cauldronIdx + 1}/{cauldrons.length}
+              </span>
+              <button disabled={cauldronIdx >= cauldrons.length - 1} onClick={() => setCauldronIdx(cauldronIdx + 1)} style={{ cursor: cauldronIdx >= cauldrons.length - 1 ? 'default' : 'pointer', opacity: cauldronIdx >= cauldrons.length - 1 ? 0.4 : 1, padding: '4px 12px', fontSize: 16, background: 'transparent', border: 'none', color: 'inherit' }}>▶</button>
+            </div>
+          )}
+
           {cauldron ? (
             <div className="fm-card fm-rise" style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -215,7 +228,7 @@ function PotionsCatalog() {
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <strong style={{ display: 'block' }}>{cauldron.recipe_name}</strong>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {CAULDRON_MATERIAL_LABELS[cauldron.material] || cauldron.material} · {cauldron.capacity} ингр.
+                    {cauldron.field_name ? `${cauldron.field_name} · ` : ''}{CAULDRON_MATERIAL_LABELS[cauldron.material] || cauldron.material} · {cauldron.capacity} ингр.
                   </div>
                   {cauldronStatus && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: cauldronStatus.color, marginTop: 4 }}>
@@ -354,7 +367,7 @@ function PotionsCatalog() {
                     <button
                       className="fm-btn fm-btn-sm fm-btn-wrap"
                       style={{ width: '100%', marginTop: 10 }}
-                      disabled={busy || !!cauldron || !levelUnlocked}
+                      disabled={busy || !levelUnlocked}
                       onClick={() => createCauldron(r.id)}
                     >
                       Установить котёл
@@ -498,7 +511,7 @@ export function BreweryScenePage() {
   async function installBrewCauldron(recipeId: number) {
     setBusy(true); setMsg(null);
     try {
-      await api.createCauldron(recipeId);
+      await api.createCauldron(recipeId, fieldId);
       setBrewPickRecipe(false);
       setBrewCardModal(null);
       setMsg('✓ Котёл установлен!');
