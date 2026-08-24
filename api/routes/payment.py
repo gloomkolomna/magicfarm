@@ -17,13 +17,15 @@ from deps import get_current_user, require_role
 from models import LOCATION_NAMES, PaymentLog, PaymentOrder, User
 from services.subscription import (
     PERIOD_DAYS,
+    apply_dlc_topup,
     dlc_catalog,
+    days_left,
     extend_subscription,
     get_base_price_rub,
-    get_dlc_change_immediate,
     is_subscription_active,
     parse_dlc_codes,
     price_rub_for,
+    topup_price_rub,
 )
 
 router = APIRouter(prefix="/api/payment", tags=["payment"])
@@ -47,9 +49,11 @@ def _log(vk_id, order_id, action, detail="", txn_id="", db: Session = None) -> N
         pass
 
 
-def _order_description(dlc_codes: list[str]) -> str:
-    parts = ["Подписка «Ферма» 30 дней"]
+def _order_description(dlc_codes: list[str], kind: str = "subscription") -> str:
     names = [LOCATION_NAMES.get(c, c) for c in dlc_codes]
+    if kind == "dlc_topup":
+        return "Дополнение подписки «Ферма»: " + ", ".join(names)
+    parts = ["Подписка «Ферма» 30 дней"]
     if names:
         parts.append(" + " + ", ".join(names))
     return "".join(parts)
@@ -70,6 +74,7 @@ class CreateOrderResponse(BaseModel):
     amount_kop: int
     amount_rub: int
     period_days: int
+    kind: str
     dlc_codes: list[str]
 
 
@@ -78,6 +83,7 @@ class OrderStatusResponse(BaseModel):
     status: str
     amount_kop: int
     period_days: int
+    kind: str
     dlc_codes: list[str]
     created_at: str
 
@@ -86,12 +92,14 @@ class PriceDlcItem(BaseModel):
     code: str
     name: str
     price_rub: int
+    topup_rub: int | None = None
 
 
 class PriceResponse(BaseModel):
     period_days: int
     base_rub: int
     dlc: list[PriceDlcItem]
+    topup_days_left: int | None = None
 
 
 def _cancel_expired_pending(db: Session, vk_id: int) -> None:
@@ -126,10 +134,22 @@ def _validate_dlc_codes(codes: list[str]) -> list[str]:
 
 @router.get("/price", response_model=PriceResponse)
 def get_price(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    topup_days = None
+    current: set[str] = set()
+    if is_subscription_active(user):
+        topup_days = days_left(user.subscription_until)
+        current = set(parse_dlc_codes(user.subscription_dlc_codes))
+    items = []
+    for d in dlc_catalog(db):
+        topup_rub = None
+        if topup_days is not None and d["code"] not in current:
+            topup_rub = topup_price_rub(db, [d["code"]], topup_days)
+        items.append(PriceDlcItem(**d, topup_rub=topup_rub))
     return PriceResponse(
         period_days=PERIOD_DAYS,
         base_rub=get_base_price_rub(db),
-        dlc=[PriceDlcItem(**d) for d in dlc_catalog(db)],
+        dlc=items,
+        topup_days_left=topup_days,
     )
 
 
@@ -170,15 +190,25 @@ def create_subscription_order(
             detail="Укажите корректный email — на него придёт электронный чек",
         )
 
-    if is_subscription_active(user) and not get_dlc_change_immediate(db):
-        current = set(parse_dlc_codes(user.subscription_dlc_codes))
-        if set(dlc_codes) != current:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Состав подписки можно изменить после истечения текущей",
-            )
-
+    kind = "subscription"
     amount_rub = price_rub_for(db, dlc_codes)
+    period_days = PERIOD_DAYS
+
+    if is_subscription_active(user):
+        current = set(parse_dlc_codes(user.subscription_dlc_codes))
+        requested = set(dlc_codes)
+        if requested != current:
+            if not requested.issuperset(current):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="До конца текущего периода состав можно только дополнять ДЛС. Полная стоимость — со следующего платежа",
+                )
+            new_codes = [c for c in dlc_codes if c not in current]
+            period_days = days_left(user.subscription_until)
+            amount_rub = topup_price_rub(db, new_codes, period_days)
+            kind = "dlc_topup"
+            dlc_codes = new_codes
+
     amount_kop = amount_rub * 100
 
     _cancel_expired_pending(db, user.vk_id)
@@ -186,8 +216,9 @@ def create_subscription_order(
     order = PaymentOrder(
         vk_id=user.vk_id,
         amount_kop=amount_kop,
-        period_days=PERIOD_DAYS,
+        period_days=period_days,
         dlc_codes=",".join(dlc_codes),
+        kind=kind,
         status="pending",
         receipt_email=email,
     )
@@ -202,7 +233,7 @@ def create_subscription_order(
         info = gateway_create_order(
             vk_id=user.vk_id,
             amount_kop=amount_kop,
-            description=_order_description(dlc_codes),
+            description=_order_description(dlc_codes, kind),
             receipt_email=order.receipt_email,
         )
     except PayGatewayBlocked:
@@ -227,7 +258,8 @@ def create_subscription_order(
         payment_url=info.get("payment_url") or "",
         amount_kop=amount_kop,
         amount_rub=amount_rub,
-        period_days=PERIOD_DAYS,
+        period_days=period_days,
+        kind=kind,
         dlc_codes=dlc_codes,
     )
 
@@ -247,10 +279,15 @@ def _claim_success(db: Session, order: PaymentOrder) -> bool:
 
 def _fulfill(db: Session, order: PaymentOrder, source: str, operation_id: str = "") -> None:
     user = db.query(User).filter(User.vk_id == order.vk_id).first()
+    action = "subscription_extended"
     if user is not None:
-        extend_subscription(db, user, order.period_days, parse_dlc_codes(order.dlc_codes))
-    _log(order.vk_id, order.id, f"subscription_extended_{source}",
-         f"days={order.period_days} dlc={order.dlc_codes} moneta_operation_id={operation_id}",
+        if order.kind == "dlc_topup":
+            apply_dlc_topup(db, user, parse_dlc_codes(order.dlc_codes))
+            action = "dlc_topup_applied"
+        else:
+            extend_subscription(db, user, order.period_days, parse_dlc_codes(order.dlc_codes))
+    _log(order.vk_id, order.id, f"{action}_{source}",
+         f"kind={order.kind} days={order.period_days} dlc={order.dlc_codes} moneta_operation_id={operation_id}",
          txn_id=order.gateway_txn_id or "", db=db)
 
 
@@ -289,6 +326,7 @@ def get_order_status(
         status=order.status,
         amount_kop=order.amount_kop,
         period_days=order.period_days,
+        kind=order.kind,
         dlc_codes=parse_dlc_codes(order.dlc_codes),
         created_at=order.created_at.isoformat(),
     )
@@ -368,6 +406,7 @@ class AdminPaymentOrderOut(BaseModel):
     amount_kop: int
     amount_rub: float
     period_days: int
+    kind: str
     dlc_codes: list[str]
     status: str
     gateway_txn_id: str | None
@@ -399,7 +438,7 @@ def list_payment_orders(
         AdminPaymentOrderOut(
             id=o.id, vk_id=o.vk_id, amount_kop=o.amount_kop,
             amount_rub=round(o.amount_kop / 100, 2), period_days=o.period_days,
-            dlc_codes=parse_dlc_codes(o.dlc_codes), status=o.status,
+            kind=o.kind, dlc_codes=parse_dlc_codes(o.dlc_codes), status=o.status,
             gateway_txn_id=o.gateway_txn_id,
             created_at=o.created_at.isoformat(), completed_at=o.completed_at.isoformat() if o.completed_at else None,
         )
@@ -424,7 +463,7 @@ def cancel_payment_order(
     return AdminPaymentOrderOut(
         id=order.id, vk_id=order.vk_id, amount_kop=order.amount_kop,
         amount_rub=round(order.amount_kop / 100, 2), period_days=order.period_days,
-        dlc_codes=parse_dlc_codes(order.dlc_codes), status=order.status,
+        kind=order.kind, dlc_codes=parse_dlc_codes(order.dlc_codes), status=order.status,
         gateway_txn_id=order.gateway_txn_id,
         created_at=order.created_at.isoformat(), completed_at=order.completed_at.isoformat() if order.completed_at else None,
     )

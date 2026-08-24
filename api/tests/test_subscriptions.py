@@ -194,7 +194,6 @@ def test_finance_settings_admin_only(admin_client):
     assert admin_client.put("/api/admin/settings/subscription_price_rub", json={"value": "350"}).status_code == 200
     assert admin_client.put("/api/admin/settings/subscription_price_rub_infirmary", json={"value": "75"}).status_code == 200
     assert admin_client.put("/api/admin/settings/subscription_price_rub_brewery", json={"value": "60"}).status_code == 200
-    assert admin_client.put("/api/admin/settings/dlc_change_immediate", json={"value": "1"}).status_code == 200
     assert admin_client.put("/api/admin/settings/trial_days", json={"value": "-5"}).json()["value"] == "0"
 
 

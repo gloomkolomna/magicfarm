@@ -32,7 +32,7 @@ function SlidePager({ slides, finishLabel, onFinish }: { slides: StorySlide[]; f
         ) : (
           <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, background: 'rgba(255,255,255,0.04)', borderRadius: 12, marginBottom: 12 }}>📜</div>
         )}
-        <div style={{ fontSize: 15, lineHeight: 1.55, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-word', background: 'linear-gradient(180deg, rgba(10,16,8,0.60) 0%, rgba(10,16,8,0.48) 100%)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px 16px', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
+        <div style={{ fontSize: 15, lineHeight: 1.55, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-word', background: 'linear-gradient(180deg, rgba(10,16,8,0.60) 0%, rgba(10,16,8,0.48) 100%)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '12px 8px', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
           {slide.text || ''}
         </div>
       </div>
@@ -195,10 +195,10 @@ export function DlcStoryOverlay({ locationCode, name, emoji, onClose }: { locati
       style={{
         position: 'fixed', inset: 0, zIndex: 70,
         background: 'rgba(8,12,6,0.97)', backdropFilter: 'blur(6px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 8px',
       }}
     >
-      <div style={{ width: '100%', maxWidth: 'calc(var(--shell-max-width) * 0.85)', maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '100%', maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
         {intro ? (
           <div className="fm-pop" style={{ textAlign: 'center', padding: '24px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <div style={{ fontSize: 'clamp(56px, 20vw, 110px)', lineHeight: 1 }}>{emoji}</div>
@@ -252,11 +252,9 @@ export function DlcStoryGate({ locationCode, name, emoji, children }: { location
 export function PrehistoryPage() {
   const nav = useNavigate();
   return (
-    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
+    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: '8px 6px' }}>
       <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>📜 Предыстория</h1>
-      <div className="fm-card">
-        <Prehistory onDone={() => nav(-1)} />
-      </div>
+      <Prehistory onDone={() => nav(-1)} />
     </div>
   );
 }

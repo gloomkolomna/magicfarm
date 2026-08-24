@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 TRIAL_DAYS_KEY = "trial_days"
 BASE_PRICE_KEY = "subscription_price_rub"
-DLC_CHANGE_IMMEDIATE_KEY = "dlc_change_immediate"
 DEFAULT_TRIAL_DAYS = 7
 DEFAULT_BASE_PRICE_RUB = 300
 DEFAULT_DLC_PRICE_RUB = 50
@@ -42,8 +41,11 @@ def get_dlc_price_rub(db: Session, code: str) -> int:
     return _get_int_setting(db, dlc_price_key(code), DEFAULT_DLC_PRICE_RUB)
 
 
-def get_dlc_change_immediate(db: Session) -> bool:
-    return _get_int_setting(db, DLC_CHANGE_IMMEDIATE_KEY, 0) == 1
+def topup_price_rub(db: Session, dlc_codes: list[str], days: int) -> int:
+    import math
+
+    total = sum(get_dlc_price_rub(db, c) for c in dlc_codes)
+    return math.ceil(total * days / PERIOD_DAYS)
 
 
 def dlc_catalog(db: Session) -> list[dict]:
@@ -97,6 +99,15 @@ def extend_subscription(db: Session, user, days: int, dlc_codes: list[str]) -> N
     base = max(datetime.datetime.utcnow(), user.subscription_until or datetime.datetime.utcnow())
     user.subscription_until = base + datetime.timedelta(days=days)
     user.subscription_dlc_codes = dlc_codes_to_str(dlc_codes)
+    db.commit()
+
+
+def apply_dlc_topup(db: Session, user, dlc_codes: list[str]) -> None:
+    merged = parse_dlc_codes(user.subscription_dlc_codes)
+    for c in dlc_codes:
+        if c not in merged:
+            merged.append(c)
+    user.subscription_dlc_codes = dlc_codes_to_str(merged)
     db.commit()
 
 

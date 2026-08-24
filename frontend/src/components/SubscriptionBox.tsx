@@ -8,7 +8,7 @@ function formatDate(iso: string | null): string {
   return d.toLocaleDateString('ru-RU');
 }
 
-const OFFERTA_URL = 'https://belovolovhome.ru/magicfarm/game/offerta.docx';
+const OFFERTA_URL = 'https://belovolovhome.ru/magicfarm/game/offerta.html';
 const PRIVACY_URL = 'https://belovolovhome.ru/magicfarm/game/private.html';
 const GROUP_URL = 'https://vk.ru/krestiki_s_korgi';
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -16,7 +16,6 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
   const { user, refresh } = useSession();
   const [price, setPrice] = useState<PaymentPrice | null>(null);
-  const [selected, setSelected] = useState<string[]>(user?.subscription_dlc_codes ?? []);
   const [email, setEmail] = useState('');
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -24,6 +23,9 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const donorBlocked = !!user?.game_open && user.role !== 'admin' && !user.is_donor && !user.donor_exempt;
+  const activeSub = !!user?.subscription_active;
+  const currentCodes = user?.subscription_dlc_codes ?? [];
+  const [selected, setSelected] = useState<string[]>(activeSub ? [] : currentCodes);
 
   useEffect(() => {
     api.paymentPrice().then(setPrice).catch(() => {});
@@ -31,10 +33,15 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
   }, []);
 
   const toggle = (code: string) => {
+    if (activeSub && currentCodes.includes(code)) return;
     setSelected((prev) => (prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]));
   };
 
-  const total = price ? price.base_rub + price.dlc.filter((d) => selected.includes(d.code)).reduce((s, d) => s + d.price_rub, 0) : 0;
+  const selectedNew = activeSub ? selected.filter((c) => !currentCodes.includes(c)) : [];
+  const topupDays = price?.topup_days_left ?? null;
+  const topupTotal = price ? price.dlc.filter((d) => selectedNew.includes(d.code)).reduce((s, d) => s + (d.topup_rub ?? 0), 0) : 0;
+  const fullTotal = price ? price.base_rub + price.dlc.filter((d) => selected.includes(d.code)).reduce((s, d) => s + d.price_rub, 0) : 0;
+  const renewTotal = price ? price.base_rub + price.dlc.filter((d) => currentCodes.includes(d.code)).reduce((s, d) => s + d.price_rub, 0) : 0;
 
   async function pay() {
     if (busy || !price) return;
@@ -48,9 +55,13 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
     }
     setBusy(true);
     setStatus(null);
+    const codesToSend = activeSub
+      ? (selectedNew.length ? [...currentCodes, ...selectedNew] : currentCodes)
+      : selected;
+    const isTopup = activeSub && selectedNew.length > 0;
     try {
       const order = await api.createSubscriptionOrder({
-        dlc_codes: selected,
+        dlc_codes: codesToSend,
         receipt_email: email.trim(),
       });
       setStatus('Ожидание оплаты…');
@@ -68,8 +79,9 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
           const st = await api.paymentOrderStatus(order.order_id);
           if (st.status === 'success') {
             if (pollingRef.current) clearInterval(pollingRef.current);
-            setStatus('Подписка активирована! 🎉');
+            setStatus(isTopup ? 'ДЛС добавлены в подписку! 🎉' : 'Подписка активирована! 🎉');
             setBusy(false);
+            setSelected([]);
             await refresh();
             onPaid?.();
           }
@@ -122,13 +134,44 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
           <div style={{ fontSize: 16 }}>
             <b>{price.base_rub} ₽</b> — базовая подписка на {price.period_days} дней
           </div>
+          {activeSub && (
+            <>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                Подписка активна до {formatDate(user?.subscription_until ?? null)}. Новые ДЛС — пропорциональная
+                доплата за оставшиеся дни, полная цена — со следующего продления.
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                Отказаться от ДЛС можно при следующем продлении: сумма изменится с нового периода, возврат средств
+                не осуществляется. До конца оплаченного периода ДЛС продолжает действовать.
+              </div>
+            </>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {price.dlc.map((d) => (
-              <label key={d.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, cursor: 'pointer' }}>
-                <input type="checkbox" checked={selected.includes(d.code)} onChange={() => toggle(d.code)} disabled={busy} />
-                <span>+ {d.name} <span style={{ color: 'var(--text-muted)' }}>(+{d.price_rub} ₽)</span></span>
-              </label>
-            ))}
+            {price.dlc.map((d) => {
+              if (activeSub && currentCodes.includes(d.code)) {
+                return (
+                  <div key={d.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: 'var(--text-muted)' }}>
+                    <span>✅</span>
+                    <span>+ {d.name} — уже в подписке</span>
+                  </div>
+                );
+              }
+              return (
+                <label key={d.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={selected.includes(d.code)} onChange={() => toggle(d.code)} disabled={busy} />
+                  {activeSub ? (
+                    <span>
+                      + {d.name}{' '}
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        (доплата {d.topup_rub} ₽{topupDays != null ? ` за ${topupDays} дн.` : ''})
+                      </span>
+                    </span>
+                  ) : (
+                    <span>+ {d.name} <span style={{ color: 'var(--text-muted)' }}>(+{d.price_rub} ₽)</span></span>
+                  )}
+                </label>
+              );
+            })}
           </div>
           <input
             type="email"
@@ -148,7 +191,11 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
             </span>
           </label>
           <button className="fm-btn" onClick={pay} disabled={busy} style={{ padding: '14px 16px', fontSize: 17 }}>
-            {busy ? 'Ожидание оплаты…' : `Перейти к оплате ${total} ₽`}
+            {busy
+              ? 'Ожидание оплаты…'
+              : activeSub
+                ? (selectedNew.length ? `Доплатить ${topupTotal} ₽` : `Продлить на ${price.period_days} дн. — ${renewTotal} ₽`)
+                : `Перейти к оплате ${fullTotal} ₽`}
           </button>
           {status && <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{status}</div>}
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>

@@ -35,7 +35,7 @@ def _sign(payload: dict) -> dict:
 
 def _order(db, **kw):
     defaults = dict(vk_id=123, amount_kop=35000, period_days=30, dlc_codes="infirmary",
-                    status="pending", gateway_txn_id="farm-order-1")
+                    kind="subscription", status="pending", gateway_txn_id="farm-order-1")
     defaults.update(kw)
     o = PaymentOrder(**defaults)
     db.add(o)
@@ -143,41 +143,80 @@ def test_price_calculation_with_settings(db, player_client):
     assert price_rub_for(db, ["brewery", "infirmary"]) == 400 + 70 + 50
 
 
-def test_dlc_change_blocked_while_active(player_client, monkeypatch, db):
-    from models import Setting
-
-    player_client.get("/api/me")
-    _enable_gateway(monkeypatch)
-    db.add(Setting(key="dlc_change_immediate", value="0"))
-    db.commit()
+def _activate_subscription(vk_id=123, days=10, codes="infirmary"):
     with TestingSessionLocal() as s:
-        u = s.query(User).filter(User.vk_id == 123).first()
-        u.subscription_until = _utcnow() + timedelta(days=10)
-        u.subscription_dlc_codes = "infirmary"
+        u = s.query(User).filter(User.vk_id == vk_id).first()
+        u.subscription_until = _utcnow() + timedelta(days=days)
+        u.subscription_dlc_codes = codes
         s.commit()
 
+
+def test_dlc_topup_order_prorated(player_client, monkeypatch, db):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=10, codes="infirmary")
+
     r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["infirmary", "brewery"], "receipt_email": "player@example.com"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["kind"] == "dlc_topup"
+    assert data["amount_rub"] == 17
+    assert data["amount_kop"] == 1700
+    assert data["period_days"] == 10
+    assert data["dlc_codes"] == ["brewery"]
+
+    with TestingSessionLocal() as db2:
+        o = db2.query(PaymentOrder).filter(PaymentOrder.id == data["order_id"]).first()
+        assert o.kind == "dlc_topup"
+        assert o.dlc_codes == "brewery"
+        assert o.amount_kop == 1700
+
+
+def test_dlc_removal_blocked_while_active(player_client, monkeypatch, db):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=10, codes="infirmary")
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["brewery"], "receipt_email": "player@example.com"})
     assert r.status_code == 409
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": [], "receipt_email": "player@example.com"})
+    assert r.status_code == 409
+
+
+def test_dlc_same_set_renews_full_price(player_client, monkeypatch, db):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=10, codes="infirmary")
 
     r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["infirmary"], "receipt_email": "player@example.com"})
     assert r.status_code == 200
+    data = r.json()
+    assert data["kind"] == "subscription"
+    assert data["amount_rub"] == 350
+    assert data["period_days"] == 30
 
 
-def test_dlc_change_immediate_mode(player_client, monkeypatch, db):
-    from models import Setting
-
+def test_price_topup_for_active_subscriber(player_client, db):
     player_client.get("/api/me")
-    _enable_gateway(monkeypatch, txn="farm-order-imm")
-    db.add(Setting(key="dlc_change_immediate", value="1"))
-    db.commit()
-    with TestingSessionLocal() as s:
-        u = s.query(User).filter(User.vk_id == 123).first()
-        u.subscription_until = _utcnow() + timedelta(days=10)
-        u.subscription_dlc_codes = "infirmary"
-        s.commit()
+    _activate_subscription(days=10, codes="infirmary")
 
-    r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["brewery"], "receipt_email": "player@example.com"})
+    r = player_client.get("/api/payment/price")
     assert r.status_code == 200
+    data = r.json()
+    assert data["topup_days_left"] == 10
+    prices = {d["code"]: d["topup_rub"] for d in data["dlc"]}
+    assert prices["infirmary"] is None
+    assert prices["brewery"] == 17
+
+
+def test_price_no_topup_without_subscription(player_client, db):
+    player_client.get("/api/me")
+    r = player_client.get("/api/payment/price")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["topup_days_left"] is None
+    assert all(d["topup_rub"] is None for d in data["dlc"])
 
 
 def test_expired_pending_cancelled_on_new_order(player_client, monkeypatch, db):
@@ -279,6 +318,43 @@ def test_webhook_stacks_on_active_subscription(player_client, monkeypatch, db):
     with TestingSessionLocal() as s:
         u = s.query(User).filter(User.vk_id == 123).first()
         assert u.subscription_until - _utcnow() > timedelta(days=39)
+
+
+def test_webhook_dlc_topup_merges_codes(player_client, monkeypatch, db):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _order(db, gateway_txn_id="farm-topup-1", kind="dlc_topup", amount_kop=1700,
+           period_days=10, dlc_codes="brewery")
+    _activate_subscription(days=10, codes="infirmary")
+    with TestingSessionLocal() as s:
+        u = s.query(User).filter(User.vk_id == 123).first()
+        until_before = u.subscription_until
+    body = _sign({"transaction_id": "farm-topup-1", "game_id": "farm", "vk_id": 123,
+                  "amount_kop": 1700, "status": "success", "moneta_operation_id": "op-top"})
+    r = player_client.post("/api/payment/webhook", **body)
+    assert r.status_code == 200
+
+    with TestingSessionLocal() as s:
+        u = s.query(User).filter(User.vk_id == 123).first()
+        o = s.query(PaymentOrder).filter(PaymentOrder.gateway_txn_id == "farm-topup-1").first()
+        assert o.status == "success"
+        assert sorted(u.subscription_dlc_codes.split(",")) == ["brewery", "infirmary"]
+        assert abs((u.subscription_until - until_before).total_seconds()) < 5
+
+
+def test_webhook_dlc_topup_idempotent(player_client, monkeypatch, db):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _order(db, gateway_txn_id="farm-topup-1", kind="dlc_topup", amount_kop=1700,
+           period_days=10, dlc_codes="brewery")
+    _activate_subscription(days=10, codes="infirmary")
+    body = _sign({"transaction_id": "farm-topup-1", "game_id": "farm", "vk_id": 123,
+                  "amount_kop": 1700, "status": "success"})
+    assert player_client.post("/api/payment/webhook", **body).status_code == 200
+    assert player_client.post("/api/payment/webhook", **body).status_code == 200
+    with TestingSessionLocal() as s:
+        u = s.query(User).filter(User.vk_id == 123).first()
+        assert sorted(u.subscription_dlc_codes.split(",")) == ["brewery", "infirmary"]
 
 
 def test_order_status_own_and_foreign(player_client, db):

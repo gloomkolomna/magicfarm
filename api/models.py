@@ -191,6 +191,7 @@ class PaymentOrder(Base):
     amount_kop = Column(Integer, nullable=False)
     period_days = Column(Integer, nullable=False, default=30, server_default="30")
     dlc_codes = Column(String, nullable=False, default="", server_default="")
+    kind = Column(String, nullable=False, default="subscription", server_default="subscription")
     provider = Column(String, nullable=False, default="pay_gateway", server_default="pay_gateway")
     gateway_txn_id = Column(String, nullable=True, index=True)
     receipt_email = Column(String, nullable=True)

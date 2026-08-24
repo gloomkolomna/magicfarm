@@ -50,7 +50,7 @@ const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: 'customer_max_orders', label: 'Лимит активных заказов заказчика (0–50)', hint: 'Заказчики с этим числом открытых заказов скрываются при создании заказа' },
 ];
 
-const FINANCE_SETTING_KEYS = ['trial_days', 'subscription_price_rub', 'subscription_price_rub_infirmary', 'subscription_price_rub_brewery', 'dlc_change_immediate', 'game_open'];
+const FINANCE_SETTING_KEYS = ['trial_days', 'subscription_price_rub', 'subscription_price_rub_infirmary', 'subscription_price_rub_brewery', 'game_open'];
 
 const FINANCE_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: 'game_open', label: 'Игра открыта для донов (0/1)', hint: '1 — вход и игра для донов группы «Крестики от Корги» (админы и приглашённые проходят всегда); 0 — игра закрыта' },
@@ -58,7 +58,6 @@ const FINANCE_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: 'subscription_price_rub', label: 'Базовая цена подписки, ₽', hint: 'Доступ к базе на 30 дней' },
   { key: 'subscription_price_rub_infirmary', label: 'Цена ДЛС «Лечебница», ₽', hint: 'Приплюсовывается к базовой при выборе' },
   { key: 'subscription_price_rub_brewery', label: 'Цена ДЛС «Зельеварение», ₽', hint: 'Приплюсовывается к базовой при выборе' },
-  { key: 'dlc_change_immediate', label: 'Смена состава ДЛС (0/1)', hint: '0 — только после истечения подписки, 1 — сразу при новой оплате' },
 ];
 
 function matchesAny(item: unknown, q: string): boolean {
@@ -2875,7 +2874,7 @@ export default function AdminPage() {
                 <div style={{ overflowX: 'auto' }}>
                   <table className="fm-table" style={{ width: '100%' }}>
                     <thead>
-                      <tr><th>#</th><th>Игрок</th><th>Сумма</th><th>Состав</th><th>Статус</th><th>Создан</th><th></th></tr>
+                      <tr><th>#</th><th>Игрок</th><th>Сумма</th><th>Тип</th><th>Состав</th><th>Статус</th><th>Создан</th><th></th></tr>
                     </thead>
                     <tbody>
                       {payOrders.map((o) => (
@@ -2883,6 +2882,7 @@ export default function AdminPage() {
                           <td>{o.id}</td>
                           <td>{o.vk_id}</td>
                           <td>{o.amount_rub} ₽</td>
+                          <td>{o.kind === 'dlc_topup' ? `доплата (${o.period_days} дн.)` : 'подписка'}</td>
                           <td>{o.dlc_codes.length ? o.dlc_codes.join(', ') : 'база'}</td>
                           <td>{o.status}</td>
                           <td>{new Date(o.created_at.endsWith('Z') ? o.created_at : o.created_at + 'Z').toLocaleString('ru-RU')}</td>

@@ -1479,7 +1479,8 @@ export interface ForestResult {
 export interface PaymentPrice {
   period_days: number;
   base_rub: number;
-  dlc: { code: string; name: string; price_rub: number }[];
+  dlc: { code: string; name: string; price_rub: number; topup_rub: number | null }[];
+  topup_days_left: number | null;
 }
 
 export interface SubscriptionOrder {
@@ -1489,6 +1490,7 @@ export interface SubscriptionOrder {
   amount_kop: number;
   amount_rub: number;
   period_days: number;
+  kind: string;
   dlc_codes: string[];
 }
 
@@ -1497,6 +1499,7 @@ export interface PaymentOrderStatus {
   status: string;
   amount_kop: number;
   period_days: number;
+  kind: string;
   dlc_codes: string[];
   created_at: string;
 }
@@ -1507,6 +1510,7 @@ export interface AdminPaymentOrder {
   amount_kop: number;
   amount_rub: number;
   period_days: number;
+  kind: string;
   dlc_codes: string[];
   status: string;
   gateway_txn_id: string | null;

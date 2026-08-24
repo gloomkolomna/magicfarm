@@ -340,7 +340,6 @@ _SETTING_META = {
     "subscription_price_rub": (0, 1000000, 300),
     "subscription_price_rub_infirmary": (0, 1000000, 50),
     "subscription_price_rub_brewery": (0, 1000000, 50),
-    "dlc_change_immediate": (0, 1, 0),
     GAME_OPEN_KEY: (0, 1, 0 if DEFAULT_GAME_OPEN else 1),
 }
 
