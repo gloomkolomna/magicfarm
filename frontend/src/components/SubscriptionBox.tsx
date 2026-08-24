@@ -198,10 +198,9 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
                 : `Перейти к оплате ${fullTotal} ₽`}
           </button>
           {status && <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{status}</div>}
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            📄 <a href={OFFERTA_URL} target="_blank" rel="noreferrer">Оферта</a>
-            {' · '}
-            🔒 <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Политика обработки персональных данных</a>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div>📄 <a href={OFFERTA_URL} target="_blank" rel="noreferrer">Оферта</a></div>
+            <div>🔒 <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Политика обработки персональных данных</a></div>
           </div>
         </>
       ) : (

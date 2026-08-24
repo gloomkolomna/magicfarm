@@ -113,12 +113,12 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16 }}>
+      <div className="fm-story-text" style={{ textAlign: 'center', marginBottom: 16 }}>
         Каждое растение и товар требует норму вышивки, измеряемую в крестиках.
         Здесь вы задаёте <strong>цену одного кристалла</strong> каждого цвета — итог за карту
         считается как цена × значение карты (1–5), а при нескольких картах складывается.
         Ниже — ваша норма за одну точку кубика. Потом всё это можно изменить в любой момент.
-      </p>
+      </div>
 
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
@@ -270,9 +270,9 @@ export default function Onboarding({ onSaved }: { onSaved?: () => void }) {
             Сохранить мои нормы
           </button>
           {!allFilled && (
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: 6 }}>
+            <div className="fm-story-text" style={{ fontSize: 12, textAlign: 'center', marginTop: 6 }}>
               Заполните все поля: норму каждого цвета (от 1), норму кубика, продукцию животного, нормы изучения и производства (ур. 1–3) — иначе продолжить игру нельзя.
-            </p>
+            </div>
           )}
         </>
       )}

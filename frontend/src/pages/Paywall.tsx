@@ -7,15 +7,15 @@ export default function Paywall({ onWatch }: { onWatch?: () => void }) {
   const { user } = useSession();
 
   return (
-    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'calc(16px + var(--vk-inset-top, 0px)) 16px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'calc(16px + var(--vk-inset-top, 0px)) 6px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 44 }}>⏳</div>
-        <h1 style={{ fontSize: 22, margin: '8px 0 6px' }}>
+        <h1 style={{ fontSize: 22, margin: '8px 0 0' }}>
           {user?.trial_until ? 'Пробный период закончился' : 'Нужна подписка'}
         </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 15, margin: 0 }}>
-          Чтобы продолжить играть, оформите подписку. Просмотр игры остаётся бесплатным.
-        </p>
+      </div>
+      <div className="fm-story-text" style={{ textAlign: 'center' }}>
+        Чтобы продолжить играть, оформите подписку. Просмотр игры остаётся бесплатным.
       </div>
       <SubscriptionBox onPaid={() => nav('/')} />
       <button

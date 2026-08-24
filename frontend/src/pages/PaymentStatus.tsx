@@ -84,10 +84,9 @@ export default function PaymentStatusPage() {
         {txn && status !== 'success' && (
           <div style={{ fontSize: 12, color: 'var(--text-muted)', wordBreak: 'break-all' }}>Платёж: {txn}</div>
         )}
-        <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)' }}>
-          📄 <a href={OFFERTA_URL} target="_blank" rel="noreferrer">Оферта</a>
-          {' · '}
-          🔒 <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Политика обработки персональных данных</a>
+        <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div>📄 <a href={OFFERTA_URL} target="_blank" rel="noreferrer">Оферта</a></div>
+          <div>🔒 <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Политика обработки персональных данных</a></div>
         </div>
       </div>
     </div>

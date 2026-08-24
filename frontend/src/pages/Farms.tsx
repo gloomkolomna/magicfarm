@@ -126,9 +126,9 @@ export default function FarmsPage() {
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
+          <div className="fm-story-text" style={{ fontSize: 12, marginBottom: 10 }}>
             Только просмотр: фермы других игроков можно смотреть и писать, но нельзя трогать.
-          </p>
+          </div>
           {results.length === 0 ? (
             <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Игроков пока нет.</div>
           ) : (
