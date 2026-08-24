@@ -85,6 +85,29 @@ def test_admin_lessons_require_admin(player_client):
     assert player_client.get("/api/admin/lessons").status_code == 403
 
 
+def test_admin_lesson_category_default_and_validation(admin_client):
+    a = admin_client.post("/api/admin/lessons", json={"title": "Ферма", "sort_order": 0})
+    assert a.status_code == 201
+    assert a.json()["category"] == "farm"
+
+    b = admin_client.post("/api/admin/lessons", json={"title": "Зельеварение", "sort_order": 0, "category": "brewery"})
+    assert b.status_code == 201
+    assert b.json()["category"] == "brewery"
+
+    bad = admin_client.post("/api/admin/lessons", json={"title": "Бад", "category": "nope"})
+    assert bad.status_code == 400
+
+
+def test_admin_lesson_update_category(admin_client):
+    lesson = admin_client.post("/api/admin/lessons", json={"title": "Урок", "sort_order": 0}).json()
+    up = admin_client.put(f"/api/admin/lessons/{lesson['id']}", json={"category": "infirmary"})
+    assert up.status_code == 200
+    assert up.json()["category"] == "infirmary"
+    with make_user_client(123, "player") as c:
+        listed = c.get("/api/lessons").json()
+    assert listed[0]["category"] == "infirmary"
+
+
 def test_admin_upload_lesson_video_to_s3(admin_client, monkeypatch):
     import config
     from services import uploads as uploads_mod

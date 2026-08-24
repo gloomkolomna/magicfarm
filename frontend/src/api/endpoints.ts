@@ -235,6 +235,17 @@ export interface Lesson {
   video_url: string | null;
   image_url: string | null;
   sort_order: number;
+  category: string;
+}
+
+export const LESSON_CATEGORIES: { code: string; label: string }[] = [
+  { code: 'farm', label: '🌾 Ферма' },
+  { code: 'brewery', label: '🧪 Зельеварение' },
+  { code: 'infirmary', label: '🌲 Лесная лечебница' },
+];
+
+export function lessonCategoryLabel(code: string): string {
+  return LESSON_CATEGORIES.find((c) => c.code === code)?.label ?? code;
 }
 
 export interface PlayerSearchItem {
@@ -2344,9 +2355,9 @@ export const api = {
   // ── Видео-уроки ──
   lessons: () => client.get<Lesson[]>('/lessons').then((r) => r.data),
   adminLessons: () => client.get<Lesson[]>('/admin/lessons').then((r) => r.data),
-  adminCreateLesson: (data: { title: string; description?: string | null; sort_order: number }) =>
+  adminCreateLesson: (data: { title: string; description?: string | null; sort_order: number; category?: string }) =>
     client.post<Lesson>('/admin/lessons', data).then((r) => r.data),
-  adminUpdateLesson: (id: number, data: { title?: string; description?: string | null; sort_order?: number }) =>
+  adminUpdateLesson: (id: number, data: { title?: string; description?: string | null; sort_order?: number; category?: string }) =>
     client.put<Lesson>(`/admin/lessons/${id}`, data).then((r) => r.data),
   adminUploadLessonVideo: (id: number, file: File) => {
     const form = new FormData();

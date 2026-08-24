@@ -1427,6 +1427,7 @@ class Lesson(Base):
     video_url = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
     sort_order = Column(Integer, nullable=False, default=0, server_default="0")
+    category = Column(String, nullable=False, default="farm", server_default="farm")
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
 

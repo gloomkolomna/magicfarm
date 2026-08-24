@@ -12,6 +12,17 @@ from services.uploads import remove_upload, save_upload
 router = APIRouter(prefix="/api/lessons", tags=["lessons"])
 admin_router = APIRouter(prefix="/api/admin/lessons", tags=["admin-lessons"])
 
+LESSON_CATEGORIES = ("farm", "brewery", "infirmary")
+
+
+def _validate_category(category: str | None) -> str | None:
+    if category is None:
+        return None
+    cat = (category or "").strip()
+    if cat not in LESSON_CATEGORIES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестная категория урока")
+    return cat
+
 
 class LessonOut(BaseModel):
     id: int
@@ -20,24 +31,28 @@ class LessonOut(BaseModel):
     video_url: str | None
     image_url: str | None
     sort_order: int
+    category: str
 
 
 class LessonCreate(BaseModel):
     title: str
     description: str | None = None
     sort_order: int = 0
+    category: str = "farm"
 
 
 class LessonUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     sort_order: int | None = None
+    category: str | None = None
 
 
 def _lesson_out(l: Lesson) -> LessonOut:
     return LessonOut(
         id=l.id, title=l.title, description=l.description,
         video_url=l.video_url, image_url=l.image_url, sort_order=l.sort_order or 0,
+        category=l.category or "farm",
     )
 
 
@@ -79,7 +94,8 @@ def admin_create_lesson(
     title = (req.title or "").strip()
     if not title:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название обязательно")
-    l = Lesson(title=title, description=req.description, sort_order=req.sort_order or 0)
+    category = _validate_category(req.category) or "farm"
+    l = Lesson(title=title, description=req.description, sort_order=req.sort_order or 0, category=category)
     db.add(l)
     db.commit()
     db.refresh(l)
@@ -103,6 +119,10 @@ def admin_update_lesson(
         l.description = req.description
     if req.sort_order is not None:
         l.sort_order = req.sort_order
+    if req.category is not None:
+        category = _validate_category(req.category)
+        if category is not None:
+            l.category = category
     db.commit()
     db.refresh(l)
     return _lesson_out(l)

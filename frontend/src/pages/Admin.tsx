@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, BODY_PARTS, type AdminPaymentOrder, type AdminPaymentLog, BODY_PART_LABELS, LOCATION_TITLES, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type AllowedPlayer, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CocktailItemIn, type CocktailRecipeAdmin, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient,   type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport, type StorySlide, type Lesson, type DlcLocation } from '../api/endpoints';
+import { api, BODY_PARTS, type AdminPaymentOrder, type AdminPaymentLog, BODY_PART_LABELS, LOCATION_TITLES, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type AllowedPlayer, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CocktailItemIn, type CocktailRecipeAdmin, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient,   type LevelGate, type LogEntry, LESSON_CATEGORIES, lessonCategoryLabel, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport, type StorySlide, type Lesson, type DlcLocation } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import FieldGridView from '../components/FieldGridView';
@@ -124,7 +124,7 @@ export default function AdminPage() {
 
   // ── Видео-уроки ──
   const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [lessonForm, setLessonForm] = useState<{ title: string; description: string; sort_order: string }>({ title: '', description: '', sort_order: '0' });
+  const [lessonForm, setLessonForm] = useState<{ title: string; description: string; sort_order: string; category: string }>({ title: '', description: '', sort_order: '0', category: 'farm' });
   const [lessonEditingId, setLessonEditingId] = useState<number | null>(null);
   const [lessonVideo, setLessonVideo] = useState<File | null>(null);
   const [lessonImage, setLessonImage] = useState<File | null>(null);
@@ -2238,7 +2238,7 @@ export default function AdminPage() {
     if (!lessonForm.title.trim()) { setMsg('✗ Введите название'); return; }
     setBusy(true); setMsg(null);
     try {
-      const data = { title: lessonForm.title.trim(), description: lessonForm.description.trim() || null, sort_order: Number(lessonForm.sort_order) || 0 };
+      const data = { title: lessonForm.title.trim(), description: lessonForm.description.trim() || null, sort_order: Number(lessonForm.sort_order) || 0, category: lessonForm.category };
       let savedId: number;
       if (lessonEditingId) {
         await api.adminUpdateLesson(lessonEditingId, data);
@@ -2249,7 +2249,7 @@ export default function AdminPage() {
       if (lessonVideo) await api.adminUploadLessonVideo(savedId, lessonVideo);
       if (lessonImage) await api.adminUploadLessonImage(savedId, lessonImage);
       setMsg('✓ Урок сохранён');
-      setLessonForm({ title: '', description: '', sort_order: '0' });
+      setLessonForm({ title: '', description: '', sort_order: '0', category: 'farm' });
       setLessonVideo(null);
       setLessonImage(null);
       setLessonEditingId(null);
@@ -3377,6 +3377,12 @@ export default function AdminPage() {
                 <input className="fm-input" value={lessonForm.title} onChange={(e) => setLessonForm({ ...lessonForm, title: e.target.value })} placeholder="Например: как сажать растения" />
                 <label style={{ display: 'block', margin: '8px 0 4px', fontSize: 13 }}>Описание</label>
                 <textarea className="fm-input" rows={3} value={lessonForm.description} onChange={(e) => setLessonForm({ ...lessonForm, description: e.target.value })} placeholder="Короткое описание урока…" />
+                <label style={{ display: 'block', margin: '8px 0 4px', fontSize: 13 }}>Категория</label>
+                <select className="fm-input" value={lessonForm.category} onChange={(e) => setLessonForm({ ...lessonForm, category: e.target.value })}>
+                  {LESSON_CATEGORIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.label}</option>
+                  ))}
+                </select>
                 <label style={{ display: 'block', fontSize: 13, margin: '8px 0 4px' }}>Видео урока</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <label className="fm-btn fm-btn-sm fm-btn-outline" style={{ cursor: 'pointer', flexShrink: 0 }}>
@@ -3412,7 +3418,7 @@ export default function AdminPage() {
                     {lessonEditingId ? '✎ Сохранить' : '➕ Добавить урок'}
                   </button>
                   {lessonEditingId && (
-                    <button type="button" className="fm-btn" style={{ marginTop: 18 }} onClick={() => { setLessonEditingId(null); setLessonForm({ title: '', description: '', sort_order: '0' }); setLessonVideo(null); setLessonImage(null); }}>Отмена</button>
+                    <button type="button" className="fm-btn" style={{ marginTop: 18 }} onClick={() => { setLessonEditingId(null); setLessonForm({ title: '', description: '', sort_order: '0', category: 'farm' }); setLessonVideo(null); setLessonImage(null); }}>Отмена</button>
                   )}
                 </div>
               </div>
@@ -3425,9 +3431,12 @@ export default function AdminPage() {
                       <video src={mediaUrl(l.video_url)} controls playsInline style={{ width: '100%', maxHeight: 160, borderRadius: 8, marginTop: 6, marginBottom: 6 }} />
                     )}
                     <div style={{ color: 'var(--text-secondary)', marginTop: 4, whiteSpace: 'pre-wrap' }}>{l.description || '—'}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>#{l.sort_order}</div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{lessonCategoryLabel(l.category)}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>#{l.sort_order}</span>
+                    </div>
                     <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-                      <button type="button" className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setLessonEditingId(l.id); setLessonForm({ title: l.title, description: l.description || '', sort_order: String(l.sort_order) }); setLessonVideo(null); setLessonImage(null); }}>✎</button>
+                      <button type="button" className="fm-btn fm-btn-xs" disabled={busy} onClick={() => { setLessonEditingId(l.id); setLessonForm({ title: l.title, description: l.description || '', sort_order: String(l.sort_order), category: l.category }); setLessonVideo(null); setLessonImage(null); }}>✎</button>
                       <label className="fm-btn fm-btn-xs fm-btn-outline" style={{ cursor: 'pointer' }}>
                         🎬
                         <input type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLessonVideo(l.id, f); e.target.value = ''; }} />
