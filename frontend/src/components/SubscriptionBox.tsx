@@ -173,16 +173,19 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
               );
             })}
           </div>
-          <input
-            type="email"
-            placeholder="Email для электронного чека *"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="fm-input"
-            style={{ padding: '10px 12px' }}
-            disabled={busy}
-          />
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 4px' }}>Email для электронного чека *</label>
+            <input
+              type="email"
+              placeholder="email@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="fm-input"
+              style={{ padding: '10px 12px', background: 'rgba(5,9,4,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+              disabled={busy}
+            />
+          </div>
+          <label className="fm-story-text" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
             <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} disabled={busy} style={{ marginTop: 2 }} />
             <span>
               Принимаю условия{' '}
@@ -198,10 +201,6 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
                 : `Перейти к оплате ${fullTotal} ₽`}
           </button>
           {status && <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{status}</div>}
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <div>📄 <a href={OFFERTA_URL} target="_blank" rel="noreferrer">Оферта</a></div>
-            <div>🔒 <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Политика обработки персональных данных</a></div>
-          </div>
         </>
       ) : (
         <div style={{ color: 'var(--text-muted)' }}>Загрузка цен…</div>
