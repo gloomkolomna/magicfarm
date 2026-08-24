@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api, type ApothecaryItem, type BarterResult, type Shop, type ShopCell } from '../api/endpoints';
 import InfirmaryBackground from '../components/InfirmaryBackground';
 import LocationMap from '../components/LocationMap';
+import ItemPicker from '../components/ItemPicker';
 import Toast from '../components/Toast';
 
 export default function ShopPage() {
@@ -37,9 +38,9 @@ export default function ShopPage() {
     return () => clearTimeout(t);
   }, [msg]);
 
-  const giveOptions: { kind: string; id: number; label: string; qty: number }[] = [
-    ...(shop?.apothecary ?? []).map((a) => ({ kind: 'ingredient', id: a.ingredient_id, label: `⚗️ ${a.name} (×${a.qty})`, qty: a.qty })),
-    ...(shop?.inventory ?? []).map((i) => ({ kind: i.item_kind, id: i.item_id, label: `${i.item_emoji || '📦'} ${i.item_name} (×${i.qty})`, qty: i.qty })),
+  const giveOptions: { kind: string; id: number; name: string; emoji: string | null; image: string | null; qty: number }[] = [
+    ...(shop?.apothecary ?? []).map((a) => ({ kind: 'ingredient', id: a.ingredient_id, name: a.name, emoji: null, image: a.image_url, qty: a.qty })),
+    ...(shop?.inventory ?? []).map((i) => ({ kind: i.item_kind, id: i.item_id, name: i.item_name, emoji: i.item_emoji, image: i.item_image, qty: i.qty })),
   ];
 
   const selectedGive = giveOptions.find((o) => `${o.kind}:${o.id}` === giveSel);
@@ -138,18 +139,21 @@ export default function ShopPage() {
             ) : (
               <>
                 <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Что берём (из лавки)</label>
-                <select className="fm-input" value={wantId} onChange={(e) => setWantId(Number(e.target.value))}>
-                  {cell.ingredients.map((i) => (
-                    <option key={i.id} value={i.id}>{i.name}</option>
-                  ))}
-                </select>
+                <ItemPicker
+                  items={cell.ingredients.map((i) => ({ key: String(i.id), title: i.name, image: i.image_url, emoji: '⚗️' }))}
+                  value={wantId === '' ? null : String(wantId)}
+                  onChange={(k) => setWantId(Number(k))}
+                />
                 <label style={{ display: 'block', margin: '12px 0 6px', fontSize: 14 }}>Что отдаём (со склада)</label>
-                <select className="fm-input" value={giveSel} onChange={(e) => setGiveSel(e.target.value)}>
-                  <option value="">— выберите —</option>
-                  {giveOptions.map((o) => (
-                    <option key={`${o.kind}:${o.id}`} value={`${o.kind}:${o.id}`}>{o.label}</option>
-                  ))}
-                </select>
+                {giveOptions.length === 0 ? (
+                  <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>На складе нет предметов для обмена.</div>
+                ) : (
+                  <ItemPicker
+                    items={giveOptions.map((o) => ({ key: `${o.kind}:${o.id}`, title: o.name, image: o.image, emoji: o.emoji ?? (o.kind === 'ingredient' ? '⚗️' : '📦'), badge: `×${o.qty}` }))}
+                    value={giveSel || null}
+                    onChange={setGiveSel}
+                  />
+                )}
                 <label style={{ display: 'block', margin: '12px 0 6px', fontSize: 14 }}>Количество</label>
                 <input
                   className="fm-input"

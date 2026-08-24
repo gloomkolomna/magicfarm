@@ -131,6 +131,11 @@ def list_available_pets(
     return [_pet_out(p) for p in db.query(Pet).order_by(Pet.id.asc()).all()]
 
 
+class IngredientOption(BaseModel):
+    id: int
+    name: str
+
+
 class ForestActionsOut(BaseModel):
     free_used_today: bool = False
     paid_used_today: bool = False
@@ -140,6 +145,9 @@ class ForestActionsOut(BaseModel):
     paid_required: int = 200
     paid_accumulated: int = 0
     paid_task_id: int | None = None
+    ingredient_id: int | None = None
+    ingredient_name: str | None = None
+    pool: list[IngredientOption] = []
 
 
 class UserPetOut(BaseModel):
@@ -172,6 +180,13 @@ def _forest_actions_out(user_id: int, pet: Pet, db: Session) -> ForestActionsOut
         PetForestTask.date == today,
         PetForestTask.status == "pending",
     ).first()
+    chosen_id = task.ingredient_id if task is not None else None
+    chosen_name = None
+    if chosen_id is not None:
+        from models import Ingredient
+
+        ing = db.query(Ingredient).filter(Ingredient.id == chosen_id).first()
+        chosen_name = ing.name if ing is not None else None
     return ForestActionsOut(
         free_used_today=free_used,
         paid_used_today=paid_used,
@@ -181,6 +196,9 @@ def _forest_actions_out(user_id: int, pet: Pet, db: Session) -> ForestActionsOut
         paid_required=task.required if task else FOREST_PAID_COST,
         paid_accumulated=task.accumulated if task else 0,
         paid_task_id=task.id if task else None,
+        ingredient_id=chosen_id,
+        ingredient_name=chosen_name,
+        pool=[IngredientOption(**opt) for opt in _meadow_ingredient_options(db)],
     )
 
 
@@ -318,6 +336,7 @@ def settle_pet_on_cell(
 
 class ForestRequest(BaseModel):
     paid: bool = False
+    ingredient_id: int | None = None
 
 
 class ForestResult(BaseModel):
@@ -333,18 +352,24 @@ class ForestResult(BaseModel):
     paid_pending: bool = False
 
 
-def _meadow_ingredient_pool(db: Session) -> list[int]:
-    from models import GatherCell, GatherCellIngredient
+def _meadow_ingredient_options(db: Session) -> list[dict]:
+    from models import GatherCell, GatherCellIngredient, Ingredient
 
     rows = (
-        db.query(GatherCellIngredient.ingredient_id)
+        db.query(Ingredient.id, Ingredient.name)
+        .join(GatherCellIngredient, GatherCellIngredient.ingredient_id == Ingredient.id)
         .join(GatherCell, GatherCell.id == GatherCellIngredient.gather_cell_id)
         .join(Field, Field.id == GatherCell.field_id)
         .filter(Field.field_kind == "meadow")
         .distinct()
+        .order_by(Ingredient.sort_order.asc(), Ingredient.id.asc())
         .all()
     )
-    return [r[0] for r in rows]
+    return [{"id": r[0], "name": r[1]} for r in rows]
+
+
+def _meadow_ingredient_pool(db: Session) -> list[int]:
+    return [opt["id"] for opt in _meadow_ingredient_options(db)]
 
 
 def _pick_forest_ingredient(db: Session) -> int | None:
@@ -429,8 +454,26 @@ def send_pet_to_forest(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Сначала отправьте питомца в лес бесплатно",
         )
-    if _pick_forest_ingredient(db) is None:
+
+    options = _meadow_ingredient_options(db)
+    if not options:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="В Лесной поляне нет ингредиентов")
+
+    chosen_id = req.ingredient_id
+    if chosen_id is None:
+        if len(options) == 1:
+            chosen_id = options[0]["id"]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Выберите ингредиент, который принесёт выдра",
+            )
+    else:
+        if chosen_id not in [opt["id"] for opt in options]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ингредиент не доступен в Лесной поляне",
+            )
 
     task = db.query(PetForestTask).filter(
         PetForestTask.user_id == user.vk_id,
@@ -441,11 +484,17 @@ def send_pet_to_forest(
         task = PetForestTask(
             user_id=user.vk_id, pet_id=pet_id, date=today,
             required=FOREST_PAID_COST, accumulated=0, status="pending",
+            ingredient_id=chosen_id,
         )
         db.add(task)
+    elif task.ingredient_id is None:
+        task.ingredient_id = chosen_id
     db.commit()
+    chosen_name = next((opt["name"] for opt in options if opt["id"] == chosen_id), "?")
     return ForestResult(
         pet_id=pet_id,
+        ingredient_id=chosen_id,
+        ingredient_name=chosen_name,
         paid=True,
         sleeping=False,
         task_id=task.id,
@@ -474,7 +523,7 @@ def complete_forest_paid(user_id: int, task_id: int, amount: int, db: Session) -
         PetActionLog.date == today,
     ).first()
     if paid_used is None:
-        picked_id = _pick_forest_ingredient(db)
+        picked_id = task.ingredient_id or _pick_forest_ingredient(db)
         if picked_id is not None:
             _grant_forest_ingredient(user_id, picked_id, db)
         db.add(PetActionLog(user_id=user_id, pet_id=task.pet_id, action=FOREST_PAID_ACTION, date=today))

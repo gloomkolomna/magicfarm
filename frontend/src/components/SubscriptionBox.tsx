@@ -13,6 +13,15 @@ const PRIVACY_URL = 'https://belovolovhome.ru/magicfarm/game/private.html';
 const GROUP_URL = 'https://vk.ru/krestiki_s_korgi';
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+const BLOCK_STYLE: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  padding: 12,
+  border: '1px solid rgba(255,255,255,0.14)',
+  borderRadius: 12,
+};
+
 export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
   const { user, refresh } = useSession();
   const [price, setPrice] = useState<PaymentPrice | null>(null);
@@ -42,8 +51,10 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
   const topupTotal = price ? price.dlc.filter((d) => selectedNew.includes(d.code)).reduce((s, d) => s + (d.topup_rub ?? 0), 0) : 0;
   const fullTotal = price ? price.base_rub + price.dlc.filter((d) => selected.includes(d.code)).reduce((s, d) => s + d.price_rub, 0) : 0;
   const renewTotal = price ? price.base_rub + price.dlc.filter((d) => currentCodes.includes(d.code)).reduce((s, d) => s + d.price_rub, 0) : 0;
+  const currentNames = price ? price.dlc.filter((d) => currentCodes.includes(d.code)).map((d) => d.name) : [];
+  const newDlc = price ? price.dlc.filter((d) => !currentCodes.includes(d.code)) : [];
 
-  async function pay() {
+  async function pay(mode: 'topup' | 'renew' | 'full') {
     if (busy || !price) return;
     if (!EMAIL_RE.test(email.trim())) {
       setStatus('Укажите корректный email — на него придёт электронный чек');
@@ -55,10 +66,10 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
     }
     setBusy(true);
     setStatus(null);
-    const codesToSend = activeSub
-      ? (selectedNew.length ? [...currentCodes, ...selectedNew] : currentCodes)
+    const codesToSend =
+      mode === 'topup' ? [...currentCodes, ...selectedNew]
+      : mode === 'renew' ? currentCodes
       : selected;
-    const isTopup = activeSub && selectedNew.length > 0;
     try {
       const order = await api.createSubscriptionOrder({
         dlc_codes: codesToSend,
@@ -79,7 +90,11 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
           const st = await api.paymentOrderStatus(order.order_id);
           if (st.status === 'success') {
             if (pollingRef.current) clearInterval(pollingRef.current);
-            setStatus(isTopup ? 'ДЛС добавлены в подписку! 🎉' : 'Подписка активирована! 🎉');
+            setStatus(
+              mode === 'topup' ? 'ДЛС добавлены в подписку! 🎉'
+              : mode === 'renew' ? 'Подписка продлена! 🎉'
+              : 'Подписка активирована! 🎉'
+            );
             setBusy(false);
             setSelected([]);
             await refresh();
@@ -92,6 +107,32 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
       setBusy(false);
     }
   }
+
+  const emailField = (
+    <div>
+      <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 4px' }}>Email для электронного чека *</label>
+      <input
+        type="email"
+        placeholder="email@example.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="fm-input"
+        style={{ padding: '10px 12px', background: 'rgba(5,9,4,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+        disabled={busy}
+      />
+    </div>
+  );
+
+  const agreeField = (
+    <label className="fm-story-text" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+      <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} disabled={busy} style={{ marginTop: 2 }} />
+      <span>
+        Принимаю условия{' '}
+        <a href={OFFERTA_URL} target="_blank" rel="noreferrer">оферты</a> и{' '}
+        <a href={PRIVACY_URL} target="_blank" rel="noreferrer">политики обработки персональных данных</a>
+      </span>
+    </label>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -130,78 +171,86 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
           </p>
         </>
       ) : price ? (
-        <>
-          <div style={{ fontSize: 16 }}>
-            <b>{price.base_rub} ₽</b> — базовая подписка на {price.period_days} дней
-          </div>
-          {activeSub && (
-            <>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Подписка активна до {formatDate(user?.subscription_until ?? null)}. Новые ДЛС — пропорциональная
-                доплата за оставшиеся дни, полная цена — со следующего продления.
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Отказаться от ДЛС можно при следующем продлении: сумма изменится с нового периода, возврат средств
-                не осуществляется. До конца оплаченного периода ДЛС продолжает действовать.
-              </div>
-            </>
-          )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {price.dlc.map((d) => {
-              if (activeSub && currentCodes.includes(d.code)) {
-                return (
-                  <div key={d.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: 'var(--text-muted)' }}>
-                    <span>✅</span>
-                    <span>+ {d.name} — уже в подписке</span>
-                  </div>
-                );
-              }
-              return (
-                <label key={d.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={selected.includes(d.code)} onChange={() => toggle(d.code)} disabled={busy} />
-                  {activeSub ? (
+        activeSub ? (
+          <>
+            <div style={{ fontSize: 16 }}>
+              Подписка активна до <b>{formatDate(user?.subscription_until ?? null)}</b>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              В составе: базовая подписка{currentNames.length ? ` + ${currentNames.join(', ')}` : ''}
+            </div>
+
+            {newDlc.length > 0 && (
+              <div style={BLOCK_STYLE}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>Докупить ДЛС</div>
+                {newDlc.map((d) => (
+                  <label key={d.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={selected.includes(d.code)} onChange={() => toggle(d.code)} disabled={busy} />
                     <span>
                       + {d.name}{' '}
                       <span style={{ color: 'var(--text-muted)' }}>
                         (доплата {d.topup_rub} ₽{topupDays != null ? ` за ${topupDays} дн.` : ''})
                       </span>
                     </span>
-                  ) : (
-                    <span>+ {d.name} <span style={{ color: 'var(--text-muted)' }}>(+{d.price_rub} ₽)</span></span>
-                  )}
+                  </label>
+                ))}
+                <button
+                  className="fm-btn"
+                  onClick={() => pay('topup')}
+                  disabled={busy || !selectedNew.length}
+                  style={{ padding: '12px 16px', fontSize: 16 }}
+                >
+                  Добавить в подписку за {topupTotal} ₽
+                </button>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  ДЛС добавятся до конца оплаченного периода, срок подписки не изменится. Полная цена ДЛС — со следующего продления.
+                </div>
+              </div>
+            )}
+
+            <div style={BLOCK_STYLE}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Продление</div>
+              <div style={{ fontSize: 15 }}>
+                Базовая подписка{currentNames.length ? ` + ${currentNames.join(', ')}` : ''} · {price.period_days} дн. — <b>{renewTotal} ₽</b>
+              </div>
+              <button
+                className="fm-btn"
+                onClick={() => pay('renew')}
+                disabled={busy}
+                style={{ padding: '12px 16px', fontSize: 16 }}
+              >
+                Продлить на {price.period_days} дн. — {renewTotal} ₽
+              </button>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Отказаться от ДЛС можно при следующем продлении: сумма изменится с нового периода, возврат средств не осуществляется.
+              </div>
+            </div>
+
+            {emailField}
+            {agreeField}
+            {status && <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{status}</div>}
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 16 }}>
+              <b>{price.base_rub} ₽</b> — базовая подписка на {price.period_days} дней
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {price.dlc.map((d) => (
+                <label key={d.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={selected.includes(d.code)} onChange={() => toggle(d.code)} disabled={busy} />
+                  <span>+ {d.name} <span style={{ color: 'var(--text-muted)' }}>(+{d.price_rub} ₽)</span></span>
                 </label>
-              );
-            })}
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 4px' }}>Email для электронного чека *</label>
-            <input
-              type="email"
-              placeholder="email@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="fm-input"
-              style={{ padding: '10px 12px', background: 'rgba(5,9,4,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
-              disabled={busy}
-            />
-          </div>
-          <label className="fm-story-text" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} disabled={busy} style={{ marginTop: 2 }} />
-            <span>
-              Принимаю условия{' '}
-              <a href={OFFERTA_URL} target="_blank" rel="noreferrer">оферты</a> и{' '}
-              <a href={PRIVACY_URL} target="_blank" rel="noreferrer">политики обработки персональных данных</a>
-            </span>
-          </label>
-          <button className="fm-btn" onClick={pay} disabled={busy} style={{ padding: '14px 16px', fontSize: 17 }}>
-            {busy
-              ? 'Ожидание оплаты…'
-              : activeSub
-                ? (selectedNew.length ? `Доплатить ${topupTotal} ₽` : `Продлить на ${price.period_days} дн. — ${renewTotal} ₽`)
-                : `Перейти к оплате ${fullTotal} ₽`}
-          </button>
-          {status && <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{status}</div>}
-        </>
+              ))}
+            </div>
+            {emailField}
+            {agreeField}
+            <button className="fm-btn" onClick={() => pay('full')} disabled={busy} style={{ padding: '14px 16px', fontSize: 17 }}>
+              Перейти к оплате {fullTotal} ₽
+            </button>
+            {status && <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{status}</div>}
+          </>
+        )
       ) : (
         <div style={{ color: 'var(--text-muted)' }}>Загрузка цен…</div>
       )}

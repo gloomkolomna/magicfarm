@@ -6,6 +6,7 @@ import { mediaUrl } from '../api/media';
 import StitchReportForm from '../components/StitchReportForm';
 import Toast from '../components/Toast';
 import LocationMap from '../components/LocationMap';
+import ItemPicker from '../components/ItemPicker';
 import plotUrl from '../assets/plot.png';
 
 const COLOR_LABEL: Record<string, string> = { green: '🟢', blue: '🔵', violet: '🟣' };
@@ -171,6 +172,8 @@ export default function FieldPage() {
   const [petSel, setPetSel] = useState<number | null>(null);
   const [petSettleResult, setPetSettleResult] = useState<{ pet_id: number; pet_name: string; required: number } | null>(null);
   const [otterInfo, setOtterInfo] = useState<UserPetInfo | null>(null);
+  const [forestPick, setForestPick] = useState<number | null>(null);
+  const [showForestPick, setShowForestPick] = useState(false);
 
   const [cardResult, setCardResult] = useState<{ cards: { color: string; value: number; is_treasure: boolean }[]; title: string; norm?: number; qty?: number } | null>(null);
   const [showVideo, setShowVideo] = useState(false);
@@ -580,6 +583,8 @@ export default function FieldPage() {
     setPetCell(cell);
     setPetSel(cell.pet?.pet_id ?? petCatalog[0]?.id ?? null);
     setPetSettleResult(null);
+    setShowForestPick(false);
+    setForestPick(null);
     if (cell.pet) {
       api.userPets()
         .then((pets) => {
@@ -592,11 +597,11 @@ export default function FieldPage() {
     }
   }
 
-  async function doOtterForest(paid: boolean) {
+  async function doOtterForest(paid: boolean, ingredientId?: number) {
     if (!otterInfo) return;
     setBusy(true); setMsg(null);
     try {
-      const res = await api.petForest(otterInfo.pet_id, paid);
+      const res = await api.petForest(otterInfo.pet_id, paid, ingredientId);
       if (res.task_id) {
         setMsg(`🦦 Выдра ждёт: вышейте ${res.required ?? 200} крестиков и отправьте фото-отчёт`);
       } else if (res.ingredient_id != null) {
@@ -604,6 +609,7 @@ export default function FieldPage() {
       } else {
         setMsg('🦦 Выдра вернулась с пустыми лапами');
       }
+      setShowForestPick(false);
       const pets = await api.userPets();
       const own = pets.find((p) => p.pet_id === otterInfo.pet_id);
       setOtterInfo(own && (own.code === 'vydra' || own.code === 'otter') ? own : null);
@@ -611,6 +617,16 @@ export default function FieldPage() {
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally { setBusy(false); }
+  }
+
+  function startPaidForest() {
+    const pool = otterInfo?.forest?.pool ?? [];
+    if (pool.length <= 1) {
+      doOtterForest(true, pool[0]?.id);
+      return;
+    }
+    setForestPick(pool[0].id);
+    setShowForestPick(true);
   }
 
   async function doPetSettle() {
@@ -1463,16 +1479,11 @@ export default function FieldPage() {
                         <>
                           <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
                           <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>Что забрать</label>
-                          <select
-                            className="fm-input"
-                            value={barnyardWithdrawSel ?? ''}
-                            onChange={(e) => setBarnyardWithdrawSel(e.target.value ? Number(e.target.value) : null)}
-                          >
-                            <option value="">— выберите —</option>
-                            {barnyardStorage.items.map((it) => (
-                              <option key={it.product_id} value={it.product_id}>{it.product_emoji || '📦'} {it.product_name} (×{it.qty})</option>
-                            ))}
-                          </select>
+                          <ItemPicker
+                            items={barnyardStorage.items.map((it) => ({ key: String(it.product_id), title: it.product_name, image: it.product_image_url, emoji: it.product_emoji, badge: `×${it.qty}` }))}
+                            value={barnyardWithdrawSel != null ? String(barnyardWithdrawSel) : null}
+                            onChange={(k) => setBarnyardWithdrawSel(Number(k))}
+                          />
                           <label style={{ display: 'block', fontSize: 13, margin: '8px 0 4px' }}>Количество</label>
                           <input
                             className="fm-input"
@@ -1541,12 +1552,19 @@ export default function FieldPage() {
               {tentModal.kind !== 'kassa' && (
               <>
               <label style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>Новый крафт</label>
-              <select className="fm-input" value={craftProduct ?? ''} onChange={(e) => void selectCraftProduct(Number(e.target.value))}>
-                <option value="">— выберите —</option>
-                {products.filter((p) => p.production_kind === tentModal.kind && p.craftable).map((p) => (
-                  <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>
-                ))}
-              </select>
+              {(() => {
+                const craftable = products.filter((p) => p.production_kind === tentModal.kind && p.craftable);
+                if (craftable.length === 0) {
+                  return <div className="fm-card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Нет доступных товаров для крафта.</div>;
+                }
+                return (
+                  <ItemPicker
+                    items={craftable.map((p) => ({ key: String(p.id), title: p.name, image: p.image_url, emoji: p.emoji }))}
+                    value={craftProduct != null ? String(craftProduct) : null}
+                    onChange={(k) => void selectCraftProduct(Number(k))}
+                  />
+                );
+              })()}
               {craftInfo && (
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', margin: '10px 0' }}>
                   <div style={{ marginBottom: 4 }}>
@@ -1971,9 +1989,11 @@ export default function FieldPage() {
                 {petCatalog.length === 0 ? (
                   <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Нет доступных питомцев. Обратитесь к админу.</div>
                 ) : (
-                  <select className="fm-input" value={petSel ?? ''} onChange={(e) => setPetSel(Number(e.target.value))}>
-                    {petCatalog.map((p) => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
-                  </select>
+                  <ItemPicker
+                    items={petCatalog.map((p) => ({ key: String(p.id), title: p.name, image: p.image_url, emoji: p.emoji }))}
+                    value={petSel != null ? String(petSel) : null}
+                    onChange={(k) => setPetSel(Number(k))}
+                  />
                 )}
                 <button className="fm-btn" style={{ width: '100%', marginTop: 14 }} disabled={busy || petSel == null} onClick={doPetSettle}>
                   Поселить
@@ -2015,26 +2035,51 @@ export default function FieldPage() {
                       {otterInfo.forest.wake_at && <> Проснётся в {new Date(otterInfo.forest.wake_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} МСК.</>}
                     </div>
                   ) : otterInfo.forest.paid_pending && otterInfo.forest.paid_task_id ? (
-                    <StitchReportForm
-                      contextType="forest_paid"
-                      contextId={otterInfo.forest.paid_task_id}
-                      required={Math.max(0, otterInfo.forest.paid_required - otterInfo.forest.paid_accumulated)}
-                      busy={busy}
-                      buttonText="Отправить фото-отчёт"
-                      onDone={async () => {
-                        setMsg('🦦 Выдра вернулась из леса!');
-                        const pets = await api.userPets();
-                        const own = pets.find((p) => p.pet_id === otterInfo.pet_id);
-                        setOtterInfo(own && (own.code === 'vydra' || own.code === 'otter') ? own : null);
-                        await refresh();
-                      }}
-                    />
+                    <>
+                      {otterInfo.forest.ingredient_name && (
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                          🌿 Выдра принесёт: <b>{otterInfo.forest.ingredient_name}</b>
+                        </div>
+                      )}
+                      <StitchReportForm
+                        contextType="forest_paid"
+                        contextId={otterInfo.forest.paid_task_id}
+                        required={Math.max(0, otterInfo.forest.paid_required - otterInfo.forest.paid_accumulated)}
+                        busy={busy}
+                        buttonText="Отправить фото-отчёт"
+                        onDone={async () => {
+                          setMsg('🦦 Выдра вернулась из леса!');
+                          const pets = await api.userPets();
+                          const own = pets.find((p) => p.pet_id === otterInfo.pet_id);
+                          setOtterInfo(own && (own.code === 'vydra' || own.code === 'otter') ? own : null);
+                          await refresh();
+                        }}
+                      />
+                    </>
+                  ) : showForestPick ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ fontSize: 13 }}>Выберите ингредиент, который принесёт выдра:</div>
+                      {(otterInfo.forest.pool ?? []).map((it) => (
+                        <label key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                          <input type="radio" name="forest-ing" checked={forestPick === it.id} onChange={() => setForestPick(it.id)} />
+                          <span>{it.name}</span>
+                        </label>
+                      ))}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="fm-btn fm-btn-sm" disabled={busy || forestPick == null} onClick={() => forestPick != null && doOtterForest(true, forestPick)}>
+                          Отправить выдру
+                        </button>
+                        <button className="fm-btn fm-btn-sm fm-btn-outline" onClick={() => setShowForestPick(false)}>
+                          Отмена
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <button className="fm-btn fm-btn-sm" disabled={busy || otterInfo.forest.free_used_today} onClick={() => doOtterForest(false)}>
                         🦦 В лес (бесплатно, 1×/сутки){otterInfo.forest.free_used_today ? ' — уже ходила' : ''}
                       </button>
-                      <button className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy || otterInfo.forest.paid_used_today || !otterInfo.forest.free_used_today} onClick={() => doOtterForest(true)}>
+                      <button className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy || otterInfo.forest.paid_used_today || !otterInfo.forest.free_used_today} onClick={startPaidForest}>
                         🦦 Повторно за 200 ❆ (фото-отчёт)
                       </button>
                     </div>

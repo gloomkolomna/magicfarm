@@ -1448,6 +1448,9 @@ export interface ForestActions {
   paid_required: number;
   paid_accumulated: number;
   paid_task_id: number | null;
+  ingredient_id: number | null;
+  ingredient_name: string | null;
+  pool: { id: number; name: string }[];
 }
 
 export interface UserPetInfo {
@@ -1649,8 +1652,8 @@ export const api = {
 
   // ── Питомцы ──
   userPets: () => client.get<UserPetInfo[]>('/pets').then(r => r.data),
-  petForest: (petId: number, paid: boolean) =>
-    client.post<ForestResult>(`/pets/${petId}/forest`, { paid }).then(r => r.data),
+  petForest: (petId: number, paid: boolean, ingredientId?: number) =>
+    client.post<ForestResult>(`/pets/${petId}/forest`, { paid, ingredient_id: ingredientId ?? null }).then(r => r.data),
   settlePetOnCell: (cellId: number, petId: number) =>
     client.post(`/pets/cells/${cellId}/settle`, { pet_id: petId }).then(r => r.data),
   petsCatalog: () => client.get<Pet[]>('/pets/catalog').then((r) => r.data),

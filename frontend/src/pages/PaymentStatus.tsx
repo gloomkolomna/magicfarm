@@ -77,7 +77,7 @@ export default function PaymentStatusPage() {
         <h1 style={{ fontSize: 22, margin: '10px 0 8px' }}>{view.title}</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: 15, margin: '0 0 16px' }}>{view.text}</p>
         {status === 'success' && (
-          <button className="fm-btn" style={{ padding: '12px 16px', fontSize: 16 }} onClick={() => window.close()}>
+          <button className="fm-btn" style={{ padding: '12px 16px', fontSize: 16 }} onClick={() => window.location.replace('https://vk.com/app54712760')}>
             🌿 Вернуться в игру
           </button>
         )}

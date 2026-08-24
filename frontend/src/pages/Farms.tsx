@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, type FieldDetail, type PlayerFarm, type PlayerSearchItem } from '../api/endpoints';
 import { useSession } from '../context/SessionContext';
 import FieldGridView from '../components/FieldGridView';
+import ItemPicker from '../components/ItemPicker';
 import Toast from '../components/Toast';
 
 interface GiftItem {
@@ -10,10 +11,12 @@ interface GiftItem {
   item_id: number;
   name: string;
   emoji: string | null;
+  image: string | null;
   qty: number;
 }
 
 const GIFT_KIND_LABEL: Record<string, string> = { plant: 'Растение', product: 'Товар', ingredient: 'Ингредиент' };
+const GIFT_KIND_EMOJI: Record<string, string> = { plant: '🌿', product: '📦', ingredient: '⚗️' };
 
 const PLOT_STATUS_LABEL: Record<string, string> = {
   planted: 'посажено',
@@ -54,9 +57,9 @@ export default function FarmsPage() {
     try {
       const [inv, aph] = await Promise.all([api.inventory(), api.apothecary()]);
       const all: GiftItem[] = [
-        ...inv.filter((i) => i.item_kind === 'plant').map((i) => ({ kind: 'plant' as const, item_id: i.item_id, name: i.item_name, emoji: i.item_emoji, qty: i.qty })),
-        ...inv.filter((i) => i.item_kind === 'product').map((i) => ({ kind: 'product' as const, item_id: i.item_id, name: i.item_name, emoji: i.item_emoji, qty: i.qty })),
-        ...aph.map((i) => ({ kind: 'ingredient' as const, item_id: i.ingredient_id, name: i.name, emoji: null, qty: i.qty })),
+        ...inv.filter((i) => i.item_kind === 'plant').map((i) => ({ kind: 'plant' as const, item_id: i.item_id, name: i.item_name, emoji: i.item_emoji, image: i.item_image, qty: i.qty })),
+        ...inv.filter((i) => i.item_kind === 'product').map((i) => ({ kind: 'product' as const, item_id: i.item_id, name: i.item_name, emoji: i.item_emoji, image: i.item_image, qty: i.qty })),
+        ...aph.map((i) => ({ kind: 'ingredient' as const, item_id: i.ingredient_id, name: i.name, emoji: null, image: i.image_url, qty: i.qty })),
       ].filter((i) => i.qty > 0);
       setGiftItems(all);
     } catch { /* ignore */ }
@@ -278,17 +281,19 @@ export default function FarmsPage() {
               <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ padding: '2px 10px', lineHeight: 1.4 }} disabled={busy} onClick={() => setGiftTarget(null)} aria-label="Закрыть">✕</button>
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>Предмет спишется с вашего склада сразу и появится у игрока в чате.</p>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Тип</label>
-            <select className="fm-input" value={giftKind} onChange={(e) => { setGiftKind(e.target.value as 'plant' | 'product' | 'ingredient'); setGiftItemId(''); }}>
-              {(['plant', 'product', 'ingredient'] as const).map((k) => <option key={k} value={k}>{GIFT_KIND_LABEL[k]}</option>)}
-            </select>
-            <label style={{ display: 'block', fontSize: 13, margin: '8px 0 2px' }}>Предмет</label>
-            <select className="fm-input" value={giftItemId} onChange={(e) => setGiftItemId(e.target.value)}>
-              <option value="">— выберите —</option>
-              {giftItems.filter((i) => i.kind === giftKind).map((i) => (
-                <option key={`${i.kind}-${i.item_id}`} value={String(i.item_id)}>{i.emoji || ''} {i.name} ({i.qty})</option>
-              ))}
-            </select>
+            <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>Тип</label>
+            <ItemPicker
+              compact
+              items={(['plant', 'product', 'ingredient'] as const).map((k) => ({ key: k, title: GIFT_KIND_LABEL[k], emoji: GIFT_KIND_EMOJI[k] }))}
+              value={giftKind}
+              onChange={(k) => { setGiftKind(k as 'plant' | 'product' | 'ingredient'); setGiftItemId(''); }}
+            />
+            <label style={{ display: 'block', fontSize: 13, margin: '8px 0 4px' }}>Предмет</label>
+            <ItemPicker
+              items={giftItems.filter((i) => i.kind === giftKind).map((i) => ({ key: String(i.item_id), title: i.name, image: i.image, emoji: i.emoji ?? GIFT_KIND_EMOJI[giftKind], badge: `×${i.qty}` }))}
+              value={giftItemId || null}
+              onChange={setGiftItemId}
+            />
             {giftItems.filter((i) => i.kind === giftKind).length === 0 && (
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>У вас нет таких предметов на складе.</div>
             )}

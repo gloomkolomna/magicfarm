@@ -63,6 +63,34 @@ def _seed_meadow_with_ingredient(name="Роса"):
         s.close()
 
 
+def _seed_meadow_with_ingredients(names):
+    from models import Field, FieldCell, GatherCell, GatherCellIngredient, Ingredient
+    from routes.admin_catalog import _auto_code, _unique_code
+    s = TestingSessionLocal()
+    try:
+        ids = []
+        for name in names:
+            code = _unique_code(_auto_code(name, "ingredient"), Ingredient, s)
+            ing = Ingredient(code=code, name=name)
+            s.add(ing)
+            s.flush()
+            ids.append(ing.id)
+        f = Field(code="meadow_wave_d_multi", name="Лесная поляна", cols=3, rows=2,
+                  field_kind="meadow", min_level=0)
+        s.add(f)
+        s.flush()
+        gc = GatherCell(field_id=f.id, col=0, row=0, window="always")
+        s.add(gc)
+        s.flush()
+        for ing_id in ids:
+            s.add(GatherCellIngredient(gather_cell_id=gc.id, ingredient_id=ing_id))
+        s.add(FieldCell(field_id=f.id, col=0, row=0, kind="gather"))
+        s.commit()
+        return ids
+    finally:
+        s.close()
+
+
 # ── W-7a: штрафы-долг за осмотр ──
 
 def test_examine_first_free_repeat_adds_debt(admin_client):
@@ -384,7 +412,8 @@ def test_otter_forest_actions_daily_limits(admin_client):
         assert r2.json()["task_id"] is not None
         assert r2.json()["required"] == 200
         assert r2.json()["paid_pending"] is True
-        assert r2.json()["ingredient_id"] is None
+        assert r2.json()["ingredient_id"] == ing_id
+        assert r2.json()["ingredient_name"] == "Роса"
         assert r2.json()["sleeping"] is False
 
         _report(c, 200, "forest_paid", r2.json()["task_id"])
@@ -398,6 +427,57 @@ def test_otter_forest_actions_daily_limits(admin_client):
         assert otter["forest"]["paid_pending"] is False
         assert otter["forest"]["sleeping"] is True
         assert otter["forest"]["wake_at"] is not None
+
+
+def _user_ingredient_qty(vk_id, ingredient_id):
+    from models import UserIngredient
+    s = TestingSessionLocal()
+    try:
+        row = s.query(UserIngredient).filter(
+            UserIngredient.user_id == vk_id,
+            UserIngredient.ingredient_id == ingredient_id,
+        ).first()
+        return row.qty if row else 0
+    finally:
+        s.close()
+
+
+def test_otter_paid_requires_choice_with_multiple_ingredients(admin_client):
+    ids = _seed_meadow_with_ingredients(["Роса", "Гриб"])
+    pet_id, cell_id = _seed_otter_pet()
+    _seed_otter_owner(pet_id, cell_id)
+
+    with make_user_client(123, "player") as c:
+        c.post(f"/api/pets/{pet_id}/forest", json={"paid": False})
+
+        no_choice = c.post(f"/api/pets/{pet_id}/forest", json={"paid": True})
+        assert no_choice.status_code == 400
+
+        r = c.post(f"/api/pets/{pet_id}/forest", json={"paid": True, "ingredient_id": ids[1]})
+        assert r.status_code == 200
+        assert r.json()["ingredient_id"] == ids[1]
+        assert r.json()["ingredient_name"] == "Гриб"
+        assert r.json()["task_id"] is not None
+
+        pets = c.get("/api/pets").json()
+        otter = next(p for p in pets if p["pet_id"] == pet_id)
+        assert otter["forest"]["ingredient_id"] == ids[1]
+        assert otter["forest"]["ingredient_name"] == "Гриб"
+        assert {o["id"] for o in otter["forest"]["pool"]} == set(ids)
+
+        _report(c, 200, "forest_paid", r.json()["task_id"])
+        assert _user_ingredient_qty(123, ids[1]) >= 1
+
+
+def test_otter_paid_invalid_ingredient_400(admin_client):
+    ing_id = _seed_meadow_with_ingredient("Роса")
+    pet_id, cell_id = _seed_otter_pet()
+    _seed_otter_owner(pet_id, cell_id)
+
+    with make_user_client(123, "player") as c:
+        c.post(f"/api/pets/{pet_id}/forest", json={"paid": False})
+        r = c.post(f"/api/pets/{pet_id}/forest", json={"paid": True, "ingredient_id": ing_id + 9999})
+        assert r.status_code == 400
 
 
 def test_otter_paid_creates_task_without_deducting_crosses(admin_client):

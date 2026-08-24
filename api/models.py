@@ -1296,6 +1296,7 @@ class PetForestTask(Base):
     required = Column(Integer, nullable=False, default=200, server_default="200")
     accumulated = Column(Integer, nullable=False, default=0, server_default="0")
     status = Column(String, nullable=False, default="pending", server_default="pending")
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     __table_args__ = (

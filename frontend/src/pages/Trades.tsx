@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSession } from '../context/SessionContext';
 import { api, type PlayerSearchItem, type TradeOffer, type TradeItemIn } from '../api/endpoints';
 import { confirmDialog } from '../components/Confirm';
+import ItemPicker from '../components/ItemPicker';
 import Toast from '../components/Toast';
 
 interface AvailItem {
@@ -9,6 +10,7 @@ interface AvailItem {
   item_id: number;
   name: string;
   emoji: string | null;
+  image: string | null;
   qty: number;
 }
 
@@ -19,6 +21,7 @@ interface RowForm {
 }
 
 const KIND_LABEL: Record<string, string> = { plant: 'Растение', product: 'Товар', ingredient: 'Ингредиент' };
+const KIND_EMOJI: Record<string, string> = { plant: '🌿', product: '📦', ingredient: '⚗️' };
 
 function TradeItems({ items, isMine }: { items: TradeOffer['items']; isMine: boolean }) {
   const give = items.filter((i) => i.direction === 'give');
@@ -41,19 +44,19 @@ function TradeItems({ items, isMine }: { items: TradeOffer['items']; isMine: boo
   );
 }
 
-function buildItems(inv: { item_kind: string; item_id: number; item_name: string; item_emoji: string | null; qty: number }[], aph: { ingredient_id: number; name: string; qty: number }[]): AvailItem[] {
+function buildItems(inv: { item_kind: string; item_id: number; item_name: string; item_emoji: string | null; item_image: string | null; qty: number }[], aph: { ingredient_id: number; name: string; image_url: string | null; qty: number }[]): AvailItem[] {
   return [
-    ...inv.filter((i) => i.item_kind === 'plant').map((i) => ({ kind: 'plant' as const, item_id: i.item_id, name: i.item_name, emoji: i.item_emoji, qty: i.qty })),
-    ...inv.filter((i) => i.item_kind === 'product').map((i) => ({ kind: 'product' as const, item_id: i.item_id, name: i.item_name, emoji: i.item_emoji, qty: i.qty })),
-    ...aph.map((i) => ({ kind: 'ingredient' as const, item_id: i.ingredient_id, name: i.name, emoji: null, qty: i.qty })),
+    ...inv.filter((i) => i.item_kind === 'plant').map((i) => ({ kind: 'plant' as const, item_id: i.item_id, name: i.item_name, emoji: i.item_emoji, image: i.item_image, qty: i.qty })),
+    ...inv.filter((i) => i.item_kind === 'product').map((i) => ({ kind: 'product' as const, item_id: i.item_id, name: i.item_name, emoji: i.item_emoji, image: i.item_image, qty: i.qty })),
+    ...aph.map((i) => ({ kind: 'ingredient' as const, item_id: i.ingredient_id, name: i.name, emoji: null, image: i.image_url, qty: i.qty })),
   ].filter((i) => i.qty > 0);
 }
 
 function buildItemsFromFarm(farm: { plants: { item_id: number; name: string; emoji: string | null; qty: number }[]; products: { item_id: number; name: string; emoji: string | null; qty: number }[]; ingredients: { item_id: number; name: string; qty: number }[] }): AvailItem[] {
   return [
-    ...farm.plants.map((i) => ({ kind: 'plant' as const, item_id: i.item_id, name: i.name, emoji: i.emoji, qty: i.qty })),
-    ...farm.products.map((i) => ({ kind: 'product' as const, item_id: i.item_id, name: i.name, emoji: i.emoji, qty: i.qty })),
-    ...farm.ingredients.map((i) => ({ kind: 'ingredient' as const, item_id: i.item_id, name: i.name, emoji: null, qty: i.qty })),
+    ...farm.plants.map((i) => ({ kind: 'plant' as const, item_id: i.item_id, name: i.name, emoji: i.emoji, image: null, qty: i.qty })),
+    ...farm.products.map((i) => ({ kind: 'product' as const, item_id: i.item_id, name: i.name, emoji: i.emoji, image: null, qty: i.qty })),
+    ...farm.ingredients.map((i) => ({ kind: 'ingredient' as const, item_id: i.item_id, name: i.name, emoji: null, image: null, qty: i.qty })),
   ].filter((i) => i.qty > 0);
 }
 
@@ -243,23 +246,41 @@ export default function TradesPage() {
           {rows.map((r, idx) => {
             const isGive = r.direction === 'give';
             const opts = isGive ? itemsOf[r.kind] : recipientItemsOf[r.kind];
-            const chosen = opts.find((i) => i.item_id === Number(r.item_id));
             return (
-              <div key={idx} style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                <select className="fm-input" value={r.direction} onChange={(e) => setRows(rows.map((x, i) => (i === idx ? { ...x, direction: e.target.value as 'give' | 'want', item_id: '' } : x)))} style={{ width: 110 }}>
-                  <option value="give">Отдаю</option>
-                  <option value="want">Хочу</option>
-                </select>
-                <select className="fm-input" value={r.kind} onChange={(e) => setRows(rows.map((x, i) => (i === idx ? { ...x, kind: e.target.value as RowForm['kind'], item_id: '' } : x)))} style={{ width: 130 }}>
-                  {(['plant', 'product', 'ingredient'] as const).map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
-                </select>
-                <select className="fm-input" value={r.item_id} onChange={(e) => setRows(rows.map((x, i) => (i === idx ? { ...x, item_id: e.target.value } : x)))} style={{ width: 180 }}>
-                  <option value="">— выберите —</option>
-                  {opts.map((it) => <option key={`${it.kind}-${it.item_id}`} value={String(it.item_id)}>{it.emoji || ''} {it.name}</option>)}
-                </select>
-                {chosen && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{isGive ? `есть ${chosen.qty}` : `у него ${chosen.qty}`}</span>}
-                {!isGive && opts.length === 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>у игрока нет таких предметов</span>}
-                {rows.length > 1 && <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => setRows(rows.filter((_, i) => i !== idx))}>🗑</button>}
+              <div key={idx} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 120px', minWidth: 0 }}>
+                    <ItemPicker
+                      compact
+                      columns={2}
+                      items={[{ key: 'give', title: 'Отдаю', emoji: '📤' }, { key: 'want', title: 'Хочу', emoji: '📥' }]}
+                      value={r.direction}
+                      onChange={(k) => setRows(rows.map((x, i) => (i === idx ? { ...x, direction: k as 'give' | 'want', item_id: '' } : x)))}
+                    />
+                  </div>
+                  <div style={{ flex: '2 1 160px', minWidth: 0 }}>
+                    <ItemPicker
+                      compact
+                      items={(['plant', 'product', 'ingredient'] as const).map((k) => ({ key: k, title: KIND_LABEL[k], emoji: KIND_EMOJI[k] }))}
+                      value={r.kind}
+                      onChange={(k) => setRows(rows.map((x, i) => (i === idx ? { ...x, kind: k as RowForm['kind'], item_id: '' } : x)))}
+                    />
+                  </div>
+                  {rows.length > 1 && (
+                    <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => setRows(rows.filter((_, i) => i !== idx))} aria-label="Удалить строку">🗑</button>
+                  )}
+                </div>
+                <div style={{ marginTop: 6 }}>
+                  {opts.length === 0 ? (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{isGive ? 'Нет таких предметов на складе.' : 'у игрока нет таких предметов'}</div>
+                  ) : (
+                    <ItemPicker
+                      items={opts.map((it) => ({ key: String(it.item_id), title: it.name, image: it.image, emoji: it.emoji ?? KIND_EMOJI[r.kind], badge: isGive ? `есть ${it.qty}` : `у него ${it.qty}` }))}
+                      value={r.item_id || null}
+                      onChange={(k) => setRows(rows.map((x, i) => (i === idx ? { ...x, item_id: k } : x)))}
+                    />
+                  )}
+                </div>
               </div>
             );
           })}
