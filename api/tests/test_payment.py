@@ -401,3 +401,60 @@ def test_admin_payment_orders_and_cancel(admin_client, monkeypatch, db):
     from tests.conftest import make_user_client
     with make_user_client(124) as pc:
         assert pc.get("/api/admin/payment-orders").status_code == 403
+
+
+def test_readonly_player_can_pay_subscription(monkeypatch):
+    from tests.test_player_status import _auth, _seed_user, _token, token_client
+
+    _enable_gateway(monkeypatch)
+    _seed_user(123, status="readonly")
+    with token_client() as c:
+        r = c.post(
+            "/api/payment/create-order",
+            json={"dlc_codes": ["infirmary"], "receipt_email": "ro@example.com"},
+            headers=_auth(_token(123)),
+        )
+        assert r.status_code == 200
+        assert r.json()["amount_rub"] == 350
+
+
+def test_readonly_player_price_available(monkeypatch):
+    from tests.test_player_status import _auth, _seed_user, _token, token_client
+
+    _seed_user(123, status="readonly")
+    with token_client() as c:
+        r = c.get("/api/payment/price", headers=_auth(_token(123)))
+        assert r.status_code == 200
+        assert {d["code"]: d["price_rub"] for d in r.json()["dlc"]} == {"infirmary": 50, "brewery": 50}
+
+
+def test_no_access_player_can_pay_subscription(monkeypatch):
+    from models import User
+    from tests.test_player_status import _auth, _token, token_client
+
+    _enable_gateway(monkeypatch)
+    with TestingSessionLocal() as db:
+        db.add(User(vk_id=555, role="player", status="active"))
+        db.commit()
+    with token_client() as c:
+        r = c.post(
+            "/api/payment/create-order",
+            json={"dlc_codes": [], "receipt_email": "na@example.com"},
+            headers=_auth(_token(555)),
+        )
+        assert r.status_code == 200
+        assert r.json()["amount_rub"] == 300
+
+
+def test_blocked_player_cannot_pay_subscription(monkeypatch):
+    from tests.test_player_status import _auth, _seed_user, _token, token_client
+
+    _enable_gateway(monkeypatch)
+    _seed_user(123, status="blocked")
+    with token_client() as c:
+        r = c.post(
+            "/api/payment/create-order",
+            json={"dlc_codes": [], "receipt_email": "bl@example.com"},
+            headers=_auth(_token(123)),
+        )
+        assert r.status_code == 403

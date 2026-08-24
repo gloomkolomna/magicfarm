@@ -41,7 +41,7 @@ export default function ProfilePage() {
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <div className="fm-card" style={{ marginBottom: 14 }}>
+      <div className="fm-card fm-view-allow" style={{ marginBottom: 14 }}>
         <h2 style={{ margin: '0 0 8px', fontSize: 18 }}>⏳ Подписка</h2>
         <SubscriptionStatusLine />
         {user.role !== 'admin' && (

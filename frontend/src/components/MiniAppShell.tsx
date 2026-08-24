@@ -19,6 +19,8 @@ interface Props {
 
 const BAR_BG = 'linear-gradient(180deg, rgba(10,16,8,0.92) 0%, rgba(10,16,8,0.78) 100%)';
 
+const DLC_CODES = ['infirmary', 'brewery'];
+
 const BASE_TABS: Tab[] = [
   { path: '/', label: '🗺️ Поля' },
   { path: '/library', label: '📖 Библиотека' },
@@ -61,8 +63,14 @@ function MiniAppShell({ children }: Props) {
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  const isLocked = (code?: string) =>
-    user?.role !== 'admin' && !!code && (user?.locked_locations ?? []).includes(code);
+  const isLocked = (code?: string) => {
+    if (user?.role === 'admin' || !code) return false;
+    if ((user?.locked_locations ?? []).includes(code)) return true;
+    if ((user?.status === 'readonly' || readOnly) && DLC_CODES.includes(code)) {
+      return !(user?.subscription_active && (user?.subscription_dlc_codes ?? []).includes(code));
+    }
+    return false;
+  };
 
   const tabs: Tab[] = BASE_TABS
     .filter((t) => !(t.hideWhenLocked && isLocked(t.location)))

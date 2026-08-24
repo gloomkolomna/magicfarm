@@ -62,9 +62,9 @@ export default function LessonsPage() {
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
-        <button className="fm-btn fm-btn-outline" style={{ minWidth: 60 }} disabled={page === 0} onClick={() => setPage(page - 1)}>◀</button>
+        <button className="fm-btn fm-btn-outline fm-view-allow" style={{ minWidth: 60 }} disabled={page === 0} onClick={() => setPage(page - 1)}>◀</button>
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{page + 1} / {lessons.length}</span>
-        <button className="fm-btn fm-btn-outline" style={{ minWidth: 60 }} disabled={page >= lessons.length - 1} onClick={() => setPage(page + 1)}>▶</button>
+        <button className="fm-btn fm-btn-outline fm-view-allow" style={{ minWidth: 60 }} disabled={page >= lessons.length - 1} onClick={() => setPage(page + 1)}>▶</button>
       </div>
     </div>
   );

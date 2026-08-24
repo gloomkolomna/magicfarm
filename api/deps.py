@@ -14,6 +14,14 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 READONLY_SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 
+PAYMENT_CREATE_ORDER_PATH = "/api/payment/create-order"
+
+
+def _payment_allowed(request: Request) -> bool:
+    """Оформление подписки разрешено и в режиме только просмотра / без подписки."""
+    path = getattr(getattr(request, "url", None), "path", None)
+    return request.method == "POST" and path == PAYMENT_CREATE_ORDER_PATH
+
 
 def get_current_user(
     request: Request,
@@ -31,8 +39,11 @@ def get_current_user(
     if user.role != "admin" and user.status == "blocked":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Аккаунт заблокирован")
     if user.role != "admin" and user.status == "readonly" and request.method not in READONLY_SAFE_METHODS:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ закрыт: только просмотр")
+        if not _payment_allowed(request):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ закрыт: только просмотр")
     if user.role != "admin" and request.method not in READONLY_SAFE_METHODS:
+        if _payment_allowed(request):
+            return user
         from routes.settings import get_game_open
 
         if get_game_open(db):
