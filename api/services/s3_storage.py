@@ -33,6 +33,20 @@ def upload_bytes(key: str, data: bytes, content_type: str = "image/jpeg") -> str
     return f"{config.S3_PUBLIC_URL}/{key}"
 
 
+def upload_stream(key: str, fileobj, content_type: str = "video/mp4") -> str:
+    client = _s3_client()
+    client.upload_fileobj(
+        fileobj,
+        config.S3_BUCKET_NAME,
+        key,
+        ExtraArgs={
+            "ContentType": content_type,
+            "CacheControl": "public, max-age=31536000, immutable",
+        },
+    )
+    return f"{config.S3_PUBLIC_URL}/{key}"
+
+
 def delete_object(key: str) -> None:
     client = _s3_client()
     try:

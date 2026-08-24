@@ -85,6 +85,46 @@ def test_admin_lessons_require_admin(player_client):
     assert player_client.get("/api/admin/lessons").status_code == 403
 
 
+def test_admin_upload_lesson_video_to_s3(admin_client, monkeypatch):
+    import config
+    from services import uploads as uploads_mod
+
+    class _FakeS3:
+        def __init__(self):
+            self.base = "https://s3.example.com/bucket"
+            self.uploaded = {}
+            self.deleted = []
+
+        def upload_stream(self, key, fileobj, content_type="video/mp4"):
+            self.uploaded[key] = (fileobj.read(), content_type)
+            return f"{self.base}/{key}"
+
+        def delete_object(self, key):
+            self.deleted.append(key)
+
+    fake = _FakeS3()
+    monkeypatch.setattr(config, "S3_PUBLIC_URL", fake.base)
+    monkeypatch.setattr(uploads_mod, "_S3", fake)
+
+    lesson = admin_client.post("/api/admin/lessons", json={"title": "S3 урок"}).json()
+    res = admin_client.put(
+        f"/api/admin/lessons/{lesson['id']}/video",
+        files={"file": ("lesson.mp4", _fake_video(), "video/mp4")},
+    )
+    assert res.status_code == 200
+    url = res.json()["video_url"]
+    assert url.startswith(fake.base + "/videos/lesson_")
+    key = url[len(fake.base) + 1:]
+    assert fake.uploaded[key][0] == _fake_video().getvalue()
+    assert fake.uploaded[key][1] == "video/mp4"
+
+    with make_user_client(123, "player") as c:
+        assert c.get("/api/lessons").json()[0]["video_url"] == url
+
+    assert admin_client.delete(f"/api/admin/lessons/{lesson['id']}").status_code == 204
+    assert fake.deleted == [key]
+
+
 def test_admin_lesson_404(admin_client):
     assert admin_client.put("/api/admin/lessons/999", json={"title": "x"}).status_code == 404
     assert admin_client.delete("/api/admin/lessons/999").status_code == 404

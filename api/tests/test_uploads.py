@@ -138,3 +138,109 @@ def test_video_not_allowed_without_flag():
         raise AssertionError("ожидались ошибки HTTPException")
     except HTTPException as e:
         assert e.status_code == 400
+
+
+# ===== Видео → S3 (стриминг) =====
+
+class _FakeS3:
+    def __init__(self, base: str):
+        self.base = base
+        self.uploaded = {}
+        self.deleted = []
+
+    def upload_bytes(self, key, data, content_type="image/jpeg"):
+        self.uploaded[key] = (data, content_type)
+        return f"{self.base}/{key}"
+
+    def upload_stream(self, key, fileobj, content_type="video/mp4"):
+        self.uploaded[key] = (fileobj.read(), content_type)
+        return f"{self.base}/{key}"
+
+    def delete_object(self, key):
+        self.deleted.append(key)
+
+
+def _attach_fake_s3(monkeypatch):
+    import config
+    from services import uploads as uploads_mod
+    fake = _FakeS3("https://s3.example.com/bucket")
+    monkeypatch.setattr(config, "S3_PUBLIC_URL", fake.base)
+    monkeypatch.setattr(uploads_mod, "_S3", fake)
+    return fake
+
+
+def test_video_s3_stream_upload(monkeypatch, uploads_tmp):
+    import os
+    import config
+    data = b"\x00\x00\x00\x18ftypmp42" + b"v" * 100
+    up = _fake_upload(data, "video/mp4")
+    up.filename = "movie.mp4"
+    fake = _attach_fake_s3(monkeypatch)
+    from services.uploads import save_upload
+    url = save_upload(up, "gm_test", allow_video=True)
+    assert url.startswith(fake.base + "/videos/gm_test")
+    assert url.endswith(".mp4")
+    assert list(fake.uploaded) == [url[len(fake.base) + 1:]]
+    assert fake.uploaded[url[len(fake.base) + 1:]] == (data, "video/mp4")
+    assert os.listdir(config.UPLOADS_DIR) == []
+
+
+def test_video_s3_over_limit_rejected(monkeypatch, uploads_tmp):
+    import config
+    monkeypatch.setattr(config, "UPLOAD_VIDEO_MAX_BYTES", 1024)
+    fake = _attach_fake_s3(monkeypatch)
+    from services.uploads import save_upload
+    from fastapi import HTTPException
+    try:
+        save_upload(_fake_upload(b"z" * 4096, "video/mp4"), "gm_test", allow_video=True)
+        raise AssertionError("ожидались ошибки HTTPException")
+    except HTTPException as e:
+        assert e.status_code == 400
+        assert "МБ" in e.detail
+    assert fake.uploaded == {}
+
+
+def test_video_local_stream_content(monkeypatch, uploads_tmp):
+    import os
+    import config
+    data = b"v" * 5000
+    up = _fake_upload(data, "video/mp4")
+    up.filename = "movie.mp4"
+    from services.uploads import save_upload
+    url = save_upload(up, "gm_test", allow_video=True)
+    name = url.rsplit("/", 1)[-1]
+    with open(os.path.join(config.UPLOADS_DIR, name), "rb") as fh:
+        assert fh.read() == data
+
+
+def test_video_local_over_limit_no_partial_file(monkeypatch, uploads_tmp):
+    import os
+    import config
+    monkeypatch.setattr(config, "UPLOAD_VIDEO_MAX_BYTES", 1024)
+    from services.uploads import save_upload
+    from fastapi import HTTPException
+    try:
+        save_upload(_fake_upload(b"z" * 4096, "video/mp4"), "gm_test", allow_video=True)
+        raise AssertionError("ожидались ошибки HTTPException")
+    except HTTPException as e:
+        assert e.status_code == 400
+        assert "МБ" in e.detail
+    assert os.listdir(config.UPLOADS_DIR) == []
+
+
+def test_video_local_reads_stream_not_memory(monkeypatch, uploads_tmp):
+    data = b"x" * (3 * 1024 * 1024)
+    up = _fake_upload(data, "video/mp4")
+    up.filename = "movie.mp4"
+    from services import uploads as uploads_mod
+    from services.uploads import save_upload
+    calls = {"n": 0}
+
+    def _fail_read(*a, **kw):
+        calls["n"] += 1
+        raise AssertionError("видео не должно читаться в память через _read_with_limit")
+
+    monkeypatch.setattr(uploads_mod, "_read_with_limit", _fail_read)
+    url = save_upload(up, "gm_test", allow_video=True)
+    assert calls["n"] == 0
+    assert url.startswith("/api/uploads/gm_test")

@@ -13,8 +13,8 @@ _S3 = None
 def _get_s3():
     global _S3
     if _S3 is None and config.S3_ENABLED:
-        from services.s3_storage import upload_bytes as _up, delete_object as _del
-        _S3 = (_up, _del)
+        import services.s3_storage as _mod
+        _S3 = _mod
     return _S3
 
 
@@ -75,16 +75,69 @@ def _process(buf: bytes, max_size: int | None) -> tuple[bytes, bool]:
         return out.getvalue(), False
 
 
-def save_upload(upload: UploadFile, prefix: str, max_size: int | None = None, allow_video: bool = False) -> str:
-    buf, is_video = _read_with_limit(upload, allow_video=allow_video)
-    if is_video:
-        ext = os.path.splitext(upload.filename or "")[1].lower().lstrip(".") or "mp4"
-        name = f"{prefix}_{int(time.time())}_{os.urandom(3).hex()}.{ext}"
-        path = os.path.join(config.UPLOADS_DIR, name)
-        with open(path, "wb") as fh:
-            fh.write(buf)
-        return f"/api/uploads/{name}"
+class _VideoTooLarge(Exception):
+    pass
 
+
+class _LimitedStream:
+    def __init__(self, fh, limit: int):
+        self._fh = fh
+        self._limit = limit
+        self.count = 0
+
+    def read(self, size: int = -1):
+        chunk = self._fh.read(size)
+        if chunk:
+            self.count += len(chunk)
+            if self.count > self._limit:
+                raise _VideoTooLarge()
+        return chunk
+
+
+_VIDEO_DEFAULT_TYPE = "video/mp4"
+
+
+def _remove_silent(path: str) -> None:
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
+def _save_video(upload: UploadFile, prefix: str) -> str:
+    limit = config.UPLOAD_VIDEO_MAX_BYTES
+    ext = os.path.splitext(upload.filename or "")[1].lower().lstrip(".") or "mp4"
+    name = f"{prefix}_{int(time.time())}_{os.urandom(3).hex()}.{ext}"
+    reader = _LimitedStream(upload.file, limit)
+    path = os.path.join(config.UPLOADS_DIR, name)
+    s3 = _get_s3()
+    try:
+        if s3:
+            ctype = (upload.content_type or "").lower()
+            if not ctype.startswith("video/"):
+                ctype = _VIDEO_DEFAULT_TYPE
+            return s3.upload_stream(f"videos/{name}", reader, ctype)
+        with open(path, "wb") as fh:
+            while True:
+                chunk = reader.read(1024 * 1024)
+                if not chunk:
+                    break
+                fh.write(chunk)
+        return f"/api/uploads/{name}"
+    except _VideoTooLarge:
+        _remove_silent(path)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Файл слишком большой (макс. {limit // (1024 * 1024)} МБ)",
+        )
+
+
+def save_upload(upload: UploadFile, prefix: str, max_size: int | None = None, allow_video: bool = False) -> str:
+    ctype = (upload.content_type or "").lower()
+    if allow_video and ctype.startswith("video/"):
+        return _save_video(upload, prefix)
+    buf, _ = _read_with_limit(upload, allow_video=allow_video)
     processed, is_png = _process(buf, max_size)
     if max_size is not None:
         ext = "png" if is_png else "jpg"
@@ -95,10 +148,8 @@ def save_upload(upload: UploadFile, prefix: str, max_size: int | None = None, al
     s3 = _get_s3()
     if s3 and prefix.startswith("stitch_"):
         vk_id = prefix.split("_", 1)[1]
-        upload_fn, _ = s3
-        key = f"{vk_id}/{name}"
         content_type = "image/png" if is_png else "image/jpeg"
-        return upload_fn(key, processed, content_type)
+        return s3.upload_bytes(f"{vk_id}/{name}", processed, content_type)
 
     path = os.path.join(config.UPLOADS_DIR, name)
     with open(path, "wb") as fh:
@@ -118,9 +169,9 @@ def save_stitch_photo(upload: UploadFile, vk_id: int, kind: str) -> tuple[str, s
     thumb_name = f"thumb_stitch_{vk_id}_{kind}_{stamp}_{os.urandom(3).hex()}.{'png' if thumb_is_png else 'jpg'}"
     s3 = _get_s3()
     if s3:
-        upload_fn, _ = s3
-        url = upload_fn(f"{vk_id}/{name}", processed, "image/png" if is_png else "image/jpeg")
-        thumb_url = upload_fn(f"{vk_id}/{thumb_name}", thumb, "image/png" if thumb_is_png else "image/jpeg")
+        ctype = "image/png" if is_png else "image/jpeg"
+        url = s3.upload_bytes(f"{vk_id}/{name}", processed, ctype)
+        thumb_url = s3.upload_bytes(f"{vk_id}/{thumb_name}", thumb, "image/png" if thumb_is_png else "image/jpeg")
         return url, thumb_url
     path = os.path.join(config.UPLOADS_DIR, name)
     with open(path, "wb") as fh:
@@ -136,10 +187,9 @@ def remove_upload(url: str | None) -> None:
         return
     s3 = _get_s3()
     if s3 and url.startswith("http"):
-        _, delete_fn = s3
         base = config.S3_PUBLIC_URL.rstrip("/") + "/"
         key = url[len(base):] if url.startswith(base) else url.rsplit("/", 1)[-1]
-        delete_fn(key)
+        s3.delete_object(key)
         return
     name = url.rsplit("/", 1)[-1]
     path = os.path.join(config.UPLOADS_DIR, name)
