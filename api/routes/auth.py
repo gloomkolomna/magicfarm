@@ -1,4 +1,6 @@
 from __future__ import annotations
+import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -34,10 +36,13 @@ def create_session(req: SessionRequest, db: Session = Depends(get_db)):
     if config.ADMIN_ONLY and not is_admin and user is None and invite is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ к игре пока закрыт")
     if user is None:
+        from services.subscription import get_trial_days
+
         user = User(
             vk_id=vk_id,
             role="admin" if is_admin else "player",
             display_name=None,
+            trial_until=datetime.datetime.utcnow() + datetime.timedelta(days=get_trial_days(db)),
         )
         db.add(user)
         db.commit()

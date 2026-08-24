@@ -45,6 +45,7 @@ from routes.trades import router as trades_router
 from routes.chat import router as chat_router
 from routes.gifts import router as gifts_router
 from routes.notifications import router as notifications_router
+from routes.payment import router as payment_router, admin_router as admin_payment_router
 
 init_db()
 
@@ -116,6 +117,8 @@ app.include_router(trades_router)
 app.include_router(chat_router)
 app.include_router(gifts_router)
 app.include_router(notifications_router)
+app.include_router(payment_router)
+app.include_router(admin_payment_router)
 
 
 @app.get("/api/")

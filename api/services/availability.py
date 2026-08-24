@@ -27,9 +27,10 @@ def user_dlc_codes(user, db: Session) -> set[str]:
 
 
 def location_lock_reason(code: str, user, db: Session) -> str | None:
-    """Причина закрытости локации для игрока: глобальный замок минус ДЛС игрока.
+    """Причина закрытости локации для игрока: глобальный замок минус доступ игрока.
 
     None — локация доступна. Админам всё доступно всегда.
+    Доступ: вечная разблокировка ИЛИ активная подписка с ДЛС в составе.
     """
     from routes.settings import get_locked_locations
 
@@ -39,6 +40,11 @@ def location_lock_reason(code: str, user, db: Session) -> str | None:
         return None
     if code in user_dlc_codes(user, db):
         return None
+    if user is not None:
+        from services.subscription import is_subscription_active, parse_dlc_codes
+
+        if is_subscription_active(user) and code in parse_dlc_codes(user.subscription_dlc_codes):
+            return None
     from models import LOCATION_NAMES
 
     return f"{LOCATION_NAMES.get(code, code)} пока закрыта"
@@ -55,6 +61,11 @@ def locked_locations_for(user, db: Session) -> list[str]:
     if not locked:
         return []
     owned = user_dlc_codes(user, db)
+    if user is not None:
+        from services.subscription import is_subscription_active, parse_dlc_codes
+
+        if is_subscription_active(user):
+            owned = owned | set(parse_dlc_codes(user.subscription_dlc_codes))
     return sorted(c for c in LOCATION_CODES if c in locked and c not in owned)
 
 

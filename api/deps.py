@@ -32,6 +32,11 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Аккаунт заблокирован")
     if user.role != "admin" and user.status == "readonly" and request.method not in READONLY_SAFE_METHODS:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ закрыт: только просмотр")
+    if user.role != "admin" and request.method not in READONLY_SAFE_METHODS:
+        from services.subscription import is_access_active
+
+        if not is_access_active(user):
+            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Подписка не активна")
     return user
 
 

@@ -84,6 +84,9 @@ class User(Base):
     production_norm_l3 = Column(Integer, nullable=True)
     onboarding_done = Column(Boolean, nullable=False, default=False, server_default="0")
     story_seen = Column(Boolean, nullable=False, default=False, server_default="0")
+    trial_until = Column(DateTime, nullable=True)
+    subscription_until = Column(DateTime, nullable=True)
+    subscription_dlc_codes = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     plots = relationship("Plot", back_populates="user", cascade="all, delete-orphan")
@@ -167,6 +170,34 @@ class UserDlcUnlock(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "location_code", name="uq_userdlcunlock_user_location"),
     )
+
+
+class PaymentOrder(Base):
+    __tablename__ = "payment_orders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    vk_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    amount_kop = Column(Integer, nullable=False)
+    period_days = Column(Integer, nullable=False, default=30, server_default="30")
+    dlc_codes = Column(String, nullable=False, default="", server_default="")
+    provider = Column(String, nullable=False, default="pay_gateway", server_default="pay_gateway")
+    gateway_txn_id = Column(String, nullable=True, index=True)
+    receipt_email = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="pending", server_default="pending")
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+
+class PaymentLog(Base):
+    __tablename__ = "payment_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    vk_id = Column(Integer, nullable=True)
+    order_id = Column(Integer, nullable=True)
+    txn_id = Column(String, nullable=True)
+    action = Column(String, nullable=False)
+    detail = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
 
 class StitchReport(Base):

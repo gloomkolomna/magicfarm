@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, type ReactNode, type ComponentType } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useState, type ReactNode, type ComponentType } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useVkBridge } from './context/VkBridgeContext';
 import { useSession } from './context/SessionContext';
 import Background from './components/Background';
@@ -72,6 +72,8 @@ const FarmsPage = lazyPage(() => import('./pages/Farms'));
 const TradesPage = lazyPage(() => import('./pages/Trades'));
 const ChatPage = lazyPage(() => import('./pages/Chat'));
 const NotificationsPage = lazyPage(() => import('./pages/Notifications'));
+const PaywallPage = lazyPage(() => import('./pages/Paywall')) as unknown as ComponentType<{ onWatch?: () => void }>;
+const PaymentStatusPage = lazyPage(() => import('./pages/PaymentStatus'));
 
 const zoomed = { zoom: 'var(--app-scale)', width: 'calc(100% / var(--app-scale))', margin: '0 auto' } as const;
 
@@ -135,14 +137,31 @@ function StubPage() {
 }
 
 function App() {
+  const appLoc = useLocation();
   const { vkUserId, loading } = useVkBridge();
-  const { user, loading: sessionLoading, error: sessionError, refresh } = useSession();
+  const { user, loading: sessionLoading, error: sessionError, refresh, readOnly } = useSession();
+  const [viewOnly, setViewOnly] = useState(false);
 
   useEffect(() => { installGlobalErrorReporters(); }, []);
 
   useEffect(() => {
     try { sessionStorage.removeItem('farm_chunk_reload'); } catch { /* ignore */ }
   }, []);
+
+  useEffect(() => {
+    const h = () => setViewOnly(false);
+    window.addEventListener('farm:subscription-required', h);
+    return () => window.removeEventListener('farm:subscription-required', h);
+  }, []);
+
+  if (appLoc.pathname === '/pay/status') {
+    return (
+      <>
+        <Background />
+        <Suspense fallback={<Skeleton />}><PaymentStatusPage /></Suspense>
+      </>
+    );
+  }
 
   if (loading) return <><Background /><Skeleton /></>;
   if (vkUserId == null) return <><Background /><StubPage /></>;
@@ -197,6 +216,19 @@ function App() {
         <Background />
         <div style={zoomed}>
           <Suspense fallback={<Skeleton />}><Onboarding /></Suspense>
+        </div>
+      </>
+    );
+  }
+
+  if (readOnly && !viewOnly) {
+    return (
+      <>
+        <Background />
+        <div style={zoomed}>
+          <Suspense fallback={<Skeleton />}>
+            <PaywallPage onWatch={() => setViewOnly(true)} />
+          </Suspense>
         </div>
       </>
     );

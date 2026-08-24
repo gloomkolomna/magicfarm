@@ -68,6 +68,9 @@ client.interceptors.response.use(
         return client.request(original);
       }
     }
+    if (status === 402) {
+      window.dispatchEvent(new CustomEvent('farm:subscription-required'));
+    }
     return Promise.reject(error);
   },
 );

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="Правила игры «История одной магической фермы» — мотивационная игра-вышивка в сеттинге волшебной фермы." />
+<title>📜 Правила игры — История одной магической фермы</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Marcellus&family=PT+Serif:wght@400;700&display=swap" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M16 4 C20 8 20 12 16 16 C12 12 12 8 16 4 Z' fill='%237cb342'/><path d='M6 26 L26 26 L24 18 L8 18 Z' fill='%238d6e63'/></svg>" />
+<style>
+:root {
+  --bg: #1a2414;
+  --bg-card: rgba(10, 16, 8, 0.55);
+  --bg-elev: rgba(10, 16, 8, 0.72);
+  --leaf: #7cb342;
+  --grass: #5a8f3e;
+  --flax: #d9c89a;
+  --flax-light: #efe6cc;
+  --honey: #e0a83e;
+  --text: #ffffff;
+  --text-secondary: #d8cdb0;
+  --text-muted: #b8a88a;
+  --border: rgba(217, 200, 154, 0.22);
+  --serif: 'Cormorant Garamond', Georgia, serif;
+  --display: 'Marcellus', 'Cormorant Garamond', serif;
+  --body: 'PT Serif', 'Cormorant Garamond', Georgia, serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--body);
+  background: var(--bg);
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgba(124, 179, 66, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 100%, rgba(224, 168, 62, 0.05) 0%, transparent 50%);
+  color: var(--text);
+  line-height: 1.75;
+  min-height: 100vh;
+}
+.wrap { max-width: 780px; margin: 0 auto; padding: 0 20px; }
+
+header {
+  text-align: center;
+  padding: 48px 20px 32px;
+  border-bottom: 1px solid var(--border);
+}
+header .crest { font-size: 48px; margin-bottom: 8px; }
+header h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(24px, 4vw, 36px);
+  color: var(--flax-light);
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+}
+header .subtitle { font-family: var(--serif); font-style: italic; color: var(--text-muted); font-size: 16px; }
+
+.back-link {
+  display: inline-block;
+  margin: 24px 0;
+  font-family: var(--display);
+  font-size: 14px;
+  color: var(--flax-light);
+  text-decoration: none;
+  padding: 8px 18px;
+  border: 1px solid var(--grass);
+  border-radius: 6px;
+}
+.back-link:hover { background: rgba(124, 179, 66, 0.12); }
+
+.toc {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px 28px;
+  margin-bottom: 32px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.toc-title {
+  font-family: var(--display);
+  font-size: 16px;
+  color: var(--flax);
+  margin-bottom: 12px;
+}
+.toc ol { padding-left: 24px; }
+.toc li { padding: 3px 0; }
+.toc a { color: var(--leaf); text-decoration: none; font-size: 15px; }
+.toc a:hover { text-decoration: underline; }
+
+article { padding-bottom: 56px; }
+
+.md h1, .md h2 {
+  font-family: var(--display);
+  color: var(--flax-light);
+  line-height: 1.3;
+  margin-top: 40px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+}
+.md h1 { font-size: 28px; border-bottom: 1px solid var(--border); }
+.md h2 { font-size: 24px; }
+.md h3 {
+  font-family: var(--display);
+  font-size: 19px;
+  color: var(--flax);
+  margin-top: 28px;
+  margin-bottom: 10px;
+}
+.md h4 { font-size: 17px; color: var(--text); margin-top: 20px; margin-bottom: 8px; }
+.md p { margin-bottom: 14px; }
+.md strong { color: var(--text); font-weight: 700; }
+.md em { color: var(--text); }
+.md a { color: var(--leaf); }
+.md ul, .md ol { padding-left: 24px; margin-bottom: 14px; }
+.md li { margin-bottom: 6px; }
+.md code {
+  font-family: 'Fira Code', 'Courier New', monospace;
+  background: var(--bg-elev);
+  color: var(--leaf);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.md pre {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+.md pre code { background: none; padding: 0; }
+.md blockquote {
+  border-left: 3px solid var(--grass);
+  background: var(--bg-card);
+  padding: 14px 20px;
+  margin: 16px 0;
+  color: var(--text-muted);
+  font-style: italic;
+  border-radius: 0 8px 8px 0;
+}
+.md blockquote p { margin-bottom: 8px; }
+.md blockquote p:last-child { margin-bottom: 0; }
+.md hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+.md table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+.md th, .md td { border: 1px solid var(--border); padding: 10px 14px; text-align: left; font-size: 15px; }
+.md th { background: var(--bg-elev); color: var(--flax); font-family: var(--display); font-weight: 600; }
+
+.loading { text-align: center; color: var(--text-muted); padding: 60px 20px; font-style: italic; }
+.err-msg { text-align: center; color: var(--text-muted); padding: 24px; }
+
+footer {
+  text-align: center;
+  padding: 28px 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 600px) {
+  header { padding: 36px 20px 24px; }
+  .toc { padding: 18px 20px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="crest">📜</div>
+    <h1>Правила игры</h1>
+    <p class="subtitle">История одной магической фермы</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <a class="back-link" href="index.html">← Назад к описанию</a>
+  <div class="loading" id="loading">Загрузка правил…</div>
+  <div id="guide-error" class="err-msg" style="display:none"></div>
+  <div id="toc"></div>
+  <article id="content" class="md" style="display:none"></article>
+  <a class="back-link" href="index.html">← Назад к описанию</a>
+</div>
+
+<footer>
+  <div class="wrap">
+    © 2026 История одной магической фермы · Беловолов Е. Г. · Самозанятый (НПД)
+  </div>
+</footer>
+
+<script>
+(function() {
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function inline(s) {
+    return escapeHtml(s)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+      .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  }
+
+  function render(md) {
+    var lines = md.split('\n');
+    var html = [];
+    var i = 0;
+    var inList = null;
+
+    function closeList() {
+      if (inList) { html.push('</' + inList + '>'); inList = null; }
+    }
+
+    while (i < lines.length) {
+      var line = lines[i];
+      var t = line.trim();
+
+      if (t === '') { closeList(); i++; continue; }
+
+      if (t === '---') { closeList(); html.push('<hr>'); i++; continue; }
+
+      var fence = t.match(/^```/);
+      if (fence) {
+        closeList();
+        var code = [];
+        i++;
+        while (i < lines.length && !lines[i].trim().match(/^```/)) {
+          code.push(lines[i]);
+          i++;
+        }
+        i++;
+        html.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>');
+        continue;
+      }
+
+      var h = t.match(/^(#{1,4})\s+(.*)$/);
+      if (h) {
+        closeList();
+        var lvl = h[1].length;
+        html.push('<h' + lvl + '>' + inline(h[2]) + '</h' + lvl + '>');
+        i++;
+        continue;
+      }
+
+      var bq = t.match(/^>\s?(.*)$/);
+      if (bq) {
+        closeList();
+        var bqLines = [];
+        while (i < lines.length && lines[i].trim().match(/^>/)) {
+          bqLines.push(lines[i].trim().replace(/^>\s?/, ''));
+          i++;
+        }
+        html.push('<blockquote>' + bqLines.map(function(l) {
+          return l.trim() === '' ? '<br>' : '<p>' + inline(l) + '</p>';
+        }).join('') + '</blockquote>');
+        continue;
+      }
+
+      var ol = t.match(/^\d+\.\s+(.*)$/);
+      if (ol) {
+        if (inList !== 'ol') { closeList(); html.push('<ol>'); inList = 'ol'; }
+        html.push('<li>' + inline(ol[1]) + '</li>');
+        i++;
+        continue;
+      }
+
+      var ul = t.match(/^[-*]\s+(.*)$/);
+      if (ul) {
+        if (inList !== 'ul') { closeList(); html.push('<ul>'); inList = 'ul'; }
+        html.push('<li>' + inline(ul[1]) + '</li>');
+        i++;
+        continue;
+      }
+
+      closeList();
+      html.push('<p>' + inline(t) + '</p>');
+      i++;
+    }
+    closeList();
+    return html.join('\n');
+  }
+
+  function buildToc(md) {
+    var lines = md.split('\n');
+    var items = [];
+    lines.forEach(function(line) {
+      var m = line.match(/^(#{1,2})\s+(.*)$/);
+      if (m && m[1].length === 2) {
+        items.push(m[2]);
+      }
+    });
+    if (items.length === 0) return '';
+
+    var hash = {};
+    var html = '<div class="toc"><div class="toc-title">📖 Оглавление</div><ol>';
+    items.forEach(function(title) {
+      var base = title.toLowerCase()
+        .replace(/[^\wа-яё]+/gi, '-').replace(/^-+|-+$/g, '');
+      var id = base;
+      var n = 2;
+      while (hash[id]) { id = base + '-' + n; n++; }
+      hash[id] = true;
+      html += '<li><a href="#' + id + '">' + escapeHtml(title) + '</a></li>';
+    });
+    html += '</ol></div>';
+    return html;
+  }
+
+  function addIds() {
+    var hash = {};
+    document.querySelectorAll('#content h2').forEach(function(el) {
+      var base = el.textContent.toLowerCase()
+        .replace(/[^\wа-яё]+/gi, '-').replace(/^-+|-+$/g, '');
+      var id = base;
+      var n = 2;
+      while (hash[id]) { id = base + '-' + n; n++; }
+      hash[id] = true;
+      el.id = id;
+    });
+  }
+
+  var loadingEl = document.getElementById('loading');
+  var contentEl = document.getElementById('content');
+  var errEl = document.getElementById('guide-error');
+  var tocEl = document.getElementById('toc');
+
+  fetch('guide.md')
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    })
+    .then(function(md) {
+      tocEl.innerHTML = buildToc(md);
+      contentEl.innerHTML = render(md);
+      addIds();
+      loadingEl.style.display = 'none';
+      contentEl.style.display = 'block';
+    })
+    .catch(function(e) {
+      loadingEl.style.display = 'none';
+      errEl.style.display = 'block';
+      errEl.textContent = 'Не удалось загрузить правила. Попробуйте обновить страницу.';
+    });
+})();
+</script>
+
+</body>
+</html>

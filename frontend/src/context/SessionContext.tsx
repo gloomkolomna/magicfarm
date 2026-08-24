@@ -18,6 +18,13 @@ export interface MeUser {
   story_seen: boolean;
   plots_placed: number;
   locked_locations: string[];
+  access_active: boolean;
+  trial_active: boolean;
+  subscription_active: boolean;
+  trial_until: string | null;
+  subscription_until: string | null;
+  subscription_dlc_codes: string[];
+  days_left: number | null;
 }
 
 interface SessionState {
@@ -27,6 +34,7 @@ interface SessionState {
   error: string | null;
   logout: () => void;
   refresh: () => Promise<void>;
+  readOnly: boolean;
 }
 
 const SessionContext = createContext<SessionState>({
@@ -36,6 +44,7 @@ const SessionContext = createContext<SessionState>({
   error: null,
   logout: () => {},
   refresh: async () => {},
+  readOnly: false,
 });
 
 const TOKEN_KEY = 'token';
@@ -118,8 +127,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const readOnly = !!user && user.role !== 'admin' && !user.access_active;
+
   return (
-    <SessionContext.Provider value={{ user, token, loading, error, logout, refresh }}>
+    <SessionContext.Provider value={{ user, token, loading, error, logout, refresh, readOnly }}>
       {children}
     </SessionContext.Provider>
   );

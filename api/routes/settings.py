@@ -326,6 +326,11 @@ _SETTING_META = {
     AUTO_CREDIT_KEY: (0, 1, 1 if DEFAULT_AUTO_CREDIT else 0),
     ANIMAL_BUILD_NORM_KEY: (1, 100000, DEFAULT_ANIMAL_BUILD),
     CUSTOMER_MAX_ORDERS_KEY: (MIN_CUSTOMER_ORDERS, MAX_CUSTOMER_ORDERS, DEFAULT_CUSTOMER_ORDERS),
+    "trial_days": (0, 365, 7),
+    "subscription_price_rub": (0, 1000000, 300),
+    "subscription_price_rub_infirmary": (0, 1000000, 50),
+    "subscription_price_rub_brewery": (0, 1000000, 50),
+    "dlc_change_immediate": (0, 1, 0),
 }
 
 

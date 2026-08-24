@@ -15,6 +15,9 @@ os.environ["S3_ENABLED"] = ""
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import datetime
+from datetime import timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, StaticPool, text
@@ -183,7 +186,10 @@ def _make_user_override(vk_id: int, role: str):
         try:
             user = db.query(User).filter(User.vk_id == vk_id).first()
             if user is None:
-                user = User(vk_id=vk_id, role=role, unlocked_pets=5, unlocked_barnyard=8)
+                user = User(
+                    vk_id=vk_id, role=role, unlocked_pets=5, unlocked_barnyard=8,
+                    trial_until=datetime.datetime.utcnow() + timedelta(days=7),
+                )
                 db.add(user)
                 db.commit()
                 db.refresh(user)
@@ -204,7 +210,8 @@ def _make_user_override_no_onboarding(vk_id: int, role: str):
         try:
             user = db.query(User).filter(User.vk_id == vk_id).first()
             if user is None:
-                user = User(vk_id=vk_id, role=role)
+                user = User(vk_id=vk_id, role=role,
+                            trial_until=datetime.datetime.utcnow() + timedelta(days=7))
                 db.add(user)
                 db.commit()
                 db.refresh(user)

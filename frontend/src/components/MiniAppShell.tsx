@@ -39,7 +39,7 @@ const BASE_TABS: Tab[] = [
 function MiniAppShell({ children }: Props) {
   const nav = useNavigate();
   const loc = useLocation();
-  const { user } = useSession();
+  const { user, readOnly } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
   const [notifUnread, setNotifUnread] = useState(0);
@@ -85,7 +85,7 @@ function MiniAppShell({ children }: Props) {
 
   return (
     <>
-      {user?.status === 'readonly' && (
+      {(user?.status === 'readonly' || readOnly) && (
         <div
           style={{
             background: 'rgba(120,80,10,0.92)',
@@ -147,6 +147,16 @@ function MiniAppShell({ children }: Props) {
         {active?.unread ? (
           <span style={{ flexShrink: 0, background: '#e5484d', color: '#fff', borderRadius: 999, fontSize: 13, padding: '2px 9px', fontWeight: 700 }}>{active.unread}</span>
         ) : null}
+        {user && user.role !== 'admin' && user.days_left != null && user.days_left > 0 && user.days_left <= 3 && (
+          <button
+            onClick={() => nav('/profile')}
+            className="fm-btn fm-btn-outline"
+            title={user.subscription_active ? 'Подписка скоро истекает' : 'Пробный период скоро истекает'}
+            style={{ flexShrink: 0, padding: '6px 10px', fontSize: 13, background: 'rgba(120,80,10,0.85)', color: '#ffe9b0', borderColor: 'rgba(255,233,176,0.4)' }}
+          >
+            ⏳ {user.days_left} дн.
+          </button>
+        )}
         <button
           onClick={() => nav('/notifications')}
           className="fm-btn fm-btn-outline"

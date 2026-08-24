@@ -1,3 +1,4 @@
+import datetime
 from tests.conftest import TestingSessionLocal, make_user_client
 
 
@@ -21,7 +22,8 @@ def _seed_user(vk_id: int, role: str = "player"):
     s = TestingSessionLocal()
     try:
         if s.query(User).filter(User.vk_id == vk_id).first() is None:
-            s.add(User(vk_id=vk_id, role=role))
+            s.add(User(vk_id=vk_id, role=role,
+                    trial_until=datetime.datetime.utcnow() + datetime.timedelta(days=7)))
             s.commit()
     finally:
         s.close()

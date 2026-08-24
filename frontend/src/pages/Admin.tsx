@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, BODY_PARTS, BODY_PART_LABELS, LOCATION_TITLES, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type AllowedPlayer, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CocktailItemIn, type CocktailRecipeAdmin, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient,   type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport, type StorySlide, type Lesson, type DlcLocation } from '../api/endpoints';
+import { api, BODY_PARTS, type AdminPaymentOrder, type AdminPaymentLog, BODY_PART_LABELS, LOCATION_TITLES, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type AllowedPlayer, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CocktailItemIn, type CocktailRecipeAdmin, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient,   type LevelGate, type LogEntry, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport, type StorySlide, type Lesson, type DlcLocation } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
 import FieldEditor from '../components/FieldEditor';
 import FieldGridView from '../components/FieldGridView';
@@ -50,6 +50,16 @@ const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: 'customer_max_orders', label: 'Лимит активных заказов заказчика (0–50)', hint: 'Заказчики с этим числом открытых заказов скрываются при создании заказа' },
 ];
 
+const FINANCE_SETTING_KEYS = ['trial_days', 'subscription_price_rub', 'subscription_price_rub_infirmary', 'subscription_price_rub_brewery', 'dlc_change_immediate'];
+
+const FINANCE_FIELDS: { key: string; label: string; hint: string }[] = [
+  { key: 'trial_days', label: 'Пробных дней для новых игроков (0–365)', hint: 'Триал стартует при первом входе. Существующих игроков не затрагивает' },
+  { key: 'subscription_price_rub', label: 'Базовая цена подписки, ₽', hint: 'Доступ к базе на 30 дней' },
+  { key: 'subscription_price_rub_infirmary', label: 'Цена ДЛС «Лечебница», ₽', hint: 'Приплюсовывается к базовой при выборе' },
+  { key: 'subscription_price_rub_brewery', label: 'Цена ДЛС «Зельеварение», ₽', hint: 'Приплюсовывается к базовой при выборе' },
+  { key: 'dlc_change_immediate', label: 'Смена состава ДЛС (0/1)', hint: '0 — только после истечения подписки, 1 — сразу при новой оплате' },
+];
+
 function matchesAny(item: unknown, q: string): boolean {
   const s = q.trim().toLowerCase();
   if (!s) return true;
@@ -67,7 +77,7 @@ function matchesAny(item: unknown, q: string): boolean {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'players' | 'settings' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'cocktail-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs' | 'ingredients' | 'infirmary' | 'story' | 'lessons'>('players');
+  const [tab, setTab] = useState<'players' | 'settings' | 'finance' | 'fields' | 'orders' | 'plants' | 'animals' | 'pets' | 'products' | 'productions' | 'recipes' | 'customers' | 'levels' | 'potion-recipes' | 'cocktail-recipes' | 'media' | 'crystal-cards' | 'achievements' | 'logs' | 'ingredients' | 'infirmary' | 'story' | 'lessons'>('players');
   const [players, setPlayers] = useState<Player[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
@@ -343,6 +353,40 @@ export default function AdminPage() {
     ? [orderForm.customer, ...freeCustomerNames]
     : freeCustomerNames;
 
+  const [payOrders, setPayOrders] = useState<AdminPaymentOrder[]>([]);
+  const [payLogs, setPayLogs] = useState<AdminPaymentLog[]>([]);
+  const [payStatusFilter, setPayStatusFilter] = useState('');
+  const [trialDays, setTrialDays] = useState('7');
+  const [financeMsg, setFinanceMsg] = useState('');
+  const [trialExtendVk, setTrialExtendVk] = useState<number | null>(null);
+
+  const loadFinance = useCallback(async () => {
+    try {
+      const pairs = await Promise.all(
+        FINANCE_SETTING_KEYS.map((k) => api.getSetting(k).then((st) => [k, st.value] as [string, string]).catch(() => null)),
+      );
+      const map: Record<string, string> = {};
+      for (const pair of pairs) if (pair) map[pair[0]] = pair[1];
+      setSettings((prev) => ({ ...prev, ...map }));
+      const [ords, logs] = await Promise.all([
+        api.adminPaymentOrders(payStatusFilter).catch(() => [] as AdminPaymentOrder[]),
+        api.adminPaymentLogs().catch(() => [] as AdminPaymentLog[]),
+      ]);
+      setPayOrders(ords);
+      setPayLogs(logs);
+    } catch { /* ignore */ }
+  }, [payStatusFilter]);
+
+  const cancelPayOrder = useCallback(async (id: number) => {
+    setBusy(true);
+    try {
+      await api.adminCancelPaymentOrder(id);
+      loadFinance();
+    } finally {
+      setBusy(false);
+    }
+  }, [loadFinance]);
+
   const loadedRef = useRef<Set<string>>(new Set());
 
   const loadCore = useCallback(async () => {
@@ -365,6 +409,21 @@ export default function AdminPage() {
       setLoading(false);
     }
   }, []);
+  const extendTrial = useCallback(async (vkId: number) => {
+    const days = parseInt(trialDays, 10);
+    if (!Number.isFinite(days) || days < 1) { setFinanceMsg('Дней: целое число >= 1'); return; }
+    setBusy(true);
+    try {
+      await api.adminExtendTrial(vkId, days);
+      setFinanceMsg('Триал игрока ' + vkId + ' продлён на ' + days + ' дн. от сегодня');
+      loadCore();
+    } catch (e: any) {
+      setFinanceMsg(e?.response?.data?.detail || 'Ошибка продления триала');
+    } finally {
+      setBusy(false);
+    }
+  }, [trialDays, loadCore]);
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2270,6 +2329,7 @@ export default function AdminPage() {
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
         <TabBtn active={tab === 'players'} onClick={() => setTab('players')}>👥 Игроки</TabBtn>
         <TabBtn active={tab === 'settings'} onClick={() => setTab('settings')}>🔧 Настройки</TabBtn>
+        <TabBtn active={tab === 'finance'} onClick={() => { setTab('finance'); loadFinance(); }}>💰 Финансы</TabBtn>
         <TabBtn active={tab === 'fields'} onClick={() => setTab('fields')}>🗺️ Локации</TabBtn>
         <TabBtn active={tab === 'orders'} onClick={() => setTab('orders')}>🧺 Заказы</TabBtn>
         <TabBtn active={tab === 'plants'} onClick={() => setTab('plants')}>🌱 Растения</TabBtn>
@@ -2339,6 +2399,11 @@ export default function AdminPage() {
                   <div className="fm-card" style={{ marginBottom: 14, fontSize: 13 }}>
                     <div>ID: {selectedPlayer.vk_id} · Роль: {selectedPlayer.role} · Статус: {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.emoji} {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.label ?? selectedPlayer.status}</div>
                     <div>Крестики: {selectedPlayer.crosses_balance} (всего {selectedPlayer.crosses_total}) · Монеты: {selectedPlayer.coins} · Раунд: {selectedPlayer.round}</div>
+                    <div>
+                      ⏳ Триал до: {selectedPlayer.trial_until ? new Date(selectedPlayer.trial_until.endsWith('Z') ? selectedPlayer.trial_until : selectedPlayer.trial_until + 'Z').toLocaleDateString('ru-RU') : '—'}
+                      {' · '}💳 Подписка до: {selectedPlayer.subscription_until ? new Date(selectedPlayer.subscription_until.endsWith('Z') ? selectedPlayer.subscription_until : selectedPlayer.subscription_until + 'Z').toLocaleDateString('ru-RU') : '—'}
+                      {selectedPlayer.subscription_dlc_codes?.length ? ` (+ ${selectedPlayer.subscription_dlc_codes.join(', ')})` : ''}
+                    </div>
                     {selectedPlayer.role !== 'admin' && (
                       <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {selectedPlayer.status !== 'blocked' && (
@@ -2717,6 +2782,88 @@ export default function AdminPage() {
                   <button type="button" className="fm-btn fm-btn-sm" style={{ flexShrink: 0 }} disabled={busy} onClick={saveBg}>💾</button>
                 </div>
                 {bgUrl && <img src={bgUrl} alt="Фон" style={{ maxWidth: 200, marginTop: 8, borderRadius: 8 }} />}
+              </div>
+            </>
+          )}
+
+          {tab === 'finance' && (
+            <>
+              <div className="fm-card">
+                <h3>💰 Цены и триалы</h3>
+                <div className="fm-grid">
+                  {FINANCE_FIELDS.map((f) => (
+                    <SettingRow key={f.key} field={f} value={settings[f.key] ?? ''} disabled={busy} onSave={(v) => saveSetting(f.key, v)} />
+                  ))}
+                </div>
+              </div>
+              <div className="fm-card" style={{ marginTop: 10 }}>
+                <h3>⏳ Продлить триал игроку</h3>
+                <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+                  Дни отсчитываются от сегодняшнего дня (заменяет текущий триал).
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <select className="fm-input" style={{ flex: '1 1 220px', minWidth: 0 }} value={trialExtendVk ?? ''} onChange={(e) => setTrialExtendVk(e.target.value ? Number(e.target.value) : null)}>
+                    <option value="">— выбрать игрока —</option>
+                    {allPlayers.map((pl) => (
+                      <option key={pl.vk_id} value={pl.vk_id}>
+                        {pl.vk_id} · {pl.first_name} {pl.last_name}
+                      </option>
+                    ))}
+                  </select>
+                  <input className="fm-input" style={{ width: 90 }} type="number" min={1} value={trialDays} onChange={(e) => setTrialDays(e.target.value)} placeholder="дней" />
+                  <button type="button" className="fm-btn fm-btn-sm" disabled={busy || trialExtendVk == null} onClick={() => trialExtendVk != null && extendTrial(trialExtendVk)}>
+                    Продлить
+                  </button>
+                </div>
+                {financeMsg && <div style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>{financeMsg}</div>}
+              </div>
+              <div className="fm-card" style={{ marginTop: 10 }}>
+                <h3>🧾 Платёжные заказы</h3>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                  {['', 'pending', 'success', 'cancelled', 'fail'].map((st) => (
+                    <button key={st || 'all'} type="button" className={'fm-btn fm-btn-sm' + (payStatusFilter === st ? '' : ' fm-btn-outline')} onClick={() => setPayStatusFilter(st)}>
+                      {st === '' ? 'все' : st}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="fm-table" style={{ width: '100%' }}>
+                    <thead>
+                      <tr><th>#</th><th>Игрок</th><th>Сумма</th><th>Состав</th><th>Статус</th><th>Создан</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {payOrders.map((o) => (
+                        <tr key={o.id}>
+                          <td>{o.id}</td>
+                          <td>{o.vk_id}</td>
+                          <td>{o.amount_rub} ₽</td>
+                          <td>{o.dlc_codes.length ? o.dlc_codes.join(', ') : 'база'}</td>
+                          <td>{o.status}</td>
+                          <td>{new Date(o.created_at.endsWith('Z') ? o.created_at : o.created_at + 'Z').toLocaleString('ru-RU')}</td>
+                          <td>
+                            {o.status === 'pending' && (
+                              <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy} onClick={() => cancelPayOrder(o.id)}>Отменить</button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="fm-card" style={{ marginTop: 10 }}>
+                <h3>📜 Журнал платежей</h3>
+                <div style={{ maxHeight: 300, overflowY: 'auto', fontSize: 13 }}>
+                  {payLogs.map((l) => (
+                    <div key={l.id} style={{ padding: '4px 0', borderBottom: '1px solid var(--border, rgba(255,255,255,0.08))' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        {new Date(l.created_at.endsWith('Z') ? l.created_at : l.created_at + 'Z').toLocaleString('ru-RU')}
+                      </span>{' '}
+                      · vk{l.vk_id ?? '—'} · <b>{l.action}</b>{l.order_id ? ` · заказ #${l.order_id}` : ''}
+                      {l.detail ? <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{l.detail.slice(0, 160)}</div> : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             </>
           )}

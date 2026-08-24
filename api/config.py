@@ -50,6 +50,15 @@ ADMIN_VK_IDS = _env_list_int("ADMIN_VK_IDS")
 LOG_RETENTION_DAYS = _env_int("LOG_RETENTION_DAYS", 30)
 
 
+# ── Платёжный шлюз ProxyPay ──
+PAY_GATEWAY_URL = os.getenv("PAY_GATEWAY_URL", "").strip().rstrip("/")
+PAY_GATEWAY_GAME_ID = os.getenv("PAY_GATEWAY_GAME_ID", "farm")
+PAY_GATEWAY_API_KEY = os.getenv("PAY_GATEWAY_API_KEY", "")
+PAY_GATEWAY_WEBHOOK_SECRET = os.getenv("PAY_GATEWAY_WEBHOOK_SECRET", "")
+PAY_GATEWAY_TIMEOUT_SECONDS = _env_int("PAY_GATEWAY_TIMEOUT_SECONDS", 15)
+PAY_GATEWAY_ENABLED = bool(PAY_GATEWAY_URL and PAY_GATEWAY_API_KEY)
+
+
 # ── Загрузки (фото вышивки) ──
 UPLOADS_DIR = os.getenv("UPLOADS_DIR", os.path.join(API_DIR, "uploads"))
 os.makedirs(UPLOADS_DIR, exist_ok=True)

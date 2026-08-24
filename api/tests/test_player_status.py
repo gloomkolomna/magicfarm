@@ -1,6 +1,8 @@
 from contextlib import contextmanager
 from types import SimpleNamespace
 
+import datetime
+
 import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
@@ -22,7 +24,8 @@ def _seed_user(vk_id: int, role: str = "player", status: str = "active"):
     s = TestingSessionLocal()
     try:
         if s.query(User).filter(User.vk_id == vk_id).first() is None:
-            s.add(User(vk_id=vk_id, role=role, status=status))
+            s.add(User(vk_id=vk_id, role=role, status=status,
+                    trial_until=datetime.datetime.utcnow() + datetime.timedelta(days=7)))
         s.commit()
     finally:
         s.close()

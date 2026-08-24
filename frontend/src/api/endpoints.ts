@@ -610,6 +610,9 @@ export interface Player {
   round: number;
   reports_total: number;
   created_at: string | null;
+  trial_until: string | null;
+  subscription_until: string | null;
+  subscription_dlc_codes: string[];
 }
 
 export interface StitchReport {
@@ -1466,6 +1469,56 @@ export interface ForestResult {
   required?: number | null;
   paid_pending?: boolean;
 }
+
+
+export interface PaymentPrice {
+  period_days: number;
+  base_rub: number;
+  dlc: { code: string; name: string; price_rub: number }[];
+}
+
+export interface SubscriptionOrder {
+  order_id: number;
+  transaction_id: string;
+  payment_url: string;
+  amount_kop: number;
+  amount_rub: number;
+  period_days: number;
+  dlc_codes: string[];
+}
+
+export interface PaymentOrderStatus {
+  id: number;
+  status: string;
+  amount_kop: number;
+  period_days: number;
+  dlc_codes: string[];
+  created_at: string;
+}
+
+export interface AdminPaymentOrder {
+  id: number;
+  vk_id: number;
+  amount_kop: number;
+  amount_rub: number;
+  period_days: number;
+  dlc_codes: string[];
+  status: string;
+  gateway_txn_id: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface AdminPaymentLog {
+  id: number;
+  vk_id: number | null;
+  order_id: number | null;
+  txn_id: string | null;
+  action: string;
+  detail: string | null;
+  created_at: string;
+}
+
 
 export const api = {
   // ── Производства / склад ──
@@ -2326,4 +2379,19 @@ export const api = {
   receivedGifts: () => client.get<Gift[]>('/gifts/received').then((r) => r.data),
   giftDetail: (id: number) => client.get<Gift>(`/gifts/${id}`).then((r) => r.data),
   claimGift: (id: number) => client.post<Gift>(`/gifts/${id}/claim`).then((r) => r.data),
+
+  // ── Подписка / оплата ──
+  paymentPrice: () => client.get<PaymentPrice>('/payment/price').then((r) => r.data),
+  createSubscriptionOrder: (data: { dlc_codes: string[]; receipt_email: string }) =>
+    client.post<SubscriptionOrder>('/payment/create-order', data).then((r) => r.data),
+  paymentOrderStatus: (orderId: number) =>
+    client.get<PaymentOrderStatus>(`/payment/orders/${orderId}`).then((r) => r.data),
+
+  adminPaymentOrders: (statusFilter = '') =>
+    client.get<AdminPaymentOrder[]>(`/admin/payment-orders${statusFilter ? `?status_filter=${statusFilter}` : ''}`).then((r) => r.data),
+  adminCancelPaymentOrder: (id: number) =>
+    client.post<AdminPaymentOrder>(`/admin/payment-orders/${id}/cancel`).then((r) => r.data),
+  adminPaymentLogs: () => client.get<AdminPaymentLog[]>('/admin/payment-logs').then((r) => r.data),
+  adminExtendTrial: (vkId: number, days: number) =>
+    client.post(`/admin/players/${vkId}/trial`, { days }).then((r) => r.data),
 };

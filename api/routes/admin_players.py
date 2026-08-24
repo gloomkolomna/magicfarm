@@ -29,6 +29,9 @@ class PlayerOut(BaseModel):
     round: int
     reports_total: int
     created_at: str | None
+    trial_until: str | None
+    subscription_until: str | None
+    subscription_dlc_codes: list[str]
 
 
 def _player_out(u: User, reports_total: int, nm: dict) -> PlayerOut:
@@ -44,6 +47,9 @@ def _player_out(u: User, reports_total: int, nm: dict) -> PlayerOut:
         round=u.round or 1,
         reports_total=reports_total,
         created_at=u.created_at.isoformat() if u.created_at else None,
+        trial_until=u.trial_until.isoformat() if u.trial_until else None,
+        subscription_until=u.subscription_until.isoformat() if u.subscription_until else None,
+        subscription_dlc_codes=[c for c in (u.subscription_dlc_codes or "").split(",") if c],
     )
 
 
@@ -155,6 +161,9 @@ class PlayerDetailOut(BaseModel):
     round: int
     reports_total: int
     created_at: str | None
+    trial_until: str | None
+    subscription_until: str | None
+    subscription_dlc_codes: list[str]
     plots: list[PlayerPlotOut]
     productions: list[PlayerProductionOut]
     inventory: list[PlayerInventoryOut]
@@ -237,6 +246,9 @@ def get_player_detail(
         round=player.round or 1,
         reports_total=reports_total,
         created_at=player.created_at.isoformat() if player.created_at else None,
+        trial_until=player.trial_until.isoformat() if player.trial_until else None,
+        subscription_until=player.subscription_until.isoformat() if player.subscription_until else None,
+        subscription_dlc_codes=[c for c in (player.subscription_dlc_codes or "").split(",") if c],
         plots=[
             PlayerPlotOut(
                 id=p.id, plant_id=p.plant_id, plant_name=p.plant.name,
@@ -611,6 +623,30 @@ def revoke_player_dlc(
     db.delete(row)
     db.commit()
     return None
+
+
+class TrialExtendRequest(BaseModel):
+    days: int
+
+
+@router.post("/{vk_id}/trial", response_model=PlayerOut)
+def extend_player_trial(
+    vk_id: int,
+    req: TrialExtendRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    from services.subscription import set_trial_days
+
+    target = db.query(User).filter(User.vk_id == vk_id).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    if not 1 <= req.days <= 3650:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Дней: от 1 до 3650")
+    set_trial_days(db, target, req.days)
+    db.refresh(target)
+    nm = resolve_vk_names([target.vk_id])
+    return _player_out(target, 0, nm)
 
 
 @router.post("/{vk_id}/restart", response_model=PlayerOut)
