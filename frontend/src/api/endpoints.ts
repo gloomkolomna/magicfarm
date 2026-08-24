@@ -2409,4 +2409,8 @@ export const api = {
   adminPaymentLogs: () => client.get<AdminPaymentLog[]>('/admin/payment-logs').then((r) => r.data),
   adminExtendTrial: (vkId: number, days: number) =>
     client.post(`/admin/players/${vkId}/trial`, { days }).then((r) => r.data),
+  adminSetTrialUntil: (vkId: number, until: string | null) =>
+    client.post(`/admin/players/${vkId}/trial-until`, { until }).then((r) => r.data),
+  adminSetSubscriptionUntil: (vkId: number, until: string | null) =>
+    client.post(`/admin/players/${vkId}/subscription-until`, { until }).then((r) => r.data),
 };

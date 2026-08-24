@@ -188,6 +188,42 @@ def player_client_post_trial_denied():
         return pc.post("/api/admin/players/123/trial", json={"days": 5}).status_code == 403
 
 
+def test_admin_set_trial_and_subscription_until(admin_client):
+    _make_user(125)
+    r = admin_client.post("/api/admin/players/125/trial-until", json={"until": "2026-08-31"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["trial_until"].startswith("2026-08-31T23:59:59")
+    assert data["subscription_until"] is None
+
+    r = admin_client.post("/api/admin/players/125/subscription-until", json={"until": "2026-09-15"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["subscription_until"].startswith("2026-09-15T23:59:59")
+    assert data["trial_until"].startswith("2026-08-31T23:59:59")
+
+    r = admin_client.post("/api/admin/players/125/trial-until", json={"until": None})
+    assert r.status_code == 200
+    assert r.json()["trial_until"] is None
+
+    r = admin_client.post("/api/admin/players/125/subscription-until", json={"until": ""})
+    assert r.status_code == 200
+    assert r.json()["subscription_until"] is None
+
+
+def test_admin_set_until_validation_and_permissions(admin_client):
+    from tests.conftest import make_user_client
+
+    _make_user(126)
+    assert admin_client.post("/api/admin/players/126/trial-until", json={"until": "31.08.2026"}).status_code == 400
+    assert admin_client.post("/api/admin/players/126/subscription-until", json={"until": "not-a-date"}).status_code == 400
+    assert admin_client.post("/api/admin/players/999999/trial-until", json={"until": "2026-08-31"}).status_code == 404
+    assert admin_client.post("/api/admin/players/999999/subscription-until", json={"until": "2026-08-31"}).status_code == 404
+    with make_user_client(127) as pc:
+        assert pc.post("/api/admin/players/126/trial-until", json={"until": "2026-08-31"}).status_code == 403
+        assert pc.post("/api/admin/players/126/subscription-until", json={"until": "2026-08-31"}).status_code == 403
+
+
 def test_finance_settings_admin_only(admin_client):
     assert admin_client.put("/api/admin/settings/trial_days", json={"value": "10"}).status_code == 200
     assert admin_client.get("/api/settings/trial_days").json()["value"] == "10"

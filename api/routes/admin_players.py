@@ -700,6 +700,61 @@ def extend_player_trial(
     return _player_out(target, 0, nm)
 
 
+class DateUntilRequest(BaseModel):
+    until: str | None
+
+
+def _parse_until(value: str | None) -> datetime.datetime | None:
+    if value is None:
+        return None
+    value = value.strip()
+    if value == "":
+        return None
+    try:
+        d = datetime.date.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Дата должна быть в формате YYYY-MM-DD")
+    return datetime.datetime.combine(d, datetime.time.max)
+
+
+def _player_out_full(db: Session, target: User) -> PlayerOut:
+    reports_total = db.query(func.count(StitchReport.id)).filter(StitchReport.user_id == target.vk_id).scalar() or 0
+    names = resolve_vk_names([target.vk_id])
+    return _player_out(target, reports_total, names.get(target.vk_id, {}), _is_donor(db, target.vk_id))
+
+
+@router.post("/{vk_id}/trial-until", response_model=PlayerOut)
+def set_player_trial_until(
+    vk_id: int,
+    req: DateUntilRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    target = db.query(User).filter(User.vk_id == vk_id).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    target.trial_until = _parse_until(req.until)
+    db.commit()
+    db.refresh(target)
+    return _player_out_full(db, target)
+
+
+@router.post("/{vk_id}/subscription-until", response_model=PlayerOut)
+def set_player_subscription_until(
+    vk_id: int,
+    req: DateUntilRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    target = db.query(User).filter(User.vk_id == vk_id).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    target.subscription_until = _parse_until(req.until)
+    db.commit()
+    db.refresh(target)
+    return _player_out_full(db, target)
+
+
 @router.post("/{vk_id}/restart", response_model=PlayerOut)
 def restart_player(
     vk_id: int,

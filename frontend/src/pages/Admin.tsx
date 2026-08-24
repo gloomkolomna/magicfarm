@@ -35,6 +35,12 @@ function fmtMsk(iso: string): string {
   return d.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
 }
 
+function toDateInputValue(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z');
+  return d.toISOString().slice(0, 10);
+}
+
 const SURCHARGE_OPTIONS = [
   { value: '30', label: '30 монет' },
   { value: '35', label: '35 монет' },
@@ -93,6 +99,8 @@ export default function AdminPage() {
     }, 150);
   }
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [trialDateInput, setTrialDateInput] = useState('');
+  const [subDateInput, setSubDateInput] = useState('');
   const [playerDetail, setPlayerDetail] = useState<PlayerDetail | null>(null);
   const [playerReports, setPlayerReports] = useState<StitchReport[]>([]);
   const [playerTab, setPlayerTab] = useState<'overview' | 'reports'>('overview');
@@ -463,6 +471,11 @@ export default function AdminPage() {
   useEffect(() => { if (!sessionLoading) loadCore(); }, [loadCore, sessionLoading]);
 
   useEffect(() => {
+    setTrialDateInput(toDateInputValue(selectedPlayer?.trial_until ?? null));
+    setSubDateInput(toDateInputValue(selectedPlayer?.subscription_until ?? null));
+  }, [selectedPlayer]);
+
+  useEffect(() => {
     const prevent = (e: Event) => e.preventDefault();
     document.addEventListener('submit', prevent);
     return () => document.removeEventListener('submit', prevent);
@@ -490,6 +503,21 @@ export default function AdminPage() {
       setPlayerFields(flds);
     } catch {
       setPlayerFields([]);
+    }
+  }
+
+  async function saveAccessDates() {
+    if (!selectedPlayer) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.adminSetTrialUntil(selectedPlayer.vk_id, trialDateInput || null);
+      const updated = await api.adminSetSubscriptionUntil(selectedPlayer.vk_id, subDateInput || null);
+      setSelectedPlayer(updated);
+      setMsg('✓ Даты доступа сохранены');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -2433,10 +2461,17 @@ export default function AdminPage() {
                       🐶 Дон: {selectedPlayer.is_donor ? '✅ активен' : '— нет'}
                       {' · '}🎟 Обход дон-гейта: {selectedPlayer.donor_exempt ? 'вкл' : 'выкл'}
                     </div>
-                    <div>
-                      ⏳ Триал до: {selectedPlayer.trial_until ? new Date(selectedPlayer.trial_until.endsWith('Z') ? selectedPlayer.trial_until : selectedPlayer.trial_until + 'Z').toLocaleDateString('ru-RU') : '—'}
-                      {' · '}💳 Подписка до: {selectedPlayer.subscription_until ? new Date(selectedPlayer.subscription_until.endsWith('Z') ? selectedPlayer.subscription_until : selectedPlayer.subscription_until + 'Z').toLocaleDateString('ru-RU') : '—'}
-                      {selectedPlayer.subscription_dlc_codes?.length ? ` (+ ${selectedPlayer.subscription_dlc_codes.join(', ')})` : ''}
+                    <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                        ⏳ Триал до
+                        <input type="date" className="fm-input" style={{ width: 150 }} value={trialDateInput} onChange={(e) => setTrialDateInput(e.target.value)} />
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                        💳 Подписка до
+                        <input type="date" className="fm-input" style={{ width: 150 }} value={subDateInput} onChange={(e) => setSubDateInput(e.target.value)} />
+                      </label>
+                      <button type="button" className="fm-btn fm-btn-sm" disabled={busy} onClick={saveAccessDates}>💾 Сохранить</button>
+                      {selectedPlayer.subscription_dlc_codes?.length ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>(+ {selectedPlayer.subscription_dlc_codes.join(', ')})</span> : null}
                     </div>
                     {selectedPlayer.role !== 'admin' && (
                       <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
