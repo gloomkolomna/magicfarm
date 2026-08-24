@@ -565,29 +565,25 @@ def list_bonuses(
     user: User = Depends(get_current_user),
 ):
     potions = db.query(UserPotion).filter(UserPotion.user_id == user.vk_id).all()
-    by_code: dict[str, UserPotion] = {}
+    by_code: dict[str, list[UserPotion]] = {}
     for p in potions:
-        if not p.bonus_code:
-            continue
-        cur = by_code.get(p.bonus_code)
-        if cur is None:
-            by_code[p.bonus_code] = p
-            continue
-        p_rank = 0 if (p.activated and not p.used) else (1 if not p.used else 2)
-        cur_rank = 0 if (cur.activated and not cur.used) else (1 if not cur.used else 2)
-        if p_rank < cur_rank:
-            by_code[p.bonus_code] = p
+        if p.bonus_code:
+            by_code.setdefault(p.bonus_code, []).append(p)
     result = []
     for code in POTION_BONUS_LABELS.keys():
-        p = by_code.get(code)
+        code_potions = by_code.get(code, [])
+        armed = next((p for p in code_potions if p.activated and not p.used), None)
+        fired = next((p for p in code_potions if p.activated and p.used), None)
+        available = next((p for p in code_potions if not p.activated and not p.used), None)
+        chosen = armed or fired or available
         result.append(BonusCatalogItem(
             code=code,
             label=_bonus_label(code),
             kind="instant" if code in INSTANT_BONUSES else "conditional",
-            owned=p is not None,
-            activated=p.activated if p else False,
-            used=p.used if p else False,
-            potion_id=p.id if p else None,
+            owned=bool(code_potions),
+            activated=chosen.activated if chosen else False,
+            used=chosen.used if chosen else False,
+            potion_id=chosen.id if chosen else None,
             when_fires=_bonus_hint(code),
         ))
     return result
@@ -645,6 +641,18 @@ def activate_potion(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Бонус уже активирован")
     if not up.bonus_code:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У этого зелья нет бонуса")
+
+    already_applied = db.query(UserPotion).filter(
+        UserPotion.user_id == user.vk_id,
+        UserPotion.bonus_code == up.bonus_code,
+        UserPotion.id != up.id,
+        UserPotion.activated.is_(True),
+    ).first()
+    if already_applied is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Этот бонус уже применён. Зелье можно варить много раз, но каждый бонус действует единожды.",
+        )
 
     up.activated = True
     if up.bonus_code in INSTANT_BONUSES:

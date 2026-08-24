@@ -757,3 +757,84 @@ def test_potions_when_fires_hint(admin_client):
         r = c.post(f"/api/potions/{pots[0]['id']}/activate")
         assert r.status_code == 200
         assert r.json()["when_fires"] == pots[0]["when_fires"]
+
+
+# ── Бонус применяется единожды, варка — без ограничений ──
+
+def test_activate_same_bonus_second_potion_forbidden(admin_client):
+    _seed_potion(123, "double_order_reward", activated=False, used=False)
+    _seed_potion(123, "double_order_reward", activated=False, used=False)
+    with make_user_client(123, "player") as c:
+        pots = c.get("/api/potions").json()
+        assert len(pots) == 2
+        r = c.post(f"/api/potions/{pots[0]['id']}/activate")
+        assert r.status_code == 200
+        r = c.post(f"/api/potions/{pots[1]['id']}/activate")
+        assert r.status_code == 409
+        assert "уже применён" in r.json()["detail"]
+
+
+def test_activate_after_bonus_fired_forbidden(admin_client):
+    _seed_potion(123, "double_order_reward", activated=True, used=True)
+    _seed_potion(123, "double_order_reward", activated=False, used=False)
+    with make_user_client(123, "player") as c:
+        pots = c.get("/api/potions").json()
+        fresh = next(p for p in pots if not p["activated"])
+        r = c.post(f"/api/potions/{fresh['id']}/activate")
+        assert r.status_code == 409
+
+
+def test_delivered_potion_does_not_block_activation(admin_client):
+    _seed_potion(123, "double_order_reward", activated=False, used=True)
+    _seed_potion(123, "double_order_reward", activated=False, used=False)
+    with make_user_client(123, "player") as c:
+        pots = c.get("/api/potions").json()
+        fresh = next(p for p in pots if not p["used"])
+        r = c.post(f"/api/potions/{fresh['id']}/activate")
+        assert r.status_code == 200
+        assert r.json()["activated"] is True
+
+
+def test_brew_same_recipe_twice(admin_client):
+    for pid in (1, 2, 3):
+        _seed_plant_inventory(123, pid, 10)
+    _seed_product_inventory(123, 1, 10)
+    with make_user_client(123, "player") as c:
+        for _ in range(2):
+            r = c.post("/api/potions/cauldrons", json={"recipe_id": 1})
+            assert r.status_code == 201, r.text
+            cid = r.json()["id"]
+            for i, pid in enumerate((1, 2, 3)):
+                c.post(f"/api/potions/cauldrons/{cid}/slot/{i}", json={"item_kind": "plant", "item_id": pid})
+            c.post(f"/api/potions/cauldrons/{cid}/slot/3", json={"item_kind": "product", "item_id": 1})
+            r = c.post(f"/api/potions/cauldrons/{cid}/brew")
+            assert r.status_code == 200
+            assert r.json()["status"] == "done"
+        r = c.get("/api/potions")
+        assert len(r.json()) == 2
+
+
+def test_bonuses_catalog_reflects_applied_state(admin_client):
+    _seed_potion(123, "double_order_reward", activated=True, used=False)
+    _seed_potion(123, "double_order_reward", activated=False, used=False)
+    with make_user_client(123, "player") as c:
+        by_code = {b["code"]: b for b in c.get("/api/potions/bonuses").json()}
+        armed = by_code["double_order_reward"]
+        assert armed["activated"] is True
+        assert armed["used"] is False
+
+    from models import UserPotion
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        for up in s.query(UserPotion).filter(UserPotion.user_id == 123).all():
+            up.used = True
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as c:
+        by_code = {b["code"]: b for b in c.get("/api/potions/bonuses").json()}
+        fired = by_code["double_order_reward"]
+        assert fired["activated"] is True
+        assert fired["used"] is True

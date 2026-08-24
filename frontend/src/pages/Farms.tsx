@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type FieldDetail, type PlayerFarm, type PlayerSearchItem } from '../api/endpoints';
+import { useSession } from '../context/SessionContext';
 import FieldGridView from '../components/FieldGridView';
 import Toast from '../components/Toast';
 
@@ -26,6 +27,8 @@ const PROD_STATUS_LABEL: Record<string, string> = {
 
 export default function FarmsPage() {
   const nav = useNavigate();
+  const { user, readOnly } = useSession();
+  const isReadOnly = user?.status === 'readonly' || readOnly;
   const [q, setQ] = useState('');
   const [allPlayers, setAllPlayers] = useState<PlayerSearchItem[]>([]);
   const [farm, setFarm] = useState<PlayerFarm | null>(null);
@@ -60,7 +63,7 @@ export default function FarmsPage() {
   }
 
   async function sendGift() {
-    if (!giftTarget) return;
+    if (isReadOnly || !giftTarget) return;
     const itemId = Number(giftItemId);
     const qty = Number(giftQty) || 1;
     if (!itemId || qty < 1) { setMsg('✗ Выберите предмет и количество'); return; }
@@ -112,7 +115,7 @@ export default function FarmsPage() {
   }
 
   return (
-    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
+    <div className="fm-view-allow" style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>🌾 Фермы игроков</h1>
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
@@ -142,8 +145,8 @@ export default function FarmsPage() {
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>ID: {p.vk_id}</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                     <button className="fm-btn fm-btn-sm" style={{ flex: '1 1 45%', minWidth: 0 }} onClick={(e) => { e.stopPropagation(); openFarm(p.vk_id); }}>👁 Смотреть</button>
-                    <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ flex: '1 1 45%', minWidth: 0 }} onClick={(e) => { e.stopPropagation(); openGift(p); }}>🎁 Подарок</button>
-                    <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ flex: '1 1 100%', minWidth: 0 }} onClick={(e) => { e.stopPropagation(); writeTo(p.vk_id); }}>💬 Написать</button>
+                    <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ flex: '1 1 45%', minWidth: 0 }} disabled={isReadOnly} title={isReadOnly ? 'Недоступно в режиме просмотра' : undefined} onClick={(e) => { e.stopPropagation(); openGift(p); }}>🎁 Подарок</button>
+                    <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ flex: '1 1 100%', minWidth: 0 }} disabled={isReadOnly} title={isReadOnly ? 'Недоступно в режиме просмотра' : undefined} onClick={(e) => { e.stopPropagation(); writeTo(p.vk_id); }}>💬 Написать</button>
                   </div>
                 </div>
               ))}
@@ -154,8 +157,8 @@ export default function FarmsPage() {
         <div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
             <button className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy} onClick={() => setFarm(null)}>← Назад</button>
-            <button className="fm-btn fm-btn-sm" disabled={busy} onClick={() => writeTo(farm.vk_id)}>💬 Написать</button>
-            <button className="fm-btn fm-btn-sm" disabled={busy} onClick={() => openGift({ vk_id: farm.vk_id, display_name: farm.display_name, level: farm.level, coins: farm.coins, crosses_total: farm.crosses_total })}>🎁 Отправить подарок</button>
+            <button className="fm-btn fm-btn-sm" disabled={busy || isReadOnly} title={isReadOnly ? 'Недоступно в режиме просмотра' : undefined} onClick={() => writeTo(farm.vk_id)}>💬 Написать</button>
+            <button className="fm-btn fm-btn-sm" disabled={busy || isReadOnly} title={isReadOnly ? 'Недоступно в режиме просмотра' : undefined} onClick={() => openGift({ vk_id: farm.vk_id, display_name: farm.display_name, level: farm.level, coins: farm.coins, crosses_total: farm.crosses_total })}>🎁 Отправить подарок</button>
           </div>
           <div className="fm-card" style={{ marginBottom: 10 }}>
             <strong style={{ fontSize: 17 }}>👤 {farm.display_name}</strong>
@@ -293,7 +296,7 @@ export default function FarmsPage() {
             <input className="fm-input" type="number" min={1} value={giftQty} onChange={(e) => setGiftQty(e.target.value)} />
             <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
               <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ flex: 1 }} disabled={busy} onClick={() => setGiftTarget(null)}>Отмена</button>
-              <button className="fm-btn fm-btn-sm" style={{ flex: 1 }} disabled={busy || !giftItemId} onClick={sendGift}>🎁 Отправить</button>
+              <button className="fm-btn fm-btn-sm" style={{ flex: 1 }} disabled={busy || !giftItemId || isReadOnly} onClick={sendGift}>🎁 Отправить</button>
             </div>
           </div>
         </div>

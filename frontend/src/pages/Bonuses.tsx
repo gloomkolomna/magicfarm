@@ -58,6 +58,7 @@ export default function BonusesPage() {
   }
 
   const activeBonuses = bonuses.filter((b) => b.activated && !b.used);
+  const appliedCodes = new Set(bonuses.filter((b) => b.activated || b.used).map((b) => b.code));
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
@@ -90,7 +91,9 @@ export default function BonusesPage() {
             </div>
           ) : (
             <div className="fm-grid" style={{ marginBottom: 16 }}>
-              {userPotions.map((p) => (
+              {userPotions.map((p) => {
+                const bonusApplied = !!p.bonus_code && appliedCodes.has(p.bonus_code);
+                return (
                 <div key={p.id} className="fm-card fm-rise" style={{ textAlign: 'center', opacity: p.used ? 0.6 : p.activated ? 0.7 : 1 }}>
                   {p.image_url && (
                     <SpritePedestal url={mediaUrl(p.image_url)} height={96} onZoom={setZoomedImg} />
@@ -137,7 +140,10 @@ export default function BonusesPage() {
                   {p.description && (
                     <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>{p.description}</p>
                   )}
-                  {!p.activated && !p.used && (
+                  {!p.activated && !p.used && bonusApplied && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>Бонус уже применён</div>
+                  )}
+                  {!p.activated && !p.used && !bonusApplied && (
                     <button
                       className="fm-btn fm-btn-sm fm-btn-wrap"
                       style={{ width: '100%', marginTop: 8 }}
@@ -148,7 +154,8 @@ export default function BonusesPage() {
                     </button>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

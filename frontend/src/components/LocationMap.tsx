@@ -65,7 +65,7 @@ export default function LocationMap({ mapUrl, name, emoji, onBack, backLabel = '
       </div>
 
       {mapUrl && (
-        <div style={{ position: 'fixed', right: 12, bottom: 'calc(16px + var(--vk-inset-bottom, 0px))', zIndex: 25, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+        <div className="fm-view-allow" style={{ position: 'fixed', right: 12, bottom: 'calc(16px + var(--vk-inset-bottom, 0px))', zIndex: 25, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
           <button onClick={zoomIn} aria-label="Увеличить" style={zoomBtn}>＋</button>
           <button onClick={resetScale} aria-label="Реальный масштаб" title="Реальный масштаб (100%)" style={{ ...zoomBtn, fontSize: 13, fontWeight: 700 }}>{Math.round(scale * 100)}%</button>
           <button onClick={zoomOut} aria-label="Уменьшить" style={zoomBtn}>−</button>
@@ -74,6 +74,7 @@ export default function LocationMap({ mapUrl, name, emoji, onBack, backLabel = '
       )}
 
       <div
+        className="fm-view-allow"
         style={{
           position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20,
           display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',

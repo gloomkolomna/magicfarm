@@ -141,6 +141,7 @@ function App() {
   const { vkUserId, loading } = useVkBridge();
   const { user, loading: sessionLoading, error: sessionError, refresh, readOnly } = useSession();
   const [viewOnly, setViewOnly] = useState(false);
+  const isViewOnly = !!user && user.role !== 'admin' && (readOnly ? viewOnly : user.status === 'readonly');
 
   useEffect(() => { installGlobalErrorReporters(); }, []);
 
@@ -257,7 +258,7 @@ function App() {
   }
 
   return (
-    <>
+    <div className={isViewOnly ? 'fm-view-only' : undefined}>
       <Background />
       <Suspense fallback={<Skeleton />}>
         <Routes>
@@ -295,7 +296,7 @@ function App() {
         </Routes>
       </Suspense>
       <ConfirmHost />
-    </>
+    </div>
   );
 }
 

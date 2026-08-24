@@ -239,6 +239,30 @@ button.fm-card {
   transition: width 0.3s ease;
 }
 
+/* ── Режим только просмотра: блокировка всех действий ── */
+.fm-view-only button,
+.fm-view-only input,
+.fm-view-only select,
+.fm-view-only textarea,
+.fm-view-only a,
+.fm-view-only [style*="cursor:pointer"],
+.fm-view-only [style*="cursor: pointer"] {
+  pointer-events: none !important;
+  opacity: 0.55;
+}
+
+.fm-view-only .fm-view-allow,
+.fm-view-only .fm-view-allow button,
+.fm-view-only .fm-view-allow input,
+.fm-view-only .fm-view-allow select,
+.fm-view-only .fm-view-allow textarea,
+.fm-view-only .fm-view-allow a,
+.fm-view-only .fm-view-allow [style*="cursor:pointer"],
+.fm-view-only .fm-view-allow [style*="cursor: pointer"] {
+  pointer-events: auto !important;
+  opacity: 1;
+}
+
 /* ── Анимации появления ── */
 @keyframes fm-rise {
   from { opacity: 0; transform: translateY(8px); }

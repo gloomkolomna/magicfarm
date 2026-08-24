@@ -99,6 +99,7 @@ function MiniAppShell({ children }: Props) {
         </div>
       )}
       <div
+        className="fm-view-allow"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -183,6 +184,7 @@ function MiniAppShell({ children }: Props) {
       {menuOpen && (
         <div
           onClick={() => setMenuOpen(false)}
+          className="fm-view-allow"
           style={{
             position: 'fixed',
             inset: 0,

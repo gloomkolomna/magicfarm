@@ -100,6 +100,7 @@ export default function FieldsPage() {
           {totalPages > 1 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, background: 'linear-gradient(180deg, var(--leaf) 0%, var(--grass) 100%)', border: '1px solid var(--grass-deep)', borderRadius: 'var(--radius-md)', padding: '8px 10px', color: '#1a2414' }}>
               <button
+                className="fm-view-allow"
                 disabled={safePage === 0}
                 onClick={handlePrev}
                 style={{ cursor: safePage === 0 ? 'default' : 'pointer', opacity: safePage === 0 ? 0.4 : 1, padding: '6px 14px', fontSize: 18, background: 'transparent', border: 'none', color: 'inherit' }}
@@ -110,6 +111,7 @@ export default function FieldsPage() {
                 {FIELD_KIND_LABEL[current.category] || current.category}
               </span>
               <button
+                className="fm-view-allow"
                 disabled={safePage >= totalPages - 1}
                 onClick={handleNext}
                 style={{ cursor: safePage >= totalPages - 1 ? 'default' : 'pointer', opacity: safePage >= totalPages - 1 ? 0.4 : 1, padding: '6px 14px', fontSize: 18, background: 'transparent', border: 'none', color: 'inherit' }}
@@ -136,7 +138,7 @@ export default function FieldsPage() {
               return (
                 <button
                   key={f.id}
-                  className="fm-card fm-rise"
+                  className="fm-card fm-rise fm-view-allow"
                   onClick={() => nav(
                     f.field_kind === 'meadow' ? `/meadow/${f.id}`
                     : f.field_kind === 'shop' ? `/shop/${f.id}`

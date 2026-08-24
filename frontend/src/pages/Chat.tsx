@@ -15,7 +15,8 @@ function fmt(iso: string | null): string {
 export default function ChatPage() {
   const nav = useNavigate();
   const { vkId } = useParams<{ vkId: string }>();
-  const { user } = useSession();
+  const { user, readOnly } = useSession();
+  const isReadOnly = user?.status === 'readonly' || readOnly;
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [peer, setPeer] = useState<Conversation | null>(null);
   const [thread, setThread] = useState<ChatMessage[]>([]);
@@ -98,7 +99,7 @@ export default function ChatPage() {
   }
 
   async function send() {
-    if (!peer || !text.trim()) return;
+    if (isReadOnly || !peer || !text.trim()) return;
     setBusy(true); setMsg(null);
     try {
       await api.sendChatMessage(peer.vk_id, text.trim());
@@ -110,7 +111,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
+    <div className="fm-view-allow" style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>💬 Чат</h1>
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
@@ -207,10 +208,11 @@ export default function ChatPage() {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-                placeholder="Сообщение…"
+                placeholder={isReadOnly ? 'Чат недоступен в режиме просмотра' : 'Сообщение…'}
+                disabled={isReadOnly}
                 style={{ flex: '1 1 200px', minWidth: 0 }}
               />
-              <button className="fm-btn fm-btn-sm" style={{ flexShrink: 0 }} disabled={busy || !text.trim()} onClick={send}>➤ Отправить</button>
+              <button className="fm-btn fm-btn-sm" style={{ flexShrink: 0 }} disabled={busy || !text.trim() || isReadOnly} onClick={send}>➤ Отправить</button>
             </div>
           </div>
         </div>
