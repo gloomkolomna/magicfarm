@@ -402,7 +402,7 @@ export default function AdminPage() {
       ]);
       setPlayers(plys);
       setAllPlayers(plys);
-      setSettings(Object.fromEntries(setMap));
+      setSettings((prev) => ({ ...prev, ...Object.fromEntries(setMap) }));
       setFields(flds);
       setAllPlants(pls);
     } finally {
@@ -444,7 +444,7 @@ export default function AdminPage() {
       ]);
       setPlayers(plys);
       setAllPlayers(plys);
-      setSettings(Object.fromEntries(setMap));
+      setSettings((prev) => ({ ...prev, ...Object.fromEntries(setMap) }));
       setFields(flds);
       setAllPlants(pls);
       setPlants(pls);
@@ -656,7 +656,8 @@ export default function AdminPage() {
     setBusy(true);
     setMsg(null);
     try {
-      await api.updateSetting(key, value);
+      const saved = await api.updateSetting(key, value);
+      setSettings((prev) => ({ ...prev, [key]: saved.value }));
       setMsg('✓ Настройка сохранена');
       await load();
     } catch (e: any) {
