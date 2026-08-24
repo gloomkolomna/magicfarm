@@ -232,7 +232,24 @@ footer {
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/__([^_]+)__/g, '<strong>$1</strong>')
       .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>')
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(m, text, url) {
+        var extra = url.charAt(0) === '#' ? '' : ' target="_blank" rel="noopener"';
+        return '<a href="' + url + '"' + extra + '>' + text + '</a>';
+      });
+  }
+
+  function splitRow(line) {
+    var s = line.trim();
+    if (s.charAt(0) === '|') s = s.slice(1);
+    if (s.charAt(s.length - 1) === '|') s = s.slice(0, -1);
+    return s.split('|').map(function(c) { return c.trim(); });
+  }
+
+  function isSeparator(line) {
+    var s = line.trim();
+    if (s.charAt(0) !== '|') return false;
+    if (!/^[\s|:\-]+$/.test(s)) return false;
+    return s.indexOf('-') !== -1;
   }
 
   function render(md) {
@@ -303,6 +320,27 @@ footer {
         if (inList !== 'ul') { closeList(); html.push('<ul>'); inList = 'ul'; }
         html.push('<li>' + inline(ul[1]) + '</li>');
         i++;
+        continue;
+      }
+
+      if (t.charAt(0) === '|' && i + 1 < lines.length && isSeparator(lines[i + 1])) {
+        closeList();
+        var headerCells = splitRow(t);
+        i += 2;
+        var rows = [];
+        while (i < lines.length && lines[i].trim().charAt(0) === '|') {
+          rows.push(splitRow(lines[i]));
+          i++;
+        }
+        var thead = '<thead><tr>' + headerCells.map(function(c) {
+          return '<th>' + inline(c) + '</th>';
+        }).join('') + '</tr></thead>';
+        var tbody = '<tbody>' + rows.map(function(r) {
+          return '<tr>' + r.map(function(c) {
+            return '<td>' + inline(c) + '</td>';
+          }).join('') + '</tr>';
+        }).join('') + '</tbody>';
+        html.push('<table>' + thead + tbody + '</table>');
         continue;
       }
 
