@@ -261,6 +261,7 @@ export default function TradesPage() {
                   <div style={{ flex: '2 1 160px', minWidth: 0 }}>
                     <ItemPicker
                       compact
+                      columns={3}
                       items={(['plant', 'product', 'ingredient'] as const).map((k) => ({ key: k, title: KIND_LABEL[k], emoji: KIND_EMOJI[k] }))}
                       value={r.kind}
                       onChange={(k) => setRows(rows.map((x, i) => (i === idx ? { ...x, kind: k as RowForm['kind'], item_id: '' } : x)))}

@@ -18,7 +18,7 @@ function arrowStyle(disabled: boolean): CSSProperties {
   };
 }
 
-export default function ItemPicker({ items, value, onChange, columns = 3, pageSize = 6, compact = false, busy = false }: {
+export default function ItemPicker({ items, value, onChange, columns = 2, pageSize = 4, compact = false, busy = false }: {
   items: PickerItem[];
   value: string | null;
   onChange: (key: string) => void;
@@ -64,12 +64,12 @@ export default function ItemPicker({ items, value, onChange, columns = 3, pageSi
                 }}
               >
                 {it.image && !compact ? (
-                  <img src={mediaUrl(it.image)} alt="" style={{ height: 44, maxWidth: '100%', objectFit: 'contain', display: 'block', margin: '0 auto 4px' }} />
+                  <img src={mediaUrl(it.image)} alt="" style={{ height: 52, maxWidth: '100%', objectFit: 'contain', display: 'block', margin: '0 auto 4px' }} />
                 ) : (
-                  <div style={{ fontSize: compact ? 16 : 22, marginBottom: 2 }}>{it.emoji || '📦'}</div>
+                  <div style={{ fontSize: compact ? 16 : 24, marginBottom: 2 }}>{it.emoji || '📦'}</div>
                 )}
-                <div style={{ fontSize: compact ? 10 : 11 }}>{it.title}</div>
-                {it.badge && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{it.badge}</div>}
+                <div style={{ fontSize: compact ? 10 : 12, lineHeight: 1.25, wordBreak: 'break-word', overflowWrap: 'anywhere', hyphens: 'auto' }}>{it.title}</div>
+                {it.badge && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{it.badge}</div>}
               </button>
             );
           })}

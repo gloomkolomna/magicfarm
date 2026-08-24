@@ -274,8 +274,8 @@ export default function FarmsPage() {
       )}
 
       {giftTarget && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div className="fm-card fm-rise" style={{ maxWidth: 420, width: '100%' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
+          <div className="fm-card fm-rise" style={{ width: '100%', maxWidth: 'min(100%, 560px)', maxHeight: '85vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <h3 style={{ flex: 1, margin: 0 }}>🎁 Подарок для {giftTarget.display_name}</h3>
               <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ padding: '2px 10px', lineHeight: 1.4 }} disabled={busy} onClick={() => setGiftTarget(null)} aria-label="Закрыть">✕</button>
@@ -284,6 +284,7 @@ export default function FarmsPage() {
             <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>Тип</label>
             <ItemPicker
               compact
+              columns={3}
               items={(['plant', 'product', 'ingredient'] as const).map((k) => ({ key: k, title: GIFT_KIND_LABEL[k], emoji: GIFT_KIND_EMOJI[k] }))}
               value={giftKind}
               onChange={(k) => { setGiftKind(k as 'plant' | 'product' | 'ingredient'); setGiftItemId(''); }}
