@@ -8,24 +8,24 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Marcellus&family=PT+Serif:wght@400;700&display=swap" />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M16 4 C20 8 20 12 16 16 C12 12 12 8 16 4 Z' fill='%237cb342'/><path d='M6 26 L26 26 L24 18 L8 18 Z' fill='%238d6e63'/></svg>" />
+<link rel="icon" href="favicon.jpg" type="image/jpeg" />
 <style>
 :root {
-  --bg: #1a2414;
-  --bg-card: rgba(10, 16, 8, 0.55);
-  --bg-elev: rgba(10, 16, 8, 0.72);
-  --leaf: #7cb342;
-  --grass: #5a8f3e;
-  --grass-deep: #2f5a1e;
-  --flax: #d9c89a;
-  --flax-light: #efe6cc;
-  --honey: #e0a83e;
-  --berry: #8e3b5e;
-  --sky: #6fa8c4;
-  --text: #ffffff;
-  --text-secondary: #d8cdb0;
-  --text-muted: #b8a88a;
-  --border: rgba(217, 200, 154, 0.22);
+  --bg: #0a0e24;
+  --bg-card: rgba(18, 24, 52, 0.55);
+  --bg-elev: rgba(22, 30, 64, 0.72);
+  --leaf: #8aa8ff;
+  --grass: #6f8cf0;
+  --grass-deep: #4a63c8;
+  --flax: #f3d779;
+  --flax-light: #f7ecd0;
+  --honey: #ffd97a;
+  --berry: #b79bff;
+  --sky: #7ea6ff;
+  --text: #eef1ff;
+  --text-secondary: #c9d0ec;
+  --text-muted: #98a2c8;
+  --border: rgba(150, 170, 230, 0.22);
   --serif: 'Cormorant Garamond', Georgia, serif;
   --display: 'Marcellus', 'Cormorant Garamond', serif;
   --body: 'PT Serif', 'Cormorant Garamond', Georgia, serif;
@@ -36,11 +36,42 @@ body {
   font-family: var(--body);
   background: var(--bg);
   background-image:
-    radial-gradient(ellipse at 20% 0%, rgba(124, 179, 66, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 100%, rgba(224, 168, 62, 0.07) 0%, transparent 50%);
+    radial-gradient(ellipse at 15% 10%, rgba(96, 120, 255, 0.16) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 85%, rgba(150, 110, 255, 0.14) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 45%, rgba(70, 100, 200, 0.10) 0%, transparent 60%);
+  background-attachment: fixed;
   color: var(--text);
   line-height: 1.7;
   min-height: 100vh;
+  position: relative;
+  z-index: 0;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 25% 20%, rgba(255, 255, 255, 0.9) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 70% 12%, rgba(255, 255, 255, 0.7) 50%, transparent 50%),
+    radial-gradient(1px 1px at 55% 65%, rgba(255, 255, 255, 0.8) 50%, transparent 50%),
+    radial-gradient(2px 2px at 40% 82%, rgba(255, 255, 255, 0.6) 50%, transparent 50%);
+  background-size: 210px 210px, 330px 330px, 260px 260px, 410px 410px;
+  background-repeat: repeat;
+  animation: twinkle 6s ease-in-out infinite;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(3, 5, 15, 0.6) 100%);
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
 }
 
 .wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
@@ -50,7 +81,15 @@ header {
   padding: 64px 20px 32px;
   border-bottom: 1px solid var(--border);
 }
-header .crest { font-size: 56px; margin-bottom: 12px; }
+header .logo {
+  width: 160px;
+  max-width: 70vw;
+  height: auto;
+  max-height: 160px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(138, 168, 255, 0.4);
+}
 header h1 {
   font-family: var(--display);
   font-weight: 600;
@@ -119,6 +158,32 @@ h2 {
 }
 .sub-banner strong { color: var(--honey); font-family: var(--display); font-weight: 600; }
 
+.pricing { max-width: 480px; margin: 0 auto 8px; text-align: center; }
+.price-main {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--honey);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.price-main small {
+  font-family: var(--body);
+  font-size: 15px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.price-dlc {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+.price-dlc li { padding: 3px 0; }
+.price-dlc .dlc-name { color: var(--leaf); }
+.loading { text-align: center; color: var(--text-muted); padding: 12px; font-style: italic; }
+
 .how { counter-reset: step; }
 .how ol { list-style: none; max-width: 640px; margin: 0 auto; }
 .how li {
@@ -174,7 +239,7 @@ h2 {
   border-radius: 6px;
   text-decoration: none;
 }
-.offerta-link:hover { background: rgba(124, 179, 66, 0.12); }
+.offerta-link:hover { background: rgba(138, 168, 255, 0.14); }
 
 .cta { text-align: center; padding: 56px 0; }
 .cta-btn {
@@ -182,16 +247,16 @@ h2 {
   font-family: var(--display);
   font-size: 17px;
   font-weight: 600;
-  color: #1a2414;
-  background: linear-gradient(135deg, var(--leaf), var(--grass));
+  color: #1a1630;
+  background: linear-gradient(135deg, #f3d779, #e6bf5a);
   text-decoration: none;
   padding: 16px 40px;
   border-radius: 8px;
   letter-spacing: 0.04em;
   transition: transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 4px 20px rgba(124, 179, 66, 0.25);
+  box-shadow: 0 4px 20px rgba(243, 215, 121, 0.25);
 }
-.cta-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(124, 179, 66, 0.4); }
+.cta-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(243, 215, 121, 0.45); }
 .cta-note { margin-top: 16px; font-size: 14px; color: var(--text-muted); }
 
 footer {
@@ -204,7 +269,7 @@ footer {
 
 @media (max-width: 600px) {
   header { padding: 40px 20px 24px; }
-  header .crest { font-size: 44px; }
+  header .logo { width: 110px; }
   section { padding: 36px 0; }
 }
 </style>
@@ -213,7 +278,7 @@ footer {
 
 <header>
   <div class="wrap">
-    <div class="crest">🌾</div>
+    <img class="logo" src="logo.jpg" alt="Логотип «История одной магической фермы»" />
     <h1>История одной магической фермы</h1>
     <p class="tagline">Волшебная ферма, где ваша вышивка превращается в урожай</p>
   </div>
@@ -260,7 +325,8 @@ footer {
 <section id="subscription">
   <div class="wrap">
     <h2>Игра по подписке</h2>
-    <p class="sub-banner">Начните с бесплатного пробного периода, затем оформите базовую подписку. Дополнения — <strong>Лазарет</strong> и <strong>Пивоварня</strong> — расширяют мир новыми постройками и продукцией.</p>
+    <p class="sub-banner">Начните с бесплатного пробного периода, затем оформите базовую подписку. Дополнения — <strong>Лечебница</strong> и <strong>Зельеварение</strong> — расширяют мир новыми постройками и продукцией.</p>
+    <div id="pricing" class="pricing"><div class="loading">Загрузка цен…</div></div>
     <p class="cta-note" style="text-align:center">Подписка предоставляет доступ к игре на оплаченный период и продлевается по вашему желанию.</p>
   </div>
 </section>
@@ -326,6 +392,36 @@ footer {
     © 2026 История одной магической фермы · Беловолов Е. Г. · Самозанятый (НПД)
   </div>
 </footer>
+
+<script>
+(function () {
+  var el = document.getElementById('pricing');
+  if (!el) return;
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  fetch('/magicfarm/api/public/pricing')
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function (data) {
+      var html = '<div class="price-main">' + data.base_rub + ' ₽ <small>базовая подписка · ' + data.period_days + ' дней</small></div>';
+      if (data.dlc && data.dlc.length) {
+        html += '<ul class="price-dlc">';
+        data.dlc.forEach(function (d) {
+          html += '<li><span class="dlc-name">' + esc(d.name) + '</span> — +' + d.price_rub + ' ₽</li>';
+        });
+        html += '</ul>';
+      }
+      el.innerHTML = html;
+    })
+    .catch(function () {
+      el.innerHTML = '<div class="loading">Стоимость уточняется в игре.</div>';
+    });
+})();
+</script>
 
 </body>
 </html>

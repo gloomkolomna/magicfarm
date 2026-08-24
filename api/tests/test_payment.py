@@ -52,6 +52,39 @@ def test_price_endpoint(player_client):
     assert {d["code"]: d["price_rub"] for d in data["dlc"]} == {"infirmary": 50, "brewery": 50}
 
 
+def test_public_pricing_no_auth(client):
+    r = client.get("/api/public/pricing")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["period_days"] == 30
+    assert data["base_rub"] == 300
+    assert {d["code"]: d["name"] for d in data["dlc"]} == {
+        "infirmary": "Лечебница",
+        "brewery": "Зельеварение",
+    }
+    assert {d["code"]: d["price_rub"] for d in data["dlc"]} == {
+        "infirmary": 50,
+        "brewery": 50,
+    }
+
+
+def test_public_pricing_reflects_settings(client, db):
+    from models import Setting
+
+    db.add(Setting(key="subscription_price_rub", value="400"))
+    db.add(Setting(key="subscription_price_rub_brewery", value="70"))
+    db.commit()
+
+    r = client.get("/api/public/pricing")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["base_rub"] == 400
+    assert {d["code"]: d["price_rub"] for d in data["dlc"]} == {
+        "infirmary": 50,
+        "brewery": 70,
+    }
+
+
 def test_create_order_disabled(player_client):
     assert config.PAY_GATEWAY_ENABLED is False
     r = player_client.post("/api/payment/create-order", json={"dlc_codes": [], "receipt_email": "player@example.com"})

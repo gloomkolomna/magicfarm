@@ -8,21 +8,21 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Marcellus&family=PT+Serif:wght@400;700&display=swap" />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M16 4 C20 8 20 12 16 16 C12 12 12 8 16 4 Z' fill='%237cb342'/><path d='M6 26 L26 26 L24 18 L8 18 Z' fill='%238d6e63'/></svg>" />
+<link rel="icon" href="favicon.jpg" type="image/jpeg" />
 <style>
 :root {
-  --bg: #1a2414;
-  --bg-card: rgba(10, 16, 8, 0.55);
-  --bg-elev: rgba(10, 16, 8, 0.72);
-  --leaf: #7cb342;
-  --grass: #5a8f3e;
-  --flax: #d9c89a;
-  --flax-light: #efe6cc;
-  --honey: #e0a83e;
-  --text: #ffffff;
-  --text-secondary: #d8cdb0;
-  --text-muted: #b8a88a;
-  --border: rgba(217, 200, 154, 0.22);
+  --bg: #0a0e24;
+  --bg-card: rgba(18, 24, 52, 0.55);
+  --bg-elev: rgba(22, 30, 64, 0.72);
+  --leaf: #8aa8ff;
+  --grass: #6f8cf0;
+  --flax: #f3d779;
+  --flax-light: #f7ecd0;
+  --honey: #ffd97a;
+  --text: #eef1ff;
+  --text-secondary: #c9d0ec;
+  --text-muted: #98a2c8;
+  --border: rgba(150, 170, 230, 0.22);
   --serif: 'Cormorant Garamond', Georgia, serif;
   --display: 'Marcellus', 'Cormorant Garamond', serif;
   --body: 'PT Serif', 'Cormorant Garamond', Georgia, serif;
@@ -33,11 +33,41 @@ body {
   font-family: var(--body);
   background: var(--bg);
   background-image:
-    radial-gradient(ellipse at 20% 0%, rgba(124, 179, 66, 0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 100%, rgba(224, 168, 62, 0.05) 0%, transparent 50%);
+    radial-gradient(ellipse at 15% 10%, rgba(96, 120, 255, 0.14) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 85%, rgba(150, 110, 255, 0.12) 0%, transparent 55%);
+  background-attachment: fixed;
   color: var(--text);
   line-height: 1.75;
   min-height: 100vh;
+  position: relative;
+  z-index: 0;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 25% 20%, rgba(255, 255, 255, 0.9) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 70% 12%, rgba(255, 255, 255, 0.7) 50%, transparent 50%),
+    radial-gradient(1px 1px at 55% 65%, rgba(255, 255, 255, 0.8) 50%, transparent 50%),
+    radial-gradient(2px 2px at 40% 82%, rgba(255, 255, 255, 0.6) 50%, transparent 50%);
+  background-size: 210px 210px, 330px 330px, 260px 260px, 410px 410px;
+  background-repeat: repeat;
+  animation: twinkle 6s ease-in-out infinite;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(3, 5, 15, 0.6) 100%);
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
 }
 .wrap { max-width: 780px; margin: 0 auto; padding: 0 20px; }
 
@@ -68,7 +98,7 @@ header .subtitle { font-family: var(--serif); font-style: italic; color: var(--t
   border: 1px solid var(--grass);
   border-radius: 6px;
 }
-.back-link:hover { background: rgba(124, 179, 66, 0.12); }
+.back-link:hover { background: rgba(138, 168, 255, 0.14); }
 
 .toc {
   background: var(--bg-card);

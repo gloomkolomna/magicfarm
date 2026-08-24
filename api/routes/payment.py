@@ -28,6 +28,7 @@ from services.subscription import (
 
 router = APIRouter(prefix="/api/payment", tags=["payment"])
 admin_router = APIRouter(prefix="/api/admin", tags=["admin-payment"])
+public_router = APIRouter(prefix="/api/public", tags=["public"])
 
 PENDING_TTL = datetime.timedelta(hours=1)
 LAZY_POLL_AFTER = datetime.timedelta(seconds=45)
@@ -125,6 +126,15 @@ def _validate_dlc_codes(codes: list[str]) -> list[str]:
 
 @router.get("/price", response_model=PriceResponse)
 def get_price(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return PriceResponse(
+        period_days=PERIOD_DAYS,
+        base_rub=get_base_price_rub(db),
+        dlc=[PriceDlcItem(**d) for d in dlc_catalog(db)],
+    )
+
+
+@public_router.get("/pricing", response_model=PriceResponse)
+def public_pricing(db: Session = Depends(get_db)):
     return PriceResponse(
         period_days=PERIOD_DAYS,
         base_rub=get_base_price_rub(db),
