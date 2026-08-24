@@ -50,9 +50,10 @@ const SETTING_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: 'customer_max_orders', label: 'Лимит активных заказов заказчика (0–50)', hint: 'Заказчики с этим числом открытых заказов скрываются при создании заказа' },
 ];
 
-const FINANCE_SETTING_KEYS = ['trial_days', 'subscription_price_rub', 'subscription_price_rub_infirmary', 'subscription_price_rub_brewery', 'dlc_change_immediate'];
+const FINANCE_SETTING_KEYS = ['trial_days', 'subscription_price_rub', 'subscription_price_rub_infirmary', 'subscription_price_rub_brewery', 'dlc_change_immediate', 'game_open'];
 
 const FINANCE_FIELDS: { key: string; label: string; hint: string }[] = [
+  { key: 'game_open', label: 'Игра открыта для донов (0/1)', hint: '1 — вход и игра для донов группы «Крестики от Корги» (админы и приглашённые проходят всегда); 0 — игра закрыта' },
   { key: 'trial_days', label: 'Пробных дней для новых игроков (0–365)', hint: 'Триал стартует при первом входе. Существующих игроков не затрагивает' },
   { key: 'subscription_price_rub', label: 'Базовая цена подписки, ₽', hint: 'Доступ к базе на 30 дней' },
   { key: 'subscription_price_rub_infirmary', label: 'Цена ДЛС «Лечебница», ₽', hint: 'Приплюсовывается к базовой при выборе' },
@@ -603,6 +604,35 @@ export default function AdminPage() {
       setPlayers((prev) => prev.map(patch));
       setAllPlayers((prev) => prev.map(patch));
       setMsg(`✓ Статус: ${PLAYER_STATUS_META[updated.status]?.label ?? updated.status}`);
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function syncDonors() {
+    setBusy(true); setMsg(null);
+    try {
+      const res = await api.adminDonorSync();
+      await loadCore();
+      setMsg(`✓ Дон-статусы синхронизированы (${res.synced})`);
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleDonorExempt(vkId: number, enabled: boolean) {
+    setBusy(true); setMsg(null);
+    try {
+      const updated = await api.adminSetDonorExempt(vkId, enabled);
+      if (selectedPlayer?.vk_id === vkId) setSelectedPlayer(updated);
+      const patch = (p: Player) => (p.vk_id === vkId ? { ...p, donor_exempt: updated.donor_exempt } : p);
+      setPlayers((prev) => prev.map(patch));
+      setAllPlayers((prev) => prev.map(patch));
+      setMsg(updated.donor_exempt ? '✓ Обход дон-гейта включён' : '✓ Обход дон-гейта выключен');
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally {
@@ -2401,6 +2431,10 @@ export default function AdminPage() {
                     <div>ID: {selectedPlayer.vk_id} · Роль: {selectedPlayer.role} · Статус: {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.emoji} {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.label ?? selectedPlayer.status}</div>
                     <div>Крестики: {selectedPlayer.crosses_balance} (всего {selectedPlayer.crosses_total}) · Монеты: {selectedPlayer.coins} · Раунд: {selectedPlayer.round}</div>
                     <div>
+                      🐶 Дон: {selectedPlayer.is_donor ? '✅ активен' : '— нет'}
+                      {' · '}🎟 Обход дон-гейта: {selectedPlayer.donor_exempt ? 'вкл' : 'выкл'}
+                    </div>
+                    <div>
                       ⏳ Триал до: {selectedPlayer.trial_until ? new Date(selectedPlayer.trial_until.endsWith('Z') ? selectedPlayer.trial_until : selectedPlayer.trial_until + 'Z').toLocaleDateString('ru-RU') : '—'}
                       {' · '}💳 Подписка до: {selectedPlayer.subscription_until ? new Date(selectedPlayer.subscription_until.endsWith('Z') ? selectedPlayer.subscription_until : selectedPlayer.subscription_until + 'Z').toLocaleDateString('ru-RU') : '—'}
                       {selectedPlayer.subscription_dlc_codes?.length ? ` (+ ${selectedPlayer.subscription_dlc_codes.join(', ')})` : ''}
@@ -2422,6 +2456,9 @@ export default function AdminPage() {
                             ✅ Разблокировать
                           </button>
                         )}
+                        <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy} onClick={() => toggleDonorExempt(selectedPlayer.vk_id, !selectedPlayer.donor_exempt)}>
+                          🎟 {selectedPlayer.donor_exempt ? 'Выключить обход' : 'Обход дон-гейта'}
+                        </button>
                       </div>
                     )}
                     <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2645,14 +2682,16 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
-                  <div style={{ marginBottom: 12 }}>
+                  <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
                     <input
                       className="fm-input"
                       type="text"
                       placeholder="Поиск по всем полям (ID, имя, роль, монеты…)"
                       value={playerSearch}
                       onChange={(e) => { setPlayerSearch(e.target.value); doSearch(e.target.value); }}
+                      style={{ flex: 1, minWidth: 0 }}
                     />
+                    <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" style={{ flexShrink: 0 }} disabled={busy} onClick={syncDonors}>🔄 Доны</button>
                   </div>
                   {players.length === 0 ? (
                     <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Игроков нет.</div>
@@ -2683,6 +2722,12 @@ export default function AdminPage() {
                                     <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title={PLAYER_STATUS_META[p.status]?.label}>
                                       {PLAYER_STATUS_META[p.status]?.emoji ?? p.status}
                                     </span>
+                                  )}
+                                  {p.is_donor && (
+                                    <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title="Дон группы «Крестики от Корги»">🐶</span>
+                                  )}
+                                  {p.donor_exempt && (
+                                    <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title="Обход дон-гейта">🎟</span>
                                   )}
                                 </td>
                                 <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.crosses_balance}</td>

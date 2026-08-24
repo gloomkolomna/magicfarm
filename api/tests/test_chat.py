@@ -127,3 +127,82 @@ def test_conversations_limit_keeps_unread_counts(monkeypatch):
         assert len(convs) == 1
         assert convs[0]["unread_count"] == 5
         assert convs[0]["last_message"] == "msg4"
+
+
+def _give_plant(vk_id, plant_id, qty):
+    from models import Inventory
+    s = TestingSessionLocal()
+    try:
+        row = s.query(Inventory).filter(Inventory.user_id == vk_id, Inventory.plant_id == plant_id).first()
+        if row is None:
+            row = Inventory(user_id=vk_id, plant_id=plant_id, qty=0)
+            s.add(row)
+        row.qty += qty
+        s.commit()
+    finally:
+        s.close()
+
+
+def test_gift_message_carries_claimed_state():
+    from models import Plant
+
+    _add_user(7001)
+    _give_plant(123, 1, 1)
+    s = TestingSessionLocal()
+    try:
+        p = s.query(Plant).filter(Plant.id == 1).first()
+        p.image_url = "/api/uploads/main.png"
+        p.image_grown_url = "/api/uploads/grown.png"
+        p.image_harvested_url = "/api/uploads/harvested.png"
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as a:
+        g = a.post("/api/gifts", json={"to_user_id": 7001, "kind": "plant", "item_id": 1, "qty": 1}).json()
+        gid = g["id"]
+
+    with make_user_client(7001, "player") as b:
+        thread = b.get("/api/chat/with/123").json()
+        gift_msgs = [m for m in thread if m["kind"] == "gift" and m["gift_id"] == gid]
+        assert len(gift_msgs) == 1
+        assert gift_msgs[0]["gift_claimed"] is False
+        assert gift_msgs[0]["gift_item_emoji"] == "🫘"
+        assert gift_msgs[0]["gift_item_image_url"] == "/api/uploads/harvested.png"
+        assert b.post(f"/api/gifts/{gid}/claim").status_code == 200
+
+    with make_user_client(7001, "player") as b:
+        thread = b.get("/api/chat/with/123").json()
+        gm = next(m for m in thread if m["kind"] == "gift" and m["gift_id"] == gid)
+        assert gm["gift_claimed"] is True
+
+    with make_user_client(123, "player") as a:
+        thread = a.get("/api/chat/with/7001").json()
+        gm = next(m for m in thread if m["kind"] == "gift" and m["gift_id"] == gid)
+        assert gm["gift_claimed"] is True
+
+
+def test_gift_message_fallback_image_for_product():
+    _add_user(7001)
+    s = TestingSessionLocal()
+    try:
+        from models import Inventory
+        row = s.query(Inventory).filter(Inventory.user_id == 123, Inventory.product_id == 1).first()
+        if row is None:
+            row = Inventory(user_id=123, product_id=1, qty=0)
+            s.add(row)
+        row.qty += 1
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(123, "player") as a:
+        g = a.post("/api/gifts", json={"to_user_id": 7001, "kind": "product", "item_id": 1, "qty": 1}).json()
+        gid = g["id"]
+
+    with make_user_client(7001, "player") as b:
+        thread = b.get("/api/chat/with/123").json()
+        gm = next(m for m in thread if m["kind"] == "gift" and m["gift_id"] == gid)
+        assert gm["gift_claimed"] is False
+        assert gm["gift_item_emoji"] == "🧪"
+        assert gm["gift_item_image_url"] is None

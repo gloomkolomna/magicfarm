@@ -10,6 +10,7 @@ function formatDate(iso: string | null): string {
 
 const OFFERTA_URL = 'https://belovolovhome.ru/magicfarm/game/offerta.docx';
 const PRIVACY_URL = 'https://belovolovhome.ru/magicfarm/game/private.html';
+const GROUP_URL = 'https://vk.ru/krestiki_s_korgi';
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
@@ -21,6 +22,8 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const donorBlocked = !!user?.game_open && user.role !== 'admin' && !user.is_donor && !user.donor_exempt;
 
   useEffect(() => {
     api.paymentPrice().then(setPrice).catch(() => {});
@@ -80,7 +83,41 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {price ? (
+      {donorBlocked ? (
+        <>
+          <div style={{ fontSize: 46, textAlign: 'center' }}>🐶</div>
+          {user?.subscription_active ? (
+            <>
+              <div style={{ fontSize: 16, textAlign: 'center' }}>
+                Вы доигрываете оплаченный период — до <b>{formatDate(user.subscription_until)}</b>.
+              </div>
+              <div style={{ fontSize: 14, color: 'var(--text-secondary)', textAlign: 'center' }}>
+                Продление станет доступно после возобновления донат-подписки группы.
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 16, textAlign: 'center' }}>
+                Играть и продлевать подписку могут только доны группы «Крестики от Корги».
+              </div>
+              <div style={{ fontSize: 14, color: 'var(--text-secondary)', textAlign: 'center' }}>
+                Станьте доном — и волшебная ферма снова откроется!
+              </div>
+            </>
+          )}
+          <p style={{ margin: '8px 0 0', textAlign: 'center' }}>
+            <a
+              className="fm-btn"
+              href={GROUP_URL}
+              target="_blank"
+              rel="noreferrer"
+              style={{ display: 'inline-block', padding: '12px 18px', textDecoration: 'none' }}
+            >
+              Стать доном 🎁
+            </a>
+          </p>
+        </>
+      ) : price ? (
         <>
           <div style={{ fontSize: 16 }}>
             <b>{price.base_rub} ₽</b> — базовая подписка на {price.period_days} дней
@@ -131,25 +168,39 @@ export function SubscriptionStatusLine() {
   const { user } = useSession();
   if (!user) return null;
   if (user.role === 'admin') return <div>Роль админа — подписка не требуется</div>;
+  const donorLine = user.game_open && !user.is_donor && !user.donor_exempt
+    ? <div style={{ marginTop: 4 }}>🐶 Дон-статус группы не активен</div>
+    : null;
   if (user.subscription_active) {
     return (
       <div>
-        Подписка активна до <b>{formatDate(user.subscription_until)}</b>
-        {user.subscription_dlc_codes.length > 0 && (
-          <span> (+ {user.subscription_dlc_codes.join(', ')})</span>
-        )}
+        <div>
+          Подписка активна до <b>{formatDate(user.subscription_until)}</b>
+          {user.subscription_dlc_codes.length > 0 && (
+            <span> (+ {user.subscription_dlc_codes.join(', ')})</span>
+          )}
+        </div>
+        {donorLine}
       </div>
     );
   }
   if (user.trial_active) {
     return (
       <div>
-        Пробный период до <b>{formatDate(user.trial_until)}</b>
-        {user.days_left != null ? ` (осталось ${user.days_left} дн.)` : ''}
+        <div>
+          Пробный период до <b>{formatDate(user.trial_until)}</b>
+          {user.days_left != null ? ` (осталось ${user.days_left} дн.)` : ''}
+        </div>
+        {donorLine}
       </div>
     );
   }
-  return <div>Подписка не активна — оформление ниже</div>;
+  return (
+    <div>
+      <div>Подписка не активна — оформление ниже</div>
+      {donorLine}
+    </div>
+  );
 }
 
 export default SubscriptionBox;

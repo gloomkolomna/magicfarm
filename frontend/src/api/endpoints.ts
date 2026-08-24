@@ -339,6 +339,9 @@ export interface ChatMessage {
   read: boolean;
   kind?: string;
   gift_id?: number | null;
+  gift_claimed?: boolean;
+  gift_item_emoji?: string | null;
+  gift_item_image_url?: string | null;
 }
 
 export interface Conversation {
@@ -613,6 +616,8 @@ export interface Player {
   trial_until: string | null;
   subscription_until: string | null;
   subscription_dlc_codes: string[];
+  is_donor?: boolean;
+  donor_exempt?: boolean;
 }
 
 export interface StitchReport {
@@ -1602,6 +1607,12 @@ export const api = {
     client.get<Setting>(`/settings/${key}`).then((r) => r.data),
   updateSetting: (key: string, value: string) =>
     client.put<Setting>(`/admin/settings/${key}`, { value }).then((r) => r.data),
+
+  // ── Доны ──
+  adminDonorSync: () =>
+    client.post<{ synced: number }>('/admin/players/donor-sync').then((r) => r.data),
+  adminSetDonorExempt: (vkId: number, enabled: boolean) =>
+    client.post<Player>(`/admin/players/${vkId}/donor-exempt`, { enabled }).then((r) => r.data),
 
   // ── Нормы кристаллов ──
   crystalStandard: () =>

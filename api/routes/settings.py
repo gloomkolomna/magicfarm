@@ -47,6 +47,16 @@ INFIRMARY_BG_KEY = "infirmary_background_url"
 
 LOCKED_LOCATIONS_KEY = "locked_locations"
 
+GAME_OPEN_KEY = "game_open"
+DEFAULT_GAME_OPEN = False
+
+
+def get_game_open(db: Session) -> bool:
+    s = db.query(Setting).filter(Setting.key == GAME_OPEN_KEY).first()
+    if s is None:
+        return DEFAULT_GAME_OPEN
+    return str(s.value).strip().lower() in ("1", "true", "yes", "on")
+
 
 def get_locked_locations(db: Session) -> set[str]:
     from models import LOCATION_CODES
@@ -331,6 +341,7 @@ _SETTING_META = {
     "subscription_price_rub_infirmary": (0, 1000000, 50),
     "subscription_price_rub_brewery": (0, 1000000, 50),
     "dlc_change_immediate": (0, 1, 0),
+    GAME_OPEN_KEY: (0, 1, 0 if DEFAULT_GAME_OPEN else 1),
 }
 
 
@@ -345,6 +356,8 @@ def _get_setting_or_404(key: str, db: Session) -> Setting:
 def get_setting(key: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if key == AUTO_CREDIT_KEY:
         return SettingOut(key=key, value=str(int(get_auto_credit(db))))
+    if key == GAME_OPEN_KEY:
+        return SettingOut(key=key, value=str(int(get_game_open(db))))
     if key == PLANT_QTY_KEY:
         return SettingOut(key=key, value=str(get_default_plant_qty(db)))
     if key == PRODUCTION_REQUIRED_KEY:

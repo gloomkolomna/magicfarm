@@ -268,9 +268,12 @@ export default function FarmsPage() {
       )}
 
       {giftTarget && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setGiftTarget(null)}>
-          <div className="fm-card fm-rise" style={{ maxWidth: 420, width: '100%' }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ margin: '0 0 4px' }}>🎁 Подарок для {giftTarget.display_name}</h3>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div className="fm-card fm-rise" style={{ maxWidth: 420, width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <h3 style={{ flex: 1, margin: 0 }}>🎁 Подарок для {giftTarget.display_name}</h3>
+              <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ padding: '2px 10px', lineHeight: 1.4 }} disabled={busy} onClick={() => setGiftTarget(null)} aria-label="Закрыть">✕</button>
+            </div>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>Предмет спишется с вашего склада сразу и появится у игрока в чате.</p>
             <label style={{ display: 'block', fontSize: 13, marginBottom: 2 }}>Тип</label>
             <select className="fm-input" value={giftKind} onChange={(e) => { setGiftKind(e.target.value as 'plant' | 'product' | 'ingredient'); setGiftItemId(''); }}>

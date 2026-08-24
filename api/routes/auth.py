@@ -33,8 +33,21 @@ def create_session(req: SessionRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.vk_id == vk_id).first()
     is_admin = vk_id in config.get_admin_vk_ids()
     invite = db.query(AllowedPlayer).filter(AllowedPlayer.vk_id == vk_id).first()
-    if config.ADMIN_ONLY and not is_admin and user is None and invite is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ к игре пока закрыт")
+
+    if not is_admin:
+        from routes.settings import get_game_open
+
+        if get_game_open(db):
+            from services.donor import is_donor, sync_user
+
+            sync_user(db, vk_id)
+            if user is None and invite is None and not is_donor(db, vk_id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Игра доступна только донам группы «Крестики от Корги»",
+                )
+        elif config.ADMIN_ONLY and user is None and invite is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ к игре пока закрыт")
     if user is None:
         from services.subscription import get_trial_days
 
@@ -56,6 +69,7 @@ def create_session(req: SessionRequest, db: Session = Depends(get_db)):
             db.refresh(user)
 
     if invite is not None:
+        user.donor_exempt = True
         db.delete(invite)
         db.commit()
 

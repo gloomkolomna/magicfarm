@@ -32,9 +32,17 @@ class PlayerOut(BaseModel):
     trial_until: str | None
     subscription_until: str | None
     subscription_dlc_codes: list[str]
+    is_donor: bool
+    donor_exempt: bool
 
 
-def _player_out(u: User, reports_total: int, nm: dict) -> PlayerOut:
+def _is_donor(db: Session, vk_id: int) -> bool:
+    from services.donor import is_donor
+
+    return is_donor(db, vk_id)
+
+
+def _player_out(u: User, reports_total: int, nm: dict, is_donor: bool = False) -> PlayerOut:
     return PlayerOut(
         vk_id=u.vk_id,
         first_name=nm.get("first_name", ""),
@@ -50,6 +58,8 @@ def _player_out(u: User, reports_total: int, nm: dict) -> PlayerOut:
         trial_until=u.trial_until.isoformat() if u.trial_until else None,
         subscription_until=u.subscription_until.isoformat() if u.subscription_until else None,
         subscription_dlc_codes=[c for c in (u.subscription_dlc_codes or "").split(",") if c],
+        is_donor=is_donor,
+        donor_exempt=bool(u.donor_exempt),
     )
 
 
@@ -62,6 +72,10 @@ def list_players(
     vk_ids = [u.vk_id for u in users]
     names = resolve_vk_names(vk_ids)
 
+    from services.donor import donor_flags
+
+    donor_map = donor_flags(db, vk_ids)
+
     report_counts = dict(
         db.query(StitchReport.user_id, func.count(StitchReport.id))
         .filter(StitchReport.user_id.in_(vk_ids))
@@ -72,7 +86,7 @@ def list_players(
     result = []
     for u in users:
         nm = names.get(u.vk_id, {})
-        result.append(_player_out(u, report_counts.get(u.vk_id, 0), nm))
+        result.append(_player_out(u, report_counts.get(u.vk_id, 0), nm, donor_map.get(u.vk_id, False)))
     return result
 
 
@@ -170,6 +184,41 @@ class PlayerDetailOut(BaseModel):
     plant_norms: list[PlayerPlantNormOut] = []
     dlc_locations: list[str] = []
     barnyard: list[PlayerBarnyardOut] = []
+    is_donor: bool = False
+    donor_exempt: bool = False
+
+
+@router.post("/donor-sync")
+def trigger_donor_sync(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    from services.donor import sync_all_users
+
+    synced = sync_all_users(db)
+    return {"synced": synced}
+
+
+class DonorExemptRequest(BaseModel):
+    enabled: bool
+
+
+@router.post("/{vk_id}/donor-exempt", response_model=PlayerOut)
+def set_player_donor_exempt(
+    vk_id: int,
+    req: DonorExemptRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    target = db.query(User).filter(User.vk_id == vk_id).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    target.donor_exempt = bool(req.enabled)
+    db.commit()
+    db.refresh(target)
+    reports_total = db.query(func.count(StitchReport.id)).filter(StitchReport.user_id == vk_id).scalar() or 0
+    names = resolve_vk_names([target.vk_id])
+    return _player_out(target, reports_total, names.get(target.vk_id, {}), _is_donor(db, vk_id))
 
 
 @router.get("/{vk_id}", response_model=PlayerDetailOut)
@@ -284,6 +333,8 @@ def get_player_detail(
         ],
         dlc_locations=dlc_locations,
         barnyard=barnyard_out,
+        is_donor=_is_donor(db, vk_id),
+        donor_exempt=bool(player.donor_exempt),
     )
 
 

@@ -59,6 +59,13 @@ PAY_GATEWAY_TIMEOUT_SECONDS = _env_int("PAY_GATEWAY_TIMEOUT_SECONDS", 15)
 PAY_GATEWAY_ENABLED = bool(PAY_GATEWAY_URL and PAY_GATEWAY_API_KEY)
 
 
+# ── Донат-бот группы «Крестики от Корги» (donut-backend) ──
+DONUT_API_URL = os.getenv("DONUT_API_URL", "").strip().rstrip("/")
+DONUT_API_KEY = os.getenv("DONUT_API_KEY", "")
+DONUT_TIMEOUT_SECONDS = _env_int("DONUT_TIMEOUT_SECONDS", 5)
+DONOR_SYNC_INTERVAL_MINUTES = _env_int("DONOR_SYNC_INTERVAL_MINUTES", 60)
+
+
 # ── Загрузки (фото вышивки) ──
 UPLOADS_DIR = os.getenv("UPLOADS_DIR", os.path.join(API_DIR, "uploads"))
 os.makedirs(UPLOADS_DIR, exist_ok=True)

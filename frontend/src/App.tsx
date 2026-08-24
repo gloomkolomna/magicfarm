@@ -168,22 +168,44 @@ function App() {
   if (sessionLoading) return <><Background /><Skeleton /></>;
   if (!user) {
     const blocked = (sessionError ?? '').toLowerCase().includes('заблокирован');
+    const donorGate = (sessionError ?? '').includes('донам');
     return (
       <>
         <Background />
         <div style={zoomed}>
           <div style={{ maxWidth: 'calc(var(--shell-max-width) * 0.8)', margin: '0 auto', padding: 'var(--shell-pad)', textAlign: 'center' }}>
             <div className="fm-card fm-rise">
-              <div style={{ fontSize: 46, marginBottom: 8 }}>{blocked ? '🚫' : '✨'}</div>
+              <div style={{ fontSize: 46, marginBottom: 8 }}>
+                {blocked ? '🚫' : donorGate ? '🐶' : '✨'}
+              </div>
               <h1 style={{ fontSize: 22, lineHeight: 1.2 }}>
-                {blocked ? 'Аккаунт заблокирован' : 'История одной магической фермы'}
+                {blocked
+                  ? 'Аккаунт заблокирован'
+                  : donorGate
+                    ? 'Игра для донов'
+                    : 'История одной магической фермы'}
               </h1>
               <p style={{ color: 'var(--text-secondary)' }}>
                 {blocked
                   ? 'Если вы считаете это ошибкой — свяжитесь с администратором игры.'
-                  : 'Скоро здесь расцветёт ваша волшебная ферма.'}
+                  : donorGate
+                    ? 'Играть могут только доны группы «Крестики от Корги».'
+                    : 'Скоро здесь расцветёт ваша волшебная ферма.'}
               </p>
-              {!blocked && (
+              {donorGate && (
+                <p style={{ margin: '14px 0' }}>
+                  <a
+                    className="fm-btn"
+                    href="https://vk.ru/krestiki_s_korgi"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display: 'inline-block', padding: '12px 18px', textDecoration: 'none' }}
+                  >
+                    Стать доном 🎁
+                  </a>
+                </p>
+              )}
+              {!blocked && !donorGate && (
                 <>
                   <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Мы готовим волшебство ✨</p>
                   <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>

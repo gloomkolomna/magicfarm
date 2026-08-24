@@ -33,10 +33,24 @@ def get_current_user(
     if user.role != "admin" and user.status == "readonly" and request.method not in READONLY_SAFE_METHODS:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ закрыт: только просмотр")
     if user.role != "admin" and request.method not in READONLY_SAFE_METHODS:
-        from services.subscription import is_access_active
+        from routes.settings import get_game_open
 
-        if not is_access_active(user):
-            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Подписка не активна")
+        if get_game_open(db):
+            from services.donor import can_play
+
+            allowed, reason = can_play(db, user)
+            if not allowed:
+                if reason == "not_donor":
+                    raise HTTPException(
+                        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                        detail="Играть могут только доны группы «Крестики от Корги»",
+                    )
+                raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Подписка не активна")
+        else:
+            from services.subscription import is_access_active
+
+            if not is_access_active(user):
+                raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Подписка не активна")
     return user
 
 

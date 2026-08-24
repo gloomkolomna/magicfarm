@@ -37,6 +37,10 @@ class MeResponse(BaseModel):
     subscription_until: str | None
     subscription_dlc_codes: list[str]
     days_left: int | None
+    is_donor: bool
+    donor_exempt: bool
+    game_open: bool
+    block_reason: str | None
 
 
 @router.get("/me", response_model=MeResponse)
@@ -44,9 +48,19 @@ def get_me(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    from routes.settings import get_game_open
+    from services.donor import can_play, is_donor
     from services.subscription import (
         access_until, days_left, is_access_active, is_subscription_active, is_trial_active, parse_dlc_codes,
     )
+
+    game_open = get_game_open(db)
+    if user.role == "admin":
+        play_allowed, block_reason = True, None
+    elif game_open:
+        play_allowed, block_reason = can_play(db, user)
+    else:
+        play_allowed, block_reason = is_access_active(user), None
 
     return MeResponse(
         vk_id=user.vk_id,
@@ -66,11 +80,15 @@ def get_me(
         story_seen=bool(user.story_seen),
         plots_placed=count_route_plots(db, user.vk_id),
         locked_locations=locked_locations_for(user, db),
-        access_active=is_access_active(user) or user.role == "admin",
+        access_active=play_allowed or user.role == "admin",
         trial_active=is_trial_active(user),
         subscription_active=is_subscription_active(user),
         trial_until=user.trial_until.isoformat() if user.trial_until else None,
         subscription_until=user.subscription_until.isoformat() if user.subscription_until else None,
         subscription_dlc_codes=parse_dlc_codes(user.subscription_dlc_codes),
         days_left=days_left(access_until(user)),
+        is_donor=is_donor(db, user.vk_id),
+        donor_exempt=bool(user.donor_exempt),
+        game_open=game_open,
+        block_reason=block_reason,
     )

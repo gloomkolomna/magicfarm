@@ -52,6 +52,9 @@ init_db()
 
 @asynccontextmanager
 async def lifespan(app):
+    from services.donor import start_donor_sync_thread
+
+    start_donor_sync_thread()
     yield
 
 

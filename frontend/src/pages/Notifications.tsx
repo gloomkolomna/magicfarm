@@ -13,12 +13,25 @@ export default function NotificationsPage() {
   const nav = useNavigate();
   const [items, setItems] = useState<Notification[] | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     api.notifications()
       .then((n) => setItems(n.filter((x) => !x.read)))
       .catch(() => setMsg('Ошибка загрузки уведомлений'));
   }, []);
+
+  async function clearAll() {
+    setClearing(true);
+    try {
+      await api.markNotificationsRead();
+      setItems([]);
+    } catch {
+      setMsg('Ошибка очистки уведомлений');
+    } finally {
+      setClearing(false);
+    }
+  }
 
   function open(n: Notification) {
     setItems((prev) => (prev ? prev.filter((x) => x.id !== n.id) : prev));
@@ -30,7 +43,12 @@ export default function NotificationsPage() {
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
-      <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>🔔 Уведомления</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 10px' }}>
+        <h1 style={{ fontSize: 20, margin: 0 }}>🔔 Уведомления</h1>
+        {items && items.length > 0 && (
+          <button className="fm-btn fm-btn-sm fm-btn-outline" style={{ marginLeft: 'auto' }} disabled={clearing} onClick={clearAll}>Очистить</button>
+        )}
+      </div>
       {msg && <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 10 }}>{msg}</div>}
       {items === null ? (
         <div className="fm-card">Загрузка…</div>

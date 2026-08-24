@@ -84,11 +84,12 @@ export default function ChatPage() {
   }
 
   async function claimGift() {
-    if (giftOpen == null) return;
+    if (giftOpen == null || !peer) return;
     setBusy(true); setMsg(null);
     try {
       const g = await api.claimGift(giftOpen);
       setGiftData(g);
+      setThread(await api.chatThread(peer.vk_id));
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка получения'));
     } finally {
@@ -158,7 +159,17 @@ export default function ChatPage() {
                       border: '1px solid rgba(255,255,255,0.08)',
                     }}>
                       {isGift ? (
-                        mine ? (
+                        m.gift_claimed ? (
+                          <div style={{ textAlign: 'center', padding: '12px 16px' }}>
+                            {m.gift_item_image_url ? (
+                              <img src={mediaUrl(m.gift_item_image_url)} alt="" style={{ width: 64, height: 64, objectFit: 'contain', borderRadius: 10, display: 'block', margin: '0 auto' }} />
+                            ) : (
+                              <div style={{ fontSize: 40, lineHeight: 1 }}>{m.gift_item_emoji || '🎀'}</div>
+                            )}
+                            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6, color: '#ffe9b0' }}>Подарок получен</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{mine ? 'Получатель открыл подарок' : 'Открыто'}</div>
+                          </div>
+                        ) : mine ? (
                           <div style={{ textAlign: 'center', padding: '12px 16px' }}>
                             <div style={{ fontSize: 40, lineHeight: 1 }}>🎁</div>
                             <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6, color: '#ffe9b0' }}>Вы отправили подарок</div>

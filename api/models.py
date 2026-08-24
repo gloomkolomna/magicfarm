@@ -87,6 +87,7 @@ class User(Base):
     trial_until = Column(DateTime, nullable=True)
     subscription_until = Column(DateTime, nullable=True)
     subscription_dlc_codes = Column(String, nullable=True)
+    donor_exempt = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     plots = relationship("Plot", back_populates="user", cascade="all, delete-orphan")
@@ -157,6 +158,16 @@ class AllowedPlayer(Base):
     screen_name = Column(String, nullable=True)
     added_by = Column(Integer, ForeignKey("users.vk_id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+
+class DonorCache(Base):
+    __tablename__ = "donor_cache"
+
+    vk_id = Column(Integer, primary_key=True)
+    is_don = Column(Boolean, nullable=False, default=False, server_default="0")
+    don_since = Column(String, nullable=True)
+    updated_at = Column(String, nullable=True)
+    last_synced_at = Column(String, nullable=False, default="", server_default="")
 
 
 class UserDlcUnlock(Base):

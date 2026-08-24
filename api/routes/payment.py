@@ -148,8 +148,20 @@ def create_subscription_order(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from routes.settings import get_game_open
+
+    if get_game_open(db):
+        from services.donor import can_renew_subscription
+
+        if not can_renew_subscription(db, user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Продление доступно только действующим донам группы «Крестики от Корги»",
+            )
+
     if not config.PAY_GATEWAY_ENABLED:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Оплата не настроена")
+
     dlc_codes = _validate_dlc_codes(req.dlc_codes or [])
     email = (req.receipt_email or "").strip().lower()
     if not EMAIL_RE.fullmatch(email):

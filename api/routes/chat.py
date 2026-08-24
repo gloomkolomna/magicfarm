@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user
-from models import ChatMessage, User
+from models import ChatMessage, Gift, User
+from routes.gifts import _gift_meta
 from services.vk_names import vk_display_name
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -29,6 +30,9 @@ class ChatMessageOut(BaseModel):
     read: bool
     kind: str = "text"
     gift_id: int | None = None
+    gift_claimed: bool = False
+    gift_item_emoji: str | None = None
+    gift_item_image_url: str | None = None
 
 
 class ConversationOut(BaseModel):
@@ -43,12 +47,18 @@ def _user_name(user: User) -> str:
     return vk_display_name(user)
 
 
-def _msg_out(m: ChatMessage) -> ChatMessageOut:
+def _msg_out(m: ChatMessage, gift_meta: dict[int, tuple[bool, str | None, str | None]] | None = None) -> ChatMessageOut:
+    claimed, emoji, image = (False, None, None)
+    if m.gift_id is not None and gift_meta is not None:
+        claimed, emoji, image = gift_meta.get(m.gift_id, (False, None, None))
     return ChatMessageOut(
         id=m.id, from_user_id=m.from_user_id, to_user_id=m.to_user_id,
         text=m.text, created_at=m.created_at.isoformat(),
         read=m.read_at is not None,
         kind=m.kind or "text", gift_id=m.gift_id,
+        gift_claimed=claimed,
+        gift_item_emoji=emoji,
+        gift_item_image_url=image,
     )
 
 
@@ -128,7 +138,13 @@ def get_thread(
         .order_by(ChatMessage.created_at.asc())
         .all()
     )
-    return [_msg_out(m) for m in msgs]
+    gift_meta: dict[int, tuple[bool, str | None, str | None]] = {}
+    gift_ids = [m.gift_id for m in msgs if m.gift_id is not None]
+    if gift_ids:
+        for g in db.query(Gift).filter(Gift.id.in_(gift_ids)).all():
+            _, emoji, image = _gift_meta(db, g.kind, g.item_id)
+            gift_meta[g.id] = (g.claimed_at is not None, emoji, image)
+    return [_msg_out(m, gift_meta) for m in msgs]
 
 
 @router.post("/with/{vk_id}", response_model=ChatMessageOut, status_code=status.HTTP_201_CREATED)

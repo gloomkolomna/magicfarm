@@ -314,6 +314,16 @@ footer {
     return html.join('\n');
   }
 
+  function slugify(s) {
+    return s.toLowerCase()
+      .replace(/[^\wа-яё\- ]/g, '')
+      .replace(/ /g, '-');
+  }
+
+  function hasManualToc(md) {
+    return /^##\s+(Оглавление|Содержание)\s*$/m.test(md);
+  }
+
   function buildToc(md) {
     var lines = md.split('\n');
     var items = [];
@@ -328,11 +338,9 @@ footer {
     var hash = {};
     var html = '<div class="toc"><div class="toc-title">📖 Оглавление</div><ol>';
     items.forEach(function(title) {
-      var base = title.toLowerCase()
-        .replace(/[^\wа-яё]+/gi, '-').replace(/^-+|-+$/g, '');
-      var id = base;
+      var id = slugify(title);
       var n = 2;
-      while (hash[id]) { id = base + '-' + n; n++; }
+      while (hash[id]) { id = slugify(title) + '-' + n; n++; }
       hash[id] = true;
       html += '<li><a href="#' + id + '">' + escapeHtml(title) + '</a></li>';
     });
@@ -342,15 +350,23 @@ footer {
 
   function addIds() {
     var hash = {};
-    document.querySelectorAll('#content h2').forEach(function(el) {
-      var base = el.textContent.toLowerCase()
-        .replace(/[^\wа-яё]+/gi, '-').replace(/^-+|-+$/g, '');
-      var id = base;
+    document.querySelectorAll('#content h2, #content h3').forEach(function(el) {
+      var id = slugify(el.textContent);
       var n = 2;
-      while (hash[id]) { id = base + '-' + n; n++; }
+      while (hash[id]) { id = slugify(el.textContent) + '-' + n; n++; }
       hash[id] = true;
       el.id = id;
     });
+  }
+
+  function stripLeadingH1(md) {
+    var lines = md.split('\n');
+    while (lines.length && lines[0].trim() === '') lines.shift();
+    if (lines.length && /^#\s/.test(lines[0])) {
+      lines.shift();
+      while (lines.length && lines[0].trim() === '') lines.shift();
+    }
+    return lines.join('\n');
   }
 
   var loadingEl = document.getElementById('loading');
@@ -364,7 +380,10 @@ footer {
       return r.text();
     })
     .then(function(md) {
-      tocEl.innerHTML = buildToc(md);
+      md = stripLeadingH1(md);
+      if (!hasManualToc(md)) {
+        tocEl.innerHTML = buildToc(md);
+      }
       contentEl.innerHTML = render(md);
       addIds();
       loadingEl.style.display = 'none';
