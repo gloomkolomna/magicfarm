@@ -24,14 +24,30 @@ export default function CollectionPage() {
     );
   }
 
+  const levels = collection?.levels ?? [];
+  const totalEarned = levels.reduce((s, l) => s + l.earned_count, 0);
+  const totalCards = levels.reduce((s, l) => s + l.total_count, 0);
+
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <h1 style={{ fontSize: 20 }}>🃏 Коллекция карточек</h1>
+      <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 14px' }}>
+        Здесь собираются карточки вылеченных животных. Вылечите и выпустите на волю животное в 🌲 Лесной лечебнице — и его карточка откроется в этой коллекции.
+      </p>
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
 
-      {collection?.levels.map((lvl) => {
-        const cards = lvl.cards.filter((c) => c.earned);
-        if (cards.length === 0) return null;
+      {totalCards === 0 ? (
+        <div className="fm-card" style={{ color: 'var(--text-muted)' }}>
+          Коллекция пуста — животные появятся в 🌲 Лесной лечебнице. Вылечите их, чтобы получить карточки.
+        </div>
+      ) : totalEarned === 0 ? (
+        <div className="fm-card" style={{ color: 'var(--text-muted)', marginBottom: 14 }}>
+          В коллекции пока пусто. Вылечите животное в 🌲 Лесной лечебнице — его карточка откроется здесь.
+        </div>
+      ) : null}
+
+      {levels.map((lvl) => {
+        if (lvl.total_count === 0) return null;
         return (
           <div key={lvl.level} style={{ marginBottom: 16 }}>
             <h3 style={{ margin: '0 0 8px' }}>
@@ -39,23 +55,33 @@ export default function CollectionPage() {
               <span style={{ color: 'var(--text-muted)', fontSize: 13 }}> ({lvl.earned_count}/{lvl.total_count})</span>
             </h3>
             <div className="fm-grid">
-              {cards.map((c) => (
-                <div
-                  key={c.patient_id}
-                  className="fm-card fm-rise"
-                  style={{ textAlign: 'center', cursor: c.card_image_url ? 'zoom-in' : 'default' }}
-                  onClick={() => { if (c.card_image_url) setZoomed({ url: mediaUrl(c.card_image_url), name: c.patient_name }); }}
-                >
-                  {c.card_image_url ? (
-                    <img src={mediaUrl(c.card_image_url)} alt={c.patient_name} style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8 }} />
-                  ) : (
+              {lvl.cards.map((c) =>
+                c.earned ? (
+                  <div
+                    key={c.patient_id}
+                    className="fm-card fm-rise"
+                    style={{ textAlign: 'center', cursor: c.card_image_url ? 'zoom-in' : 'default' }}
+                    onClick={() => { if (c.card_image_url) setZoomed({ url: mediaUrl(c.card_image_url), name: c.patient_name }); }}
+                  >
+                    {c.card_image_url ? (
+                      <img src={mediaUrl(c.card_image_url)} alt={c.patient_name} style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8 }} />
+                    ) : (
+                      <div style={{ width: 80, height: 80, borderRadius: 8, background: '#1a2414', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto' }}>
+                        👤
+                      </div>
+                    )}
+                    <div style={{ fontSize: 13, marginTop: 6 }}>{c.patient_name}</div>
+                  </div>
+                ) : (
+                  <div key={c.patient_id} className="fm-card" style={{ textAlign: 'center', opacity: 0.55 }}>
                     <div style={{ width: 80, height: 80, borderRadius: 8, background: '#1a2414', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto' }}>
-                      👤
+                      🔒
                     </div>
-                  )}
-                  <div style={{ fontSize: 13, marginTop: 6 }}>{c.patient_name}</div>
-                </div>
-              ))}
+                    <div style={{ fontSize: 13, marginTop: 6 }}>{c.patient_name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Откроется в Лесной лечебнице</div>
+                  </div>
+                ),
+              )}
             </div>
           </div>
         );

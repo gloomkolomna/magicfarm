@@ -2148,7 +2148,7 @@ export const api = {
   adminUploadGameMedia: (id: number, file: File) => {
     const form = new FormData();
     form.append('file', file);
-    return client.put<GameMedia>(`/admin/game-media/${id}/upload`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    return client.put<GameMedia>(`/admin/game-media/${id}/upload`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 0 }).then((r) => r.data);
   },
   gameMedia: () =>
     client.get<GameMedia[]>('/game-media').then((r) => r.data),
@@ -2365,7 +2365,7 @@ export const api = {
   adminUploadLessonVideo: (id: number, file: File) => {
     const form = new FormData();
     form.append('file', file);
-    return client.put<Lesson>(`/admin/lessons/${id}/video`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    return client.put<Lesson>(`/admin/lessons/${id}/video`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 0 }).then((r) => r.data);
   },
   adminUploadLessonImage: (id: number, file: File) => {
     const form = new FormData();
