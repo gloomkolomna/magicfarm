@@ -157,6 +157,27 @@ def _display_name(user: User, names: dict[int, dict]) -> str:
     return full or f"Игрок {user.vk_id}"
 
 
+def _visible_filter(user: User):
+    """SQL-фильтр видимости игроков: скрытые не видны другим (админ и сам игрок видят)."""
+    from sqlalchemy import or_
+
+    if user is not None and user.role == "admin":
+        return None
+    own = user.vk_id if user is not None else -1
+    return or_(User.hidden == False, User.vk_id == own)
+
+
+def _hidden_blocks_viewer(user: User, player: User) -> bool:
+    """Закрыта ли ферма скрытого игрока для смотрящего (админ и сам игрок видят)."""
+    if not player.hidden:
+        return False
+    if user is None:
+        return True
+    if user.role == "admin" or user.vk_id == player.vk_id:
+        return False
+    return True
+
+
 @router.get("/search", response_model=list[PlayerSearchOut])
 def search_players(
     q: str = "",
@@ -165,17 +186,21 @@ def search_players(
     user: User = Depends(get_current_user),
 ):
     q = (q or "").strip()
+    filters = [User.status != "blocked"]
+    visible = _visible_filter(user)
+    if visible is not None:
+        filters.append(visible)
     if q.isdigit():
         exact = (
             db.query(User)
-            .filter(User.vk_id == int(q), User.status != "blocked")
+            .filter(User.vk_id == int(q), *filters)
             .first()
         )
         users = [exact] if exact is not None else []
     elif q:
         users = (
             db.query(User)
-            .filter(User.status != "blocked")
+            .filter(*filters)
             .order_by(User.level.desc(), User.crosses_total.desc())
             .limit(SEARCH_CANDIDATE_LIMIT)
             .all()
@@ -186,7 +211,7 @@ def search_players(
     else:
         users = (
             db.query(User)
-            .filter(User.status != "blocked")
+            .filter(*filters)
             .order_by(User.level.desc(), User.crosses_total.desc())
             .limit(SEARCH_CANDIDATE_LIMIT)
             .all()
@@ -213,6 +238,8 @@ def get_player_farm(
 ):
     player = db.query(User).filter(User.vk_id == vk_id).first()
     if player is None or (player.status or "active") == "blocked":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    if _hidden_blocks_viewer(user, player):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
 
     names = _resolve_names(db, [player])
@@ -301,6 +328,8 @@ def get_player_field(
 ):
     player = db.query(User).filter(User.vk_id == vk_id).first()
     if player is None or (player.status or "active") == "blocked":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    if _hidden_blocks_viewer(user, player):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
     f = db.query(Field).filter(Field.id == field_id).first()
     if f is None:

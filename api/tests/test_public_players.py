@@ -2,13 +2,13 @@ from tests.conftest import TestingSessionLocal, make_user_client
 from models import Field, FieldCell, Inventory, Plot, User
 
 
-def _add_user(vk_id, display_name=None, level=0, coins=0, crosses_total=0, status="active"):
+def _add_user(vk_id, display_name=None, level=0, coins=0, crosses_total=0, status="active", hidden=False):
     s = TestingSessionLocal()
     try:
         u = s.query(User).filter(User.vk_id == vk_id).first()
         if u is None:
             u = User(vk_id=vk_id, role="player", display_name=display_name,
-                     level=level, coins=coins, crosses_total=crosses_total, status=status)
+                     level=level, coins=coins, crosses_total=crosses_total, status=status, hidden=hidden)
             s.add(u)
         else:
             u.display_name = display_name
@@ -16,6 +16,7 @@ def _add_user(vk_id, display_name=None, level=0, coins=0, crosses_total=0, statu
             u.coins = coins
             u.crosses_total = crosses_total
             u.status = status
+            u.hidden = hidden
         s.commit()
     finally:
         s.close()
@@ -50,6 +51,57 @@ def test_search_excludes_blocked(player_client):
     res = player_client.get("/api/players/search", params={"q": "заблок"})
     assert res.status_code == 200
     assert res.json() == []
+
+
+def test_search_excludes_hidden(player_client):
+    _add_user(9020, display_name="Скрытый", hidden=True)
+    _add_user(9021, display_name="Видимый")
+    res = player_client.get("/api/players/search", params={"q": ""})
+    ids = [p["vk_id"] for p in res.json()]
+    assert 9021 in ids
+    assert 9020 not in ids
+    by_name = player_client.get("/api/players/search", params={"q": "скрытый"})
+    assert by_name.json() == []
+
+
+def test_farm_hidden_player_404_for_other_player(player_client):
+    _add_user(9022, display_name="Скрытый", hidden=True)
+    assert player_client.get("/api/players/9022/farm").status_code == 404
+    assert player_client.get("/api/players/9022/fields/1").status_code == 404
+
+
+def test_hidden_player_self_and_admin_can_view(admin_client):
+    _add_user(9023, display_name="Скрытый", hidden=True)
+    with make_user_client(9023, "player") as c:
+        assert c.get("/api/players/9023/farm").status_code == 200
+    assert admin_client.get("/api/players/9023/farm").status_code == 200
+
+
+def test_admin_toggle_hidden(admin_client):
+    _add_user(9024, display_name="Переключатель")
+    r = admin_client.post("/api/admin/players/9024/hidden", json={"hidden": True})
+    assert r.status_code == 200
+    assert r.json()["hidden"] is True
+    assert r.json()["status"] == "active"
+
+    with make_user_client(123, "player") as c:
+        assert c.get("/api/players/search", params={"q": "переключатель"}).json() == []
+        assert c.get("/api/players/9024/farm").status_code == 404
+
+    r2 = admin_client.post("/api/admin/players/9024/hidden", json={"hidden": False})
+    assert r2.status_code == 200
+    assert r2.json()["hidden"] is False
+    with make_user_client(123, "player") as c:
+        assert any(p["vk_id"] == 9024 for p in c.get("/api/players/search", params={"q": "переключатель"}).json())
+
+
+def test_admin_hidden_forbidden_for_player(player_client):
+    assert player_client.post("/api/admin/players/123/hidden", json={"hidden": True}).status_code == 403
+
+
+def test_cannot_hide_admin(admin_client):
+    r = admin_client.post("/api/admin/players/400977/hidden", json={"hidden": True})
+    assert r.status_code == 400
 
 
 def test_farm_returns_read_only_snapshot(player_client):

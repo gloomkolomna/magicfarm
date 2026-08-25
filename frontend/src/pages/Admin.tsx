@@ -667,6 +667,22 @@ export default function AdminPage() {
     }
   }
 
+  async function togglePlayerHidden(vkId: number, hidden: boolean) {
+    setBusy(true); setMsg(null);
+    try {
+      const updated = await api.adminSetPlayerHidden(vkId, hidden);
+      if (selectedPlayer?.vk_id === vkId) setSelectedPlayer(updated);
+      const patch = (p: Player) => (p.vk_id === vkId ? { ...p, hidden: updated.hidden } : p);
+      setPlayers((prev) => prev.map(patch));
+      setAllPlayers((prev) => prev.map(patch));
+      setMsg(updated.hidden ? '👁 Игрок скрыт от других игроков' : '👁 Игрок снова виден всем');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deletePlayerAccount() {
     if (!selectedPlayer) return;
     if (!(await confirmDialog(`Удалить игрока #${selectedPlayer.vk_id} ПОЛНОСТЬЮ (профиль, весь прогресс, фото-отчёты, доступ)?`))) return;
@@ -2455,7 +2471,7 @@ export default function AdminPage() {
                     )}
                   </div>
                   <div className="fm-card" style={{ marginBottom: 14, fontSize: 13 }}>
-                    <div>ID: {selectedPlayer.vk_id} · Роль: {selectedPlayer.role} · Статус: {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.emoji} {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.label ?? selectedPlayer.status}</div>
+                    <div>ID: {selectedPlayer.vk_id} · Роль: {selectedPlayer.role} · Статус: {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.emoji} {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.label ?? selectedPlayer.status}{selectedPlayer.hidden ? ' · 👁 скрыт от игроков' : ''}</div>
                     <div>Крестики: {selectedPlayer.crosses_balance} (всего {selectedPlayer.crosses_total}) · Монеты: {selectedPlayer.coins} · Раунд: {selectedPlayer.round}</div>
                     <div>
                       🐶 Дон: {selectedPlayer.is_donor ? '✅ активен' : '— нет'}
@@ -2492,6 +2508,15 @@ export default function AdminPage() {
                         )}
                         <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy} onClick={() => toggleDonorExempt(selectedPlayer.vk_id, !selectedPlayer.donor_exempt)}>
                           🎟 {selectedPlayer.donor_exempt ? 'Выключить обход' : 'Обход дон-гейта'}
+                        </button>
+                        <button
+                          type="button"
+                          className={selectedPlayer.hidden ? 'fm-btn fm-btn-sm' : 'fm-btn fm-btn-sm fm-btn-outline'}
+                          disabled={busy}
+                          onClick={() => togglePlayerHidden(selectedPlayer.vk_id, !selectedPlayer.hidden)}
+                          title={selectedPlayer.hidden ? 'Показать игрока другим' : 'Скрыть игрока от других'}
+                        >
+                          👁 {selectedPlayer.hidden ? 'Показать игрокам' : 'Скрыть от игроков'}
                         </button>
                       </div>
                     )}
@@ -2762,6 +2787,9 @@ export default function AdminPage() {
                                   )}
                                   {p.donor_exempt && (
                                     <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title="Обход дон-гейта">🎟</span>
+                                  )}
+                                  {p.hidden && (
+                                    <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title="Скрыт от других игроков">👁</span>
                                   )}
                                 </td>
                                 <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.crosses_balance}</td>

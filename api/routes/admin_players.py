@@ -23,6 +23,7 @@ class PlayerOut(BaseModel):
     last_name: str
     role: str
     status: str
+    hidden: bool
     crosses_balance: int
     crosses_total: int
     coins: int
@@ -49,6 +50,7 @@ def _player_out(u: User, reports_total: int, nm: dict, is_donor: bool = False) -
         last_name=nm.get("last_name", ""),
         role=u.role,
         status=u.status or "active",
+        hidden=bool(u.hidden),
         crosses_balance=u.crosses_balance or 0,
         crosses_total=u.crosses_total or 0,
         coins=u.coins or 0,
@@ -169,6 +171,7 @@ class PlayerDetailOut(BaseModel):
     last_name: str
     role: str
     status: str
+    hidden: bool
     crosses_balance: int
     crosses_total: int
     coins: int
@@ -203,6 +206,10 @@ class DonorExemptRequest(BaseModel):
     enabled: bool
 
 
+class PlayerHiddenRequest(BaseModel):
+    hidden: bool
+
+
 @router.post("/{vk_id}/donor-exempt", response_model=PlayerOut)
 def set_player_donor_exempt(
     vk_id: int,
@@ -214,6 +221,26 @@ def set_player_donor_exempt(
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
     target.donor_exempt = bool(req.enabled)
+    db.commit()
+    db.refresh(target)
+    reports_total = db.query(func.count(StitchReport.id)).filter(StitchReport.user_id == vk_id).scalar() or 0
+    names = resolve_vk_names([target.vk_id])
+    return _player_out(target, reports_total, names.get(target.vk_id, {}), _is_donor(db, vk_id))
+
+
+@router.post("/{vk_id}/hidden", response_model=PlayerOut)
+def set_player_hidden(
+    vk_id: int,
+    req: PlayerHiddenRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    target = db.query(User).filter(User.vk_id == vk_id).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    if target.role == "admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нельзя скрыть администратора")
+    target.hidden = bool(req.hidden)
     db.commit()
     db.refresh(target)
     reports_total = db.query(func.count(StitchReport.id)).filter(StitchReport.user_id == vk_id).scalar() or 0
@@ -289,6 +316,7 @@ def get_player_detail(
         last_name=nm.get("last_name", ""),
         role=player.role,
         status=player.status or "active",
+        hidden=bool(player.hidden),
         crosses_balance=player.crosses_balance or 0,
         crosses_total=player.crosses_total or 0,
         coins=player.coins or 0,

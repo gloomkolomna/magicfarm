@@ -618,6 +618,7 @@ export interface Player {
   last_name: string;
   role: string;
   status: string;
+  hidden?: boolean;
   crosses_balance: number;
   crosses_total: number;
   coins: number;
@@ -1932,6 +1933,8 @@ export const api = {
     client.delete(`/admin/players/${vkId}/dlc/${locationCode}`).then((r) => r.data),
   adminSetPlayerStatus: (vkId: number, status: string) =>
     client.post<Player>(`/admin/players/${vkId}/status`, { status }).then((r) => r.data),
+  adminSetPlayerHidden: (vkId: number, hidden: boolean) =>
+    client.post<Player>(`/admin/players/${vkId}/hidden`, { hidden }).then((r) => r.data),
   adminDeletePlayer: (vkId: number) =>
     client.delete(`/admin/players/${vkId}`).then((r) => r.data),
 

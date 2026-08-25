@@ -64,6 +64,7 @@ class User(Base):
     vk_id = Column(Integer, primary_key=True)
     role = Column(String, nullable=False, default="player", server_default="player")
     status = Column(String, nullable=False, default="active", server_default="active")
+    hidden = Column(Boolean, nullable=False, default=False, server_default="0")
     display_name = Column(String, nullable=True)
     crosses_balance = Column(Integer, nullable=False, default=0, server_default="0")
     crosses_total = Column(Integer, nullable=False, default=0, server_default="0")

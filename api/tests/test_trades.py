@@ -2,11 +2,11 @@ from tests.conftest import TestingSessionLocal, make_user_client
 from models import Ingredient, Inventory, User, UserIngredient
 
 
-def _add_user(vk_id):
+def _add_user(vk_id, hidden=False):
     s = TestingSessionLocal()
     try:
         if s.query(User).filter(User.vk_id == vk_id).first() is None:
-            s.add(User(vk_id=vk_id, role="player", display_name=f"Игрок{vk_id}"))
+            s.add(User(vk_id=vk_id, role="player", display_name=f"Игрок{vk_id}", hidden=hidden))
             s.commit()
     finally:
         s.close()
@@ -104,7 +104,15 @@ def test_create_trade_self_and_target(player_client):
     assert player_client.post("/api/trades", json=_offer_payload(7002, [{"kind": "plant", "item_id": 1, "qty": 1, "direction": "give"}])).status_code == 400
 
 
-def test_create_trade_insufficient_stock(player_client):
+def test_create_trade_to_hidden_400(player_client):
+    _add_user(7009, hidden=True)
+    res = player_client.post("/api/trades", json=_offer_payload(
+        7009, [{"kind": "plant", "item_id": 1, "qty": 1, "direction": "give"}],
+    ))
+    assert res.status_code == 400
+
+
+def test_insufficient_stock(player_client):
     _add_user(7003)
     _give_plant(7003, 1, 2)
     res = player_client.post("/api/trades", json=_offer_payload(

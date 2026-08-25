@@ -239,6 +239,8 @@ def create_trade(
     if req.to_user_id == user.vk_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нельзя обмениваться с собой")
     target = _ensure_target_user(db, req.to_user_id)
+    if target.hidden and user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Игрок скрыт")
     items = _validate_items(db, user.vk_id, req.items)
     message = (req.message or "").strip() or None
     if message is not None and len(message) > TRADE_MESSAGE_MAX:
