@@ -181,6 +181,109 @@ def invest_plot(
     return _plot_to_out(plot)
 
 
+class PlantNormItemOut(BaseModel):
+    plant_id: int
+    plant_name: str
+    plant_emoji: str | None
+    norm_per_unit: int
+    plot_count: int
+
+
+class PlantNormsOut(BaseModel):
+    items: list[PlantNormItemOut]
+
+
+class PlantNormSetRequest(BaseModel):
+    norm_per_unit: int
+
+
+@router.get("/plant-norms", response_model=PlantNormsOut)
+def my_plant_norms(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from models import UserPlantNorm
+
+    rows = (
+        db.query(UserPlantNorm, Plant)
+        .join(Plant, Plant.id == UserPlantNorm.plant_id)
+        .filter(UserPlantNorm.user_id == user.vk_id)
+        .order_by(Plant.name)
+        .all()
+    )
+    counts = {}
+    if rows:
+        plant_ids = [n.plant_id for n, _ in rows]
+        counts = dict(
+            db.query(Plot.plant_id, func.count(Plot.id))
+            .filter(Plot.user_id == user.vk_id, Plot.plant_id.in_(plant_ids))
+            .group_by(Plot.plant_id)
+            .all()
+        )
+    return PlantNormsOut(
+        items=[
+            PlantNormItemOut(
+                plant_id=n.plant_id,
+                plant_name=pl.name,
+                plant_emoji=pl.emoji,
+                norm_per_unit=n.norm_per_unit or 0,
+                plot_count=counts.get(n.plant_id, 0),
+            )
+            for n, pl in rows
+        ]
+    )
+
+
+@router.put("/plant-norms/{plant_id}", response_model=PlantNormsOut)
+def set_my_plant_norm(
+    plant_id: int,
+    req: PlantNormSetRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from models import UserPlantNorm
+
+    if req.norm_per_unit < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Цена не может быть меньше 1",
+        )
+    plant = db.query(Plant).filter(Plant.id == plant_id).first()
+    if plant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Растение не найдено",
+        )
+
+    cached = db.query(UserPlantNorm).filter(
+        UserPlantNorm.user_id == user.vk_id,
+        UserPlantNorm.plant_id == plant_id,
+    ).first()
+    if cached is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Цена этому растению ещё не присвоена игрой",
+        )
+
+    cached.norm_per_unit = req.norm_per_unit
+
+    plots = db.query(Plot).filter(
+        Plot.user_id == user.vk_id,
+        Plot.plant_id == plant_id,
+        Plot.status == "planted",
+    ).all()
+    for p in plots:
+        p.required = req.norm_per_unit * (p.qty or 1)
+        p.norm_revealed = True
+        if (p.accumulated or 0) >= p.required:
+            p.status = "grown"
+            p.completed_at = datetime.datetime.utcnow()
+
+    db.commit()
+
+    return my_plant_norms(user=user, db=db)
+
+
 # ===== Производства (шатры) =====
 
 PRODUCTION_KINDS = ("alchemy", "sewing", "workshop", "barnyard")

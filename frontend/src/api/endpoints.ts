@@ -426,6 +426,14 @@ export interface Plot {
   completed_at: string | null;
 }
 
+export interface PlantNormItem {
+  plant_id: number;
+  plant_name: string;
+  plant_emoji: string | null;
+  norm_per_unit: number;
+  plot_count: number;
+}
+
 export interface Production {
   id: number;
   kind: string;
@@ -1552,6 +1560,10 @@ export const api = {
     client.post<Plot>(`/farm/plots/${plot_id}/invest`, { amount }).then((r) => r.data),
   revealNorm: (plot_id: number) =>
     client.post<Plot>(`/farm/plots/${plot_id}/reveal-norm`).then((r) => r.data),
+  myPlantNorms: () =>
+    client.get<{ items: PlantNormItem[] }>('/farm/plant-norms').then((r) => r.data.items),
+  setMyPlantNorm: (plantId: number, normPerUnit: number) =>
+    client.put<{ items: PlantNormItem[] }>(`/farm/plant-norms/${plantId}`, { norm_per_unit: normPerUnit }).then((r) => r.data.items),
   craftProduct: (production_id: number, product_id: number, qty = 1) =>
     client
       .post<CraftStart>(`/farm/productions/${production_id}/craft`, { product_id, qty })

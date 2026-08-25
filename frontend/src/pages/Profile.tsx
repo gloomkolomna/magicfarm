@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../context/SessionContext';
-import { api, type LevelGate, type StitchReport } from '../api/endpoints';
+import { api, type LevelGate, type PlantNormItem, type StitchReport } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Onboarding from './Onboarding';
 import SubscriptionBox, { SubscriptionStatusLine, TrialExpiringBanner } from '../components/SubscriptionBox';
@@ -15,6 +15,7 @@ export default function ProfilePage() {
   const { user, loading: sessionLoading } = useSession();
   const [reports, setReports] = useState<StitchReport[]>([]);
   const [levels, setLevels] = useState<LevelGate[]>([]);
+  const [plantNorms, setPlantNorms] = useState<PlantNormItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNorms, setShowNorms] = useState(false);
   const [filter, setFilter] = useState('');
@@ -22,12 +23,14 @@ export default function ProfilePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [reps, lvls] = await Promise.all([
+      const [reps, lvls, norms] = await Promise.all([
         api.stitchReports(),
         api.levels().catch(() => [] as LevelGate[]),
+        api.myPlantNorms().catch(() => [] as PlantNormItem[]),
       ]);
       setReports(reps);
       setLevels(lvls);
+      setPlantNorms(norms);
     } catch {
       /* ignore */
     } finally {
@@ -176,6 +179,30 @@ export default function ProfilePage() {
         </div>
       )}
 
+      <h2>🌱 Цены на грядки и сады</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
+        Игра сама назначает цену (❎ за 1 растение) при посадке. Здесь её можно изменить — новая цена применится ко всем грядкам и садам этого растения.
+      </p>
+      {plantNorms.length === 0 ? (
+        <div className="fm-card" style={{ color: 'var(--text-muted)', marginBottom: 14 }}>
+          Пока нет растений с присвоенной ценой.
+        </div>
+      ) : (
+        <div className="fm-grid" style={{ marginBottom: 14 }}>
+          {plantNorms.map((n) => (
+            <div key={n.plant_id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
+              <strong>{n.plant_emoji} {n.plant_name}</strong>
+              <div style={{ color: 'var(--text-muted)', marginTop: 2, fontSize: 12 }}>
+                Текущая цена: {n.norm_per_unit} ❎/шт · {n.plot_count} грядок и садов
+              </div>
+              <div style={{ marginTop: 6 }}>
+                <PlantNormEditor plant={n} onSaved={setPlantNorms} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <h2>📷 Дневник вышивки</h2>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
         Фото отчётов хранятся 30 дней, после чего автоматически удаляются.
@@ -221,6 +248,40 @@ export default function ProfilePage() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function PlantNormEditor({ plant, onSaved }: { plant: PlantNormItem; onSaved: (items: PlantNormItem[]) => void }) {
+  const [val, setVal] = useState(String(plant.norm_per_unit));
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setVal(String(plant.norm_per_unit)), [plant.norm_per_unit]);
+  const valid = Number(val) >= 1;
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+      <input
+        className="fm-input"
+        type="number"
+        min={1}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        style={{ width: 80 }}
+        aria-label={`Цена 1 растения ${plant.plant_name}`}
+      />
+      <button
+        className="fm-btn fm-btn-sm"
+        disabled={busy || !valid}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            onSaved(await api.setMyPlantNorm(plant.plant_id, Math.floor(Number(val))));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        💾
+      </button>
     </div>
   );
 }
