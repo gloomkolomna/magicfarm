@@ -2836,9 +2836,10 @@ export default function AdminPage() {
                                 <td style={{ padding: '8px 12px' }}>{fmtDate(p.trial_until)}</td>
                                 <td style={{ padding: '8px 12px' }}>{trialEnded(p.trial_until) ? fmtDate(p.subscription_until) : '—'}</td>
                                 <td style={{ padding: '8px 12px' }}>
-                                  {p.subscription_dlc_codes?.length
-                                    ? p.subscription_dlc_codes.map((c) => DLC_ICONS[c] ?? c).join(' ')
-                                    : '—'}
+                                  {(() => {
+                                    const codes = Array.from(new Set([...(p.subscription_dlc_codes ?? []), ...(p.dlc_locations ?? [])]));
+                                    return codes.length ? codes.map((c) => DLC_ICONS[c] ?? c).join(' ') : '—';
+                                  })()}
                                 </td>
                               </tr>
                             ))}

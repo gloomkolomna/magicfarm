@@ -111,14 +111,15 @@ def test_player_level_does_not_open_brewery(admin_client):
         assert c.get(f"/api/fields/{fid}").status_code == 403
 
 
-def test_admin_bypasses_brewery_lock(admin_client):
+def test_admin_also_locked_by_brewery_progression(admin_client):
     _create_recipe(admin_client, "Зелье Л", "green")
     _create_recipe(admin_client, "Зелье Л2", "green")
     blue1 = _create_recipe(admin_client, "Зелье М", "blue")
     fid = _create_brewery_field(admin_client, [blue1])
 
     r = admin_client.get(f"/api/fields/{fid}")
-    assert r.status_code == 200
+    assert r.status_code == 403
+    assert "простые" in r.json()["detail"]
 
 
 def test_cauldron_follows_field_level_progression(admin_client):

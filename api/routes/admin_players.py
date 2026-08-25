@@ -33,6 +33,7 @@ class PlayerOut(BaseModel):
     trial_until: str | None
     subscription_until: str | None
     subscription_dlc_codes: list[str]
+    dlc_locations: list[str]
     is_donor: bool
     donor_exempt: bool
 
@@ -43,7 +44,14 @@ def _is_donor(db: Session, vk_id: int) -> bool:
     return is_donor(db, vk_id)
 
 
-def _player_out(u: User, reports_total: int, nm: dict, is_donor: bool = False) -> PlayerOut:
+def _dlc_locations(db: Session, vk_id: int) -> list[str]:
+    return sorted(
+        r[0] for r in db.query(UserDlcUnlock.location_code)
+        .filter(UserDlcUnlock.user_id == vk_id).all()
+    )
+
+
+def _player_out(u: User, reports_total: int, nm: dict, is_donor: bool = False, dlc_locations: list[str] | None = None) -> PlayerOut:
     return PlayerOut(
         vk_id=u.vk_id,
         first_name=nm.get("first_name", ""),
@@ -60,6 +68,7 @@ def _player_out(u: User, reports_total: int, nm: dict, is_donor: bool = False) -
         trial_until=u.trial_until.isoformat() if u.trial_until else None,
         subscription_until=u.subscription_until.isoformat() if u.subscription_until else None,
         subscription_dlc_codes=[c for c in (u.subscription_dlc_codes or "").split(",") if c],
+        dlc_locations=sorted(dlc_locations or []),
         is_donor=is_donor,
         donor_exempt=bool(u.donor_exempt),
     )
@@ -85,10 +94,16 @@ def list_players(
         .all()
     )
 
+    dlc_map: dict[int, list[str]] = {}
+    for uid, code in db.query(UserDlcUnlock.user_id, UserDlcUnlock.location_code).filter(
+        UserDlcUnlock.user_id.in_(vk_ids)
+    ).all():
+        dlc_map.setdefault(uid, []).append(code)
+
     result = []
     for u in users:
         nm = names.get(u.vk_id, {})
-        result.append(_player_out(u, report_counts.get(u.vk_id, 0), nm, donor_map.get(u.vk_id, False)))
+        result.append(_player_out(u, report_counts.get(u.vk_id, 0), nm, donor_map.get(u.vk_id, False), dlc_map.get(u.vk_id)))
     return result
 
 
@@ -225,7 +240,7 @@ def set_player_donor_exempt(
     db.refresh(target)
     reports_total = db.query(func.count(StitchReport.id)).filter(StitchReport.user_id == vk_id).scalar() or 0
     names = resolve_vk_names([target.vk_id])
-    return _player_out(target, reports_total, names.get(target.vk_id, {}), _is_donor(db, vk_id))
+    return _player_out(target, reports_total, names.get(target.vk_id, {}), _is_donor(db, vk_id), _dlc_locations(db, vk_id))
 
 
 @router.post("/{vk_id}/hidden", response_model=PlayerOut)
@@ -243,7 +258,7 @@ def set_player_hidden(
     db.refresh(target)
     reports_total = db.query(func.count(StitchReport.id)).filter(StitchReport.user_id == vk_id).scalar() or 0
     names = resolve_vk_names([target.vk_id])
-    return _player_out(target, reports_total, names.get(target.vk_id, {}), _is_donor(db, vk_id))
+    return _player_out(target, reports_total, names.get(target.vk_id, {}), _is_donor(db, vk_id), _dlc_locations(db, vk_id))
 
 
 @router.get("/{vk_id}", response_model=PlayerDetailOut)
@@ -723,7 +738,7 @@ def extend_player_trial(
     set_trial_days(db, target, req.days)
     db.refresh(target)
     nm = resolve_vk_names([target.vk_id])
-    return _player_out(target, 0, nm)
+    return _player_out(target, 0, nm, dlc_locations=_dlc_locations(db, vk_id))
 
 
 class DateUntilRequest(BaseModel):
@@ -746,7 +761,7 @@ def _parse_until(value: str | None) -> datetime.datetime | None:
 def _player_out_full(db: Session, target: User) -> PlayerOut:
     reports_total = db.query(func.count(StitchReport.id)).filter(StitchReport.user_id == target.vk_id).scalar() or 0
     names = resolve_vk_names([target.vk_id])
-    return _player_out(target, reports_total, names.get(target.vk_id, {}), _is_donor(db, target.vk_id))
+    return _player_out(target, reports_total, names.get(target.vk_id, {}), _is_donor(db, target.vk_id), _dlc_locations(db, target.vk_id))
 
 
 @router.post("/{vk_id}/trial-until", response_model=PlayerOut)
@@ -894,7 +909,7 @@ def restart_player(
 
     names = resolve_vk_names([target.vk_id])
     nm = names.get(target.vk_id, {})
-    return _player_out(target, 0, nm)
+    return _player_out(target, 0, nm, dlc_locations=_dlc_locations(db, vk_id))
 
 
 class PlayerStatusRequest(BaseModel):
@@ -926,7 +941,7 @@ def set_player_status(
     reports_total = db.query(func.count(StitchReport.id)).filter(StitchReport.user_id == vk_id).scalar() or 0
     names = resolve_vk_names([target.vk_id])
     nm = names.get(target.vk_id, {})
-    return _player_out(target, reports_total, nm)
+    return _player_out(target, reports_total, nm, dlc_locations=_dlc_locations(db, vk_id))
 
 
 @router.delete("/{vk_id}", status_code=status.HTTP_204_NO_CONTENT)

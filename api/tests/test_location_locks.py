@@ -201,6 +201,25 @@ def test_dlc_endpoints_validation(admin_client):
     assert res.status_code == 204
 
 
+def test_players_list_includes_dlc_locations(admin_client):
+    _seed_user(123)
+    admin_client.post("/api/admin/players/123/dlc", json={"location_code": "infirmary"})
+    admin_client.post("/api/admin/players/123/dlc", json={"location_code": "brewery"})
+
+    rows = admin_client.get("/api/admin/players").json()
+    row = next(p for p in rows if p["vk_id"] == 123)
+
+    assert sorted(row["dlc_locations"]) == ["brewery", "infirmary"]
+    assert row["subscription_dlc_codes"] == []
+
+
+def test_players_list_has_dlc_locations_empty(admin_client):
+    _seed_user(124)
+    rows = admin_client.get("/api/admin/players").json()
+    row = next(p for p in rows if p["vk_id"] == 124)
+    assert row["dlc_locations"] == []
+
+
 def test_dlc_forbidden_for_player(player_client):
     res = player_client.post("/api/admin/players/123/dlc", json={"location_code": "infirmary"})
     assert res.status_code == 403

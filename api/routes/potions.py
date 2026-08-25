@@ -176,10 +176,8 @@ BREWERY_LEVEL_TITLES = {"green": "🟢 простые", "blue": "🔵 средн
 def brewery_field_lock_reason(field: Field, user: User, db: Session) -> str | None:
     """Почему зельеварня закрыта: пока не сварены все зелья предыдущего уровня.
 
-    None — открыта (в т.ч. для админов и полей без привязанных рецептов).
+    None — открыта (в т.ч. для полей без привязанных рецептов). Админы — как игроки.
     """
-    if user is not None and user.role == "admin":
-        return None
     levels = {
         r.level
         for r in db.query(PotionRecipe)

@@ -628,6 +628,7 @@ export interface Player {
   trial_until: string | null;
   subscription_until: string | null;
   subscription_dlc_codes: string[];
+  dlc_locations?: string[];
   is_donor?: boolean;
   donor_exempt?: boolean;
 }
