@@ -2,10 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { api, type PaymentPrice } from '../api/endpoints';
 import { useSession } from '../context/SessionContext';
 
+function parseDate(iso: string | null): Date | null {
+  if (!iso) return null;
+  return new Date(iso.endsWith('Z') ? iso : iso + 'Z');
+}
+
 function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z');
-  return d.toLocaleDateString('ru-RU');
+  const d = parseDate(iso);
+  return d ? d.toLocaleDateString('ru-RU') : '—';
 }
 
 const OFFERTA_URL = 'https://belovolovhome.ru/magicfarm/game/offerta.html';
@@ -230,6 +234,16 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
             {agreeField}
             {status && <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{status}</div>}
           </>
+        ) : user?.trial_active ? (
+          <>
+            <div style={{ fontSize: 16 }}>
+              ⏳ Идёт пробный период — до <b>{formatDate(user.trial_until)}</b>
+            </div>
+            <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+              Оформление подписки станет доступно после окончания пробного периода.
+              Мы заранее напомним — за 5, 3 и 1 день до его конца.
+            </div>
+          </>
         ) : (
           <>
             <div style={{ fontSize: 16 }}>
@@ -265,34 +279,56 @@ export function SubscriptionStatusLine() {
   const donorLine = user.game_open && !user.is_donor && !user.donor_exempt
     ? <div style={{ marginTop: 4 }}>🐶 Дон-статус группы не активен</div>
     : null;
-  if (user.subscription_active) {
-    return (
-      <div>
+  return (
+    <div>
+      {user.subscription_active && (
         <div>
           Подписка активна до <b>{formatDate(user.subscription_until)}</b>
           {user.subscription_dlc_codes.length > 0 && (
             <span> (+ {user.subscription_dlc_codes.join(', ')})</span>
           )}
         </div>
-        {donorLine}
-      </div>
-    );
-  }
-  if (user.trial_active) {
-    return (
-      <div>
+      )}
+      {user.trial_active && (
         <div>
           Пробный период до <b>{formatDate(user.trial_until)}</b>
-          {user.days_left != null ? ` (осталось ${user.days_left} дн.)` : ''}
+          {user.trial_days_left != null ? ` (осталось ${user.trial_days_left} дн.)` : ''}
         </div>
-        {donorLine}
-      </div>
-    );
-  }
-  return (
-    <div>
-      <div>Подписка не активна — оформление ниже</div>
+      )}
+      {!user.subscription_active && !user.trial_active && (
+        <div>Подписка не активна — оформление ниже</div>
+      )}
       {donorLine}
+    </div>
+  );
+}
+
+export function TrialExpiringBanner() {
+  const { user } = useSession();
+  if (!user || user.role === 'admin' || !user.trial_active) return null;
+  const days = user.trial_days_left;
+  if (days == null || days <= 0 || days > 5) return null;
+  const sub = parseDate(user.subscription_until);
+  const trial = parseDate(user.trial_until);
+  if (sub && trial && sub > trial) return null;
+  return (
+    <div
+      className="fm-card"
+      style={{
+        borderColor: 'rgba(255, 193, 7, 0.55)',
+        background: 'rgba(255, 193, 7, 0.08)',
+        display: 'flex',
+        alignItems: 'baseline',
+        gap: 8,
+        fontSize: 14,
+        marginBottom: 12,
+      }}
+    >
+      <span style={{ fontSize: 20 }}>⏳</span>
+      <span>
+        Пробный период заканчивается: осталось <b>{days} дн.</b> (до {formatDate(user.trial_until)}).
+        После окончания триала можно оформить подписку — прогресс сохранится.
+      </span>
     </div>
   );
 }

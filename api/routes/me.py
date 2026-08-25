@@ -37,6 +37,7 @@ class MeResponse(BaseModel):
     subscription_until: str | None
     subscription_dlc_codes: list[str]
     days_left: int | None
+    trial_days_left: int | None
     is_donor: bool
     donor_exempt: bool
     game_open: bool
@@ -87,6 +88,7 @@ def get_me(
         subscription_until=user.subscription_until.isoformat() if user.subscription_until else None,
         subscription_dlc_codes=parse_dlc_codes(user.subscription_dlc_codes),
         days_left=days_left(access_until(user)),
+        trial_days_left=days_left(user.trial_until),
         is_donor=is_donor(db, user.vk_id),
         donor_exempt=bool(user.donor_exempt),
         game_open=game_open,

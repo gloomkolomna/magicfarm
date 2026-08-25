@@ -2187,7 +2187,7 @@ export const api = {
 
   // ── Логи ──
   adminLogs: (params: LogsQuery = {}) =>
-    client.get<LogEntry[]>('/admin/logs', { params }).then((r) => r.data),
+    client.get<LogEntry[]>('/admin/logs', { params: { ...params, _t: Date.now() } }).then((r) => r.data),
   adminClearLogs: () => client.delete('/admin/logs').then((r) => r.data),
   vkLogReport: (payload: { level?: string; event?: string; message?: string; details?: unknown }) =>
     client.post('/logs/vk', payload).then((r) => r.data),

@@ -105,3 +105,9 @@ def test_admin_clear_logs(admin_client):
     res = admin_client.delete("/api/admin/logs")
     assert res.status_code == 204
     assert all(r["event"] != "to-be-cleared" for r in admin_client.get("/api/admin/logs").json())
+
+
+def test_admin_logs_no_store(admin_client):
+    res = admin_client.get("/api/admin/logs")
+    assert res.status_code == 200
+    assert res.headers.get("cache-control") == "no-store"

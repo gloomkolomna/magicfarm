@@ -23,6 +23,7 @@ from services.subscription import (
     extend_subscription,
     get_base_price_rub,
     is_subscription_active,
+    is_trial_active,
     parse_dlc_codes,
     price_rub_for,
     topup_price_rub,
@@ -181,6 +182,13 @@ def create_subscription_order(
 
     if not config.PAY_GATEWAY_ENABLED:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Оплата не настроена")
+
+    if is_trial_active(user) and not is_subscription_active(user):
+        until = user.trial_until.strftime("%d.%m.%Y")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Оформление подписки станет доступно после окончания пробного периода — до {until}",
+        )
 
     dlc_codes = _validate_dlc_codes(req.dlc_codes or [])
     email = (req.receipt_email or "").strip().lower()

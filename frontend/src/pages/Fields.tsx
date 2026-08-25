@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { api, type FieldInfo, type LevelGate } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import { TrialExpiringBanner } from '../components/SubscriptionBox';
 import Toast from '../components/Toast';
 
 const FIELD_KIND_LABEL: Record<string, string> = {
@@ -75,6 +76,7 @@ export default function FieldsPage() {
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
+      <TrialExpiringBanner />
       {user && (
         <div className="fm-card fm-rise" style={{ textAlign: 'center', marginBottom: 14 }}>
           {levelImage && (

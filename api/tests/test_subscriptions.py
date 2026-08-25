@@ -132,7 +132,16 @@ def test_me_reports_subscription_fields(player_client):
     assert data["trial_active"] is True
     assert data["subscription_active"] is False
     assert data["days_left"] == 7
+    assert data["trial_days_left"] == 7
     assert data["subscription_dlc_codes"] == []
+
+
+def test_me_trial_days_left_none_without_trial():
+    _make_user(990030)
+    with token_client(990030) as c:
+        data = c.get("/api/me").json()
+    assert data["trial_active"] is False
+    assert data["trial_days_left"] is None
 
 
 def test_me_days_left_zero_when_expired():

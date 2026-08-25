@@ -3,7 +3,7 @@ import { useSession } from '../context/SessionContext';
 import { api, type LevelGate, type StitchReport } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 import Onboarding from './Onboarding';
-import SubscriptionBox, { SubscriptionStatusLine } from '../components/SubscriptionBox';
+import SubscriptionBox, { SubscriptionStatusLine, TrialExpiringBanner } from '../components/SubscriptionBox';
 
 const STATUS_STYLE: Record<string, React.CSSProperties> = {
   accepted: { background: 'rgba(111,174,74,0.2)' },
@@ -43,6 +43,7 @@ export default function ProfilePage() {
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <div className="fm-card fm-view-allow" style={{ marginBottom: 14 }}>
         <h2 style={{ margin: '0 0 8px', fontSize: 18 }}>⏳ Подписка</h2>
+        <TrialExpiringBanner />
         <SubscriptionStatusLine />
         {user.role !== 'admin' && (
           <div style={{ marginTop: 12 }}>

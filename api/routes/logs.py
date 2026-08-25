@@ -3,7 +3,7 @@ import datetime
 import json
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -63,6 +63,7 @@ class LogOut(BaseModel):
 
 @router.get("/admin/logs", response_model=list[LogOut])
 def list_logs(
+    response: Response,
     source: Optional[str] = Query(None),
     level: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
@@ -72,6 +73,7 @@ def list_logs(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ):
+    response.headers["Cache-Control"] = "no-store"
     maybe_cleanup(db, config.LOG_RETENTION_DAYS)
     query = db.query(Log)
     if source:

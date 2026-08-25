@@ -92,6 +92,8 @@ def test_create_order_disabled(player_client):
 
 
 def test_create_order_happy_path(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _expire_trial()
     _enable_gateway(monkeypatch)
     r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["infirmary"], "receipt_email": "player@example.com"})
     assert r.status_code == 200
@@ -110,13 +112,47 @@ def test_create_order_happy_path(player_client, monkeypatch):
         assert o.amount_kop == 35000
 
 
+def test_create_order_blocked_during_trial(player_client, monkeypatch):
+    _enable_gateway(monkeypatch)
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": [], "receipt_email": "player@example.com"})
+    assert r.status_code == 403
+    assert "пробного периода" in r.json()["detail"]
+
+    with TestingSessionLocal() as db:
+        assert db.query(PaymentOrder).count() == 0
+
+
+def test_create_order_allowed_after_trial_end(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _expire_trial()
+    _enable_gateway(monkeypatch)
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": [], "receipt_email": "player@example.com"})
+    assert r.status_code == 200
+    assert r.json()["amount_rub"] == 300
+
+
+def test_renewal_allowed_with_trial_overlap(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=10, codes="infirmary")
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["infirmary"], "receipt_email": "player@example.com"})
+    assert r.status_code == 200
+    assert r.json()["kind"] == "subscription"
+    assert r.json()["amount_rub"] == 350
+
+
 def test_create_order_unknown_dlc(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _expire_trial()
     _enable_gateway(monkeypatch)
     r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["castle"], "receipt_email": "player@example.com"})
     assert r.status_code == 400
 
 
 def test_create_order_requires_email(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _expire_trial()
     _enable_gateway(monkeypatch)
     r = player_client.post("/api/payment/create-order", json={"dlc_codes": []})
     assert r.status_code == 422
@@ -125,6 +161,8 @@ def test_create_order_requires_email(player_client, monkeypatch):
 
 
 def test_create_order_stores_email(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _expire_trial()
     _enable_gateway(monkeypatch)
     r = player_client.post("/api/payment/create-order", json={"dlc_codes": [], "receipt_email": "  Player@Example.COM "})
     assert r.status_code == 200
@@ -148,6 +186,13 @@ def _activate_subscription(vk_id=123, days=10, codes="infirmary"):
         u = s.query(User).filter(User.vk_id == vk_id).first()
         u.subscription_until = _utcnow() + timedelta(days=days)
         u.subscription_dlc_codes = codes
+        s.commit()
+
+
+def _expire_trial(vk_id=123):
+    with TestingSessionLocal() as s:
+        u = s.query(User).filter(User.vk_id == vk_id).first()
+        u.trial_until = _utcnow() - timedelta(days=1)
         s.commit()
 
 
@@ -220,6 +265,8 @@ def test_price_no_topup_without_subscription(player_client, db):
 
 
 def test_expired_pending_cancelled_on_new_order(player_client, monkeypatch, db):
+    player_client.get("/api/me")
+    _expire_trial()
     _enable_gateway(monkeypatch, txn="farm-order-2")
     with TestingSessionLocal() as s:
         old = _order(s, gateway_txn_id="farm-old", status="pending",
@@ -408,6 +455,7 @@ def test_readonly_player_can_pay_subscription(monkeypatch):
 
     _enable_gateway(monkeypatch)
     _seed_user(123, status="readonly")
+    _expire_trial()
     with token_client() as c:
         r = c.post(
             "/api/payment/create-order",

@@ -25,6 +25,7 @@ export interface MeUser {
   subscription_until: string | null;
   subscription_dlc_codes: string[];
   days_left: number | null;
+  trial_days_left: number | null;
   is_donor: boolean;
   donor_exempt: boolean;
   game_open: boolean;

@@ -471,6 +471,23 @@ export default function AdminPage() {
   useEffect(() => { if (!sessionLoading) loadCore(); }, [loadCore, sessionLoading]);
 
   useEffect(() => {
+    if (tab !== 'players' && tab !== 'finance') return;
+    const id = setInterval(() => {
+      if (tab === 'players') {
+        api.adminPlayers()
+          .then((list) => {
+            setAllPlayers(list);
+            setPlayers(playerSearch.trim() ? list.filter((p) => matchesAny(p, playerSearch)) : list);
+          })
+          .catch(() => {});
+      } else {
+        loadFinance();
+      }
+    }, 30000);
+    return () => clearInterval(id);
+  }, [tab, playerSearch, loadFinance]);
+
+  useEffect(() => {
     setTrialDateInput(toDateInputValue(selectedPlayer?.trial_until ?? null));
     setSubDateInput(toDateInputValue(selectedPlayer?.subscription_until ?? null));
   }, [selectedPlayer]);
