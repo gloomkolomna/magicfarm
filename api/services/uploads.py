@@ -7,6 +7,13 @@ from fastapi import HTTPException, UploadFile, status
 
 import config
 
+try:
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+except ImportError:
+    pass
+
 _S3 = None
 
 
@@ -52,7 +59,16 @@ def _process(buf: bytes, max_size: int | None) -> tuple[bytes, bool]:
         return buf, True
     from PIL import Image
 
-    img = Image.open(io.BytesIO(buf))
+    try:
+        img = Image.open(io.BytesIO(buf))
+        img.load()
+    except (OSError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Не удалось прочитать изображение: файл повреждён или формат не поддерживается. "
+                   "Пересохраните фото как JPG или PNG и попробуйте снова",
+        )
+
     has_alpha = img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info)
 
     if img.mode == "P":

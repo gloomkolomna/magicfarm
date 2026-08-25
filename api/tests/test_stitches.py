@@ -70,6 +70,45 @@ def test_create_report_not_an_image(uploads_tmp, player_client):
     assert res.status_code == 400
 
 
+def test_create_report_fake_image_png_content_type(uploads_tmp, player_client):
+    # Content-Type image/*, но байты — не изображение → 400, а не 500.
+    res = player_client.post(
+        "/api/stitches/reports",
+        data={"amount": "10"},
+        files={"photo_after": ("r.png", io.BytesIO(b"not an image at all"), "image/png")},
+    )
+    assert res.status_code == 400
+    assert "Не удалось прочитать изображение" in res.json()["detail"]
+
+
+def test_create_report_truncated_image(uploads_tmp, player_client):
+    full = _img_bytes(2000, 1500)
+    truncated = full[: len(full) // 2]
+    res = player_client.post(
+        "/api/stitches/reports",
+        data={"amount": "10"},
+        files={"photo_after": ("r.png", io.BytesIO(truncated), "image/png")},
+    )
+    assert res.status_code == 400
+    assert "Не удалось прочитать изображение" in res.json()["detail"]
+
+
+def test_create_report_accepts_heic(uploads_tmp, player_client):
+    pytest.importorskip("pillow_heif")
+    import services.uploads  # noqa: F401 — регистрирует HEIF-опенер
+
+    img = Image.new("RGB", (400, 300), (90, 160, 70))
+    buf = io.BytesIO()
+    img.save(buf, format="HEIF")
+    res = player_client.post(
+        "/api/stitches/reports",
+        data={"amount": "10"},
+        files={"photo_after": ("r.heic", io.BytesIO(buf.getvalue()), "image/heic")},
+    )
+    assert res.status_code == 201
+    assert res.json()["status"] == "accepted"
+
+
 def test_create_report_dedup_same_amount(uploads_tmp, player_client):
     # Два отчёта с одинаковым amount подряд → второй отклоняется (дубль).
     first = player_client.post(
