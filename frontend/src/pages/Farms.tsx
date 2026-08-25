@@ -268,7 +268,7 @@ export default function FarmsPage() {
             <span style={{ color: '#ccc', fontSize: 14 }}>👁 {viewField.name} · {viewField.cols}×{viewField.rows} — только просмотр</span>
           </div>
           <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
-            <FieldGridView field={viewField} />
+            <FieldGridView field={viewField} noGrid />
           </div>
         </div>
       )}

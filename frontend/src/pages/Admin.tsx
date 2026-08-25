@@ -52,11 +52,6 @@ const DLC_ICONS: Record<string, string> = {
   brewery: '🧪',
 };
 
-function trialEnded(iso: string | null): boolean {
-  if (!iso) return true;
-  return new Date(iso.endsWith('Z') ? iso : iso + 'Z') <= new Date();
-}
-
 const SURCHARGE_OPTIONS = [
   { value: '30', label: '30 монет' },
   { value: '35', label: '35 монет' },
@@ -2640,7 +2635,6 @@ export default function AdminPage() {
                           {playerDetail.productions.map((pr) => (
                             <div key={pr.id} className="fm-card fm-rise" style={{ fontSize: 13 }}>
                               <strong>{pr.name}</strong>
-                              <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{pr.kind}</div>
                               <div style={{ fontSize: 12, marginTop: 2 }}>
                                 {pr.accumulated}/{pr.required} ❎
                               </div>
@@ -2834,7 +2828,7 @@ export default function AdminPage() {
                                 <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.coins}</td>
                                 <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.reports_total}</td>
                                 <td style={{ padding: '8px 12px' }}>{fmtDate(p.trial_until)}</td>
-                                <td style={{ padding: '8px 12px' }}>{trialEnded(p.trial_until) ? fmtDate(p.subscription_until) : '—'}</td>
+                                <td style={{ padding: '8px 12px' }}>{fmtDate(p.subscription_until)}</td>
                                 <td style={{ padding: '8px 12px' }}>
                                   {(() => {
                                     const codes = Array.from(new Set([...(p.subscription_dlc_codes ?? []), ...(p.dlc_locations ?? [])]));

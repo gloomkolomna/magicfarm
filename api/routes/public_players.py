@@ -14,6 +14,7 @@ from models import (
 from routes.admin_players import (
     AdminFieldCellOut, AdminFieldDetailOut, AdminTentOut, PlayerPlotOut,
 )
+from services.production_names import production_display_name
 
 router = APIRouter(prefix="/api/players", tags=["players"])
 
@@ -295,7 +296,7 @@ def get_player_farm(
         ],
         productions=[
             FarmProductionOut(
-                kind=pr.kind or "", name=pr.name or pr.kind or "", status=pr.status or "",
+                kind=pr.kind or "", name=production_display_name(db, pr.kind or "", pr.name), status=pr.status or "",
                 accumulated=pr.accumulated or 0, required=pr.required or 0,
             )
             for pr in productions
@@ -437,6 +438,7 @@ def get_player_field(
     return AdminFieldDetailOut(
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
+        field_kind=f.field_kind,
         created_at=f.created_at.isoformat() if f.created_at else None,
         cells=cells_out,
         tents=[_tent_out(t) for t in f.tents],

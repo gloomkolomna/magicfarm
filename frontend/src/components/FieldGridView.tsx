@@ -2,11 +2,12 @@ import { useState } from 'react';
 import type { FieldDetail } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 
-export default function FieldGridView({ field, playerVkId, onResetNorm, onDeletePlot }: {
+export default function FieldGridView({ field, playerVkId, onResetNorm, onDeletePlot, noGrid }: {
   field: FieldDetail;
   playerVkId?: number;
   onResetNorm?: (plotId: number) => void;
   onDeletePlot?: (plotId: number) => void;
+  noGrid?: boolean;
 }) {
   const [selectedCell, setSelectedCell] = useState<{ col: number; row: number; plotId: number } | null>(null);
   const grid = (() => {
@@ -34,7 +35,8 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
         {field.map_url && (
           <img src={mediaUrl(field.map_url)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', borderRadius: 4 }} />
         )}
-        <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: `repeat(${field.cols}, 1fr)`, gridTemplateRows: `repeat(${field.rows}, 1fr)` }}>
+        {!noGrid && field.field_kind !== 'infirmary' && (
+          <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: `repeat(${field.cols}, 1fr)`, gridTemplateRows: `repeat(${field.rows}, 1fr)` }}>
           {grid.flatMap((row, ri) =>
             row.map((cell, ci) => {
               const key = `${ri}-${ci}`;
@@ -72,7 +74,8 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
               );
             })
           )}
-        </div>
+          </div>
+        )}
         {field.tents?.map((t) => {
           const spanCols = t.col2 - t.col1 + 1;
           const spanRows = t.row2 - t.row1 + 1;

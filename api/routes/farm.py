@@ -9,6 +9,7 @@ from db import get_db
 from deps import get_current_user
 from models import CraftSession, Inventory, Plant, Plot, Production, Product, User, Recipe, UserRecipe
 from models import PotionRecipe, UserPotion
+from services.production_names import production_display_name
 from sqlalchemy import func
 
 router = APIRouter(prefix="/api/farm", tags=["farm"])
@@ -74,9 +75,9 @@ class ProductionOut(BaseModel):
     created_at: datetime.datetime | None
 
 
-def _prod_to_out(pr: Production) -> ProductionOut:
+def _prod_to_out(pr: Production, db: Session) -> ProductionOut:
     return ProductionOut(
-        id=pr.id, kind=pr.kind, name=pr.name, status=pr.status,
+        id=pr.id, kind=pr.kind, name=production_display_name(db, pr.kind, pr.name), status=pr.status,
         accumulated=pr.accumulated, required=pr.required, created_at=pr.created_at,
     )
 
@@ -584,7 +585,7 @@ def list_productions(
     user: User = Depends(get_current_user),
 ):
     rows = db.query(Production).filter(Production.user_id == user.vk_id).all()
-    return [_prod_to_out(pr) for pr in rows]
+    return [_prod_to_out(pr, db) for pr in rows]
 
 
 @router.get("/inventory", response_model=list[InventoryOut])

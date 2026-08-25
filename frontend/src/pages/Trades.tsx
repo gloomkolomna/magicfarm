@@ -15,10 +15,11 @@ interface AvailItem {
 }
 
 interface RowForm {
-  direction: 'give' | 'want';
   kind: 'plant' | 'product' | 'ingredient';
   item_id: string;
 }
+
+const EMPTY_ROWS: RowForm[] = [{ kind: 'plant', item_id: '' }];
 
 const KIND_LABEL: Record<string, string> = { plant: 'Растение', product: 'Товар', ingredient: 'Ингредиент' };
 const KIND_EMOJI: Record<string, string> = { plant: '🌿', product: '📦', ingredient: '⚗️' };
@@ -81,7 +82,8 @@ export default function TradesPage() {
   const [recipientQuery, setRecipientQuery] = useState('');
   const [recipientResults, setRecipientResults] = useState<PlayerSearchItem[]>([]);
   const [message, setMessage] = useState('');
-  const [rows, setRows] = useState<RowForm[]>([{ direction: 'give', kind: 'plant', item_id: '' }]);
+  const [giveRows, setGiveRows] = useState<RowForm[]>(EMPTY_ROWS);
+  const [wantRows, setWantRows] = useState<RowForm[]>(EMPTY_ROWS);
 
   useEffect(() => {
     const q = recipientQuery.trim();
@@ -120,7 +122,8 @@ export default function TradesPage() {
     setRecipient(p);
     setRecipientQuery('');
     setRecipientResults([]);
-    setRows([{ direction: 'give', kind: 'plant', item_id: '' }]);
+    setGiveRows(EMPTY_ROWS.map((r) => ({ ...r })));
+    setWantRows(EMPTY_ROWS.map((r) => ({ ...r })));
     try {
       const farm = await api.playerFarm(p.vk_id);
       setRecipientItems(buildItemsFromFarm(farm));
@@ -130,19 +133,23 @@ export default function TradesPage() {
   async function submitOffer() {
     if (!recipient) { setMsg('✗ Выберите игрока из списка'); return; }
     const tradeItems: TradeItemIn[] = [];
-    for (const r of rows) {
-      const itemId = Number(r.item_id);
-      if (!itemId) continue;
-      tradeItems.push({ kind: r.kind, item_id: itemId, qty: 1, direction: r.direction });
+    for (const [section, sectionRows] of [['give', giveRows], ['want', wantRows]] as const) {
+      for (const r of sectionRows) {
+        const itemId = Number(r.item_id);
+        if (!itemId) continue;
+        tradeItems.push({ kind: r.kind, item_id: itemId, qty: 1, direction: section });
+      }
     }
     if (tradeItems.length === 0) { setMsg('✗ Добавьте предметы в обмен'); return; }
     if (!tradeItems.some((i) => i.direction === 'give')) { setMsg('✗ Укажите, что вы отдаёте'); return; }
+    if (!tradeItems.some((i) => i.direction === 'want')) { setMsg('✗ Укажите, что вы хотите получить'); return; }
     setBusy(true); setMsg(null);
     try {
       await api.createTrade({ to_user_id: recipient.vk_id, message: message.trim() || null, items: tradeItems });
       setMsg('✓ Предложение отправлено');
       setRecipient(null); setRecipientQuery(''); setRecipientItems([]); setMessage('');
-      setRows([{ direction: 'give', kind: 'plant', item_id: '' }]);
+      setGiveRows(EMPTY_ROWS.map((r) => ({ ...r })));
+      setWantRows(EMPTY_ROWS.map((r) => ({ ...r })));
       await load();
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
@@ -196,7 +203,48 @@ export default function TradesPage() {
     setRecipientQuery('');
     setRecipientResults([]);
     setRecipientItems([]);
-    setRows([{ direction: 'give', kind: 'plant', item_id: '' }]);
+    setGiveRows(EMPTY_ROWS.map((r) => ({ ...r })));
+    setWantRows(EMPTY_ROWS.map((r) => ({ ...r })));
+  }
+
+  function renderRows(section: 'give' | 'want') {
+    const rows = section === 'give' ? giveRows : wantRows;
+    const setSectionRows = section === 'give' ? setGiveRows : setWantRows;
+    const source = section === 'give' ? itemsOf : recipientItemsOf;
+    return rows.map((r, idx) => {
+      const opts = source[r.kind];
+      return (
+        <div key={idx} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+              <ItemPicker
+                compact
+                columns={3}
+                items={(['plant', 'product', 'ingredient'] as const).map((k) => ({ key: k, title: KIND_LABEL[k], emoji: KIND_EMOJI[k] }))}
+                value={r.kind}
+                onChange={(k) => setSectionRows(rows.map((x, i) => (i === idx ? { ...x, kind: k as RowForm['kind'], item_id: '' } : x)))}
+              />
+            </div>
+            {rows.length > 1 && (
+              <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => setSectionRows(rows.filter((_, i) => i !== idx))} aria-label="Удалить строку">🗑</button>
+            )}
+          </div>
+          <div style={{ marginTop: 6 }}>
+            {section === 'want' && !recipient ? (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Сначала выберите игрока выше.</div>
+            ) : opts.length === 0 ? (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{section === 'give' ? 'Нет таких предметов на складе.' : 'у игрока нет таких предметов'}</div>
+            ) : (
+              <ItemPicker
+                items={opts.map((it) => ({ key: String(it.item_id), title: it.name, image: it.image, emoji: it.emoji ?? KIND_EMOJI[r.kind], badge: section === 'give' ? `есть ${it.qty}` : `у него ${it.qty}` }))}
+                value={r.item_id || null}
+                onChange={(k) => setSectionRows(rows.map((x, i) => (i === idx ? { ...x, item_id: k } : x)))}
+              />
+            )}
+          </div>
+        </div>
+      );
+    });
   }
 
   return (
@@ -240,53 +288,15 @@ export default function TradesPage() {
           <label style={{ display: 'block', fontSize: 13, margin: '8px 0 2px' }}>Сообщение</label>
           <input className="fm-input" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Короткое сообщение…" />
 
-          <label style={{ display: 'block', fontSize: 13, margin: '10px 0 4px' }}>
-            Обмен (1 к 1): отдаёте 1 предмет — получаете 1 предмет
-          </label>
-          {rows.map((r, idx) => {
-            const isGive = r.direction === 'give';
-            const opts = isGive ? itemsOf[r.kind] : recipientItemsOf[r.kind];
-            return (
-              <div key={idx} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8 }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 120px', minWidth: 0 }}>
-                    <ItemPicker
-                      compact
-                      columns={2}
-                      items={[{ key: 'give', title: 'Отдаю', emoji: '📤' }, { key: 'want', title: 'Хочу', emoji: '📥' }]}
-                      value={r.direction}
-                      onChange={(k) => setRows(rows.map((x, i) => (i === idx ? { ...x, direction: k as 'give' | 'want', item_id: '' } : x)))}
-                    />
-                  </div>
-                  <div style={{ flex: '2 1 160px', minWidth: 0 }}>
-                    <ItemPicker
-                      compact
-                      columns={3}
-                      items={(['plant', 'product', 'ingredient'] as const).map((k) => ({ key: k, title: KIND_LABEL[k], emoji: KIND_EMOJI[k] }))}
-                      value={r.kind}
-                      onChange={(k) => setRows(rows.map((x, i) => (i === idx ? { ...x, kind: k as RowForm['kind'], item_id: '' } : x)))}
-                    />
-                  </div>
-                  {rows.length > 1 && (
-                    <button className="fm-btn fm-btn-xs fm-btn-danger" onClick={() => setRows(rows.filter((_, i) => i !== idx))} aria-label="Удалить строку">🗑</button>
-                  )}
-                </div>
-                <div style={{ marginTop: 6 }}>
-                  {opts.length === 0 ? (
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{isGive ? 'Нет таких предметов на складе.' : 'у игрока нет таких предметов'}</div>
-                  ) : (
-                    <ItemPicker
-                      items={opts.map((it) => ({ key: String(it.item_id), title: it.name, image: it.image, emoji: it.emoji ?? KIND_EMOJI[r.kind], badge: isGive ? `есть ${it.qty}` : `у него ${it.qty}` }))}
-                      value={r.item_id || null}
-                      onChange={(k) => setRows(rows.map((x, i) => (i === idx ? { ...x, item_id: k } : x)))}
-                    />
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-            <button className="fm-btn fm-btn-outline fm-btn-sm" onClick={() => setRows([...rows, { direction: 'give', kind: 'plant', item_id: '' }])}>➕ Ещё строка</button>
+          <div style={{ fontSize: 14, fontWeight: 600, margin: '12px 0 6px' }}>📤 Я отдаю</div>
+          {renderRows('give')}
+          <button className="fm-btn fm-btn-outline fm-btn-sm" onClick={() => setGiveRows([...giveRows, { kind: 'plant', item_id: '' }])}>➕ Добавить предмет</button>
+
+          <div style={{ fontSize: 14, fontWeight: 600, margin: '14px 0 6px' }}>📥 Хочу получить</div>
+          {renderRows('want')}
+          <button className="fm-btn fm-btn-outline fm-btn-sm" onClick={() => setWantRows([...wantRows, { kind: 'plant', item_id: '' }])}>➕ Добавить предмет</button>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             <button className="fm-btn fm-btn-sm" disabled={busy} onClick={submitOffer}>📨 Отправить предложение</button>
           </div>
         </div>

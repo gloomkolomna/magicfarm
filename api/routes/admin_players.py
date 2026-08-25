@@ -11,6 +11,7 @@ from deps import require_role
 from models import AllowedPlayer, Field, FieldCell, FieldPlant, Inventory, Plant, PlantBed, Plot, Production, StitchReport, Tent, TentBuild, User, UserDlcUnlock, UserPlantNorm
 from services.uploads import remove_upload
 from services.vk_names import resolve_vk_names
+from services.production_names import production_display_name
 
 router = APIRouter(prefix="/api/admin/players", tags=["admin-players"])
 
@@ -353,7 +354,7 @@ def get_player_detail(
         ],
         productions=[
             PlayerProductionOut(
-                id=pr.id, kind=pr.kind, name=pr.name, status=pr.status,
+                id=pr.id, kind=pr.kind, name=production_display_name(db, pr.kind, pr.name), status=pr.status,
                 accumulated=pr.accumulated or 0, required=pr.required or 0,
                 created_at=pr.created_at.isoformat() if pr.created_at else None,
             ) for pr in productions
@@ -438,6 +439,7 @@ class AdminFieldDetailOut(BaseModel):
     cols: int
     rows: int
     grid_color: str
+    field_kind: str | None = None
     created_at: str | None
     cells: list[AdminFieldCellOut]
     tents: list[AdminTentOut]
@@ -548,6 +550,7 @@ def get_player_field(
     return AdminFieldDetailOut(
         id=f.id, code=f.code, name=f.name, map_url=f.map_url,
         cols=f.cols, rows=f.rows, grid_color=f.grid_color,
+        field_kind=f.field_kind,
         created_at=f.created_at.isoformat() if f.created_at else None,
         cells=cells_out,
         tents=[_tent_out(t) for t in f.tents],
