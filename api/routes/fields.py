@@ -14,7 +14,7 @@ from routes.admin_fields import (
     _field_to_out, _get_field_or_404, _plant_to_out,
 )
 from routes.farm import PlotOut, _plot_to_out
-from routes.potions import CauldronOut, _cauldron_detail, _recipe_out, _unlocked_levels
+from routes.potions import CauldronOut, _cauldron_detail, _recipe_out, _unlocked_levels, brewery_field_lock_reason
 from routes.cocktails import (
     ShakerOut,
     _shaker_out as _cocktail_shaker_out,
@@ -31,7 +31,7 @@ router = APIRouter(prefix="/api/fields", tags=["fields"])
 
 
 class FieldListItem(FieldOut):
-    pass
+    locked_reason: str | None = None
 
 
 def _bonus_opens_field(f: Field, user: User) -> bool:
@@ -144,7 +144,13 @@ def list_fields(
     user: User = Depends(get_current_user),
 ):
     rows = db.query(Field).order_by(Field.id.asc()).all()
-    return [_field_to_out(f) for f in rows]
+    out = []
+    for f in rows:
+        item = FieldListItem(**_field_to_out(f).model_dump())
+        if f.field_kind == "brewery":
+            item.locked_reason = brewery_field_lock_reason(f, user, db)
+        out.append(item)
+    return out
 
 
 def _cell_detail(c: FieldCell, db: Session, user: User, plot: Plot | None = None) -> CellDetailOut:
@@ -289,11 +295,13 @@ def get_field(
 ):
     f = _get_field_or_404(field_id, db)
 
-    if f.field_kind == "brewery" and f.min_level is not None and (user.level or 0) < f.min_level:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Эта локация пока недоступна",
-        )
+    if f.field_kind == "brewery":
+        reason = brewery_field_lock_reason(f, user, db)
+        if reason is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=reason,
+            )
 
     if f.field_kind == "barnyard":
         from routes.barnyard import purge_ghost_slots

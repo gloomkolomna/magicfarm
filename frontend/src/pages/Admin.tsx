@@ -41,6 +41,22 @@ function toDateInputValue(iso: string | null): string {
   return d.toISOString().slice(0, 10);
 }
 
+function fmtDate(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z');
+  return d.toLocaleDateString('ru-RU');
+}
+
+const DLC_ICONS: Record<string, string> = {
+  infirmary: '🌲',
+  brewery: '🧪',
+};
+
+function trialEnded(iso: string | null): boolean {
+  if (!iso) return true;
+  return new Date(iso.endsWith('Z') ? iso : iso + 'Z') <= new Date();
+}
+
 const SURCHARGE_OPTIONS = [
   { value: '30', label: '30 монет' },
   { value: '35', label: '35 монет' },
@@ -2783,6 +2799,9 @@ export default function AdminPage() {
                               <th style={{ padding: '8px 12px', textAlign: 'right' }}>❎</th>
                               <th style={{ padding: '8px 12px', textAlign: 'right' }}>🪙</th>
                               <th style={{ padding: '8px 12px', textAlign: 'right' }}>📷</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left' }}>⏳ Триал до</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left' }}>💳 Подписка до</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left' }}>ДЛС</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2814,6 +2833,13 @@ export default function AdminPage() {
                                 <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.crosses_balance}</td>
                                 <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.coins}</td>
                                 <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.reports_total}</td>
+                                <td style={{ padding: '8px 12px' }}>{fmtDate(p.trial_until)}</td>
+                                <td style={{ padding: '8px 12px' }}>{trialEnded(p.trial_until) ? fmtDate(p.subscription_until) : '—'}</td>
+                                <td style={{ padding: '8px 12px' }}>
+                                  {p.subscription_dlc_codes?.length
+                                    ? p.subscription_dlc_codes.map((c) => DLC_ICONS[c] ?? c).join(' ')
+                                    : '—'}
+                                </td>
                               </tr>
                             ))}
                           </tbody>

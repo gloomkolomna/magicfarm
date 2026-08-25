@@ -123,15 +123,14 @@ def test_auto_detect_field_from_binding(admin_client):
         assert r.json()["field_id"] == fid
 
 
-def test_field_min_level_blocks_install(admin_client):
+def test_field_min_level_ignored_for_brewery(admin_client):
     fid = _create_brewery_field(admin_client, min_level=3)
     _bind_recipes(admin_client, fid, [1])
     with make_user_client(123, "player") as c:
         r = c.post("/api/potions/cauldrons", json={"recipe_id": 1, "field_id": fid})
-        assert r.status_code == 403
-        assert "недоступна" in r.json()["detail"]
+        assert r.status_code == 201, r.text
         r = c.post("/api/potions/cauldrons", json={"recipe_id": 1})
-        assert r.status_code == 403
+        assert r.status_code == 409
 
 
 def test_active_cauldron_only_in_own_field(admin_client):

@@ -693,6 +693,7 @@ export interface FieldInfo {
   min_level: number;
   field_kind: string | null;
   created_at: string | null;
+  locked_reason?: string | null;
 }
 
 export interface FieldCell {

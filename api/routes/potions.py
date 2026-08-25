@@ -161,12 +161,42 @@ class CreateCauldronRequest(BaseModel):
     field_id: int | None = None
 
 
-def _check_field_level_gate(field: Field, user: User) -> None:
-    if field.min_level is not None and (user.level or 0) < field.min_level:
+def _check_field_level_gate(field: Field, user: User, db: Session) -> None:
+    reason = brewery_field_lock_reason(field, user, db)
+    if reason is not None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Эта зельеварня пока недоступна",
+            detail=reason,
         )
+
+
+BREWERY_LEVEL_TITLES = {"green": "🟢 простые", "blue": "🔵 средние", "violet": "🟣 сложные"}
+
+
+def brewery_field_lock_reason(field: Field, user: User, db: Session) -> str | None:
+    """Почему зельеварня закрыта: пока не сварены все зелья предыдущего уровня.
+
+    None — открыта (в т.ч. для админов и полей без привязанных рецептов).
+    """
+    if user is not None and user.role == "admin":
+        return None
+    levels = {
+        r.level
+        for r in db.query(PotionRecipe)
+        .join(FieldPotionRecipe, FieldPotionRecipe.recipe_id == PotionRecipe.id)
+        .filter(FieldPotionRecipe.field_id == field.id)
+        .all()
+    }
+    if not levels:
+        return None
+    unlocked = _unlocked_levels(db, user)
+    for i, lv in enumerate(RECIPE_LEVEL_ORDER):
+        if lv in levels and lv not in unlocked:
+            if i == 0:
+                return "Сварите все зелья этого уровня, чтобы открыть зельеварню"
+            prev = RECIPE_LEVEL_ORDER[i - 1]
+            return f"Сварите все {BREWERY_LEVEL_TITLES.get(prev, prev)} зелья, чтобы открыть эту зельеварню"
+    return None
 
 
 def _resolve_cauldron_field(req: CreateCauldronRequest, recipe: PotionRecipe, user: User, db: Session) -> int | None:
@@ -185,7 +215,7 @@ def _resolve_cauldron_field(req: CreateCauldronRequest, recipe: PotionRecipe, us
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Это зелье не привязано к данной зельеварне",
             )
-        _check_field_level_gate(field, user)
+        _check_field_level_gate(field, user, db)
         return field.id
 
     binding = db.query(FieldPotionRecipe).filter(
@@ -195,7 +225,7 @@ def _resolve_cauldron_field(req: CreateCauldronRequest, recipe: PotionRecipe, us
         return None
     field = db.query(Field).filter(Field.id == binding.field_id).first()
     if field is not None:
-        _check_field_level_gate(field, user)
+        _check_field_level_gate(field, user, db)
     return binding.field_id
 
 

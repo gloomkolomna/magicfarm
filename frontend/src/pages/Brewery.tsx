@@ -31,11 +31,10 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 
 export default function BreweryHubPage() {
   const nav = useNavigate();
-  const { user, loading: sessionLoading } = useSession();
+  const { loading: sessionLoading } = useSession();
   const [fields, setFields] = useState<FieldInfo[]>([]);
   const [inactivePotions, setInactivePotions] = useState(0);
   const [loading, setLoading] = useState(true);
-  const userLevel = user?.level ?? 0;
 
   useEffect(() => {
     if (sessionLoading) return;
@@ -76,12 +75,12 @@ export default function BreweryHubPage() {
       ) : (
         <div className="fm-grid" style={{ marginBottom: 16 }}>
           {fields.map((f) => {
-            const locked = f.min_level > 0 && f.min_level > userLevel;
+            const locked = !!f.locked_reason;
             if (locked) {
               return (
                 <div key={f.id} className="fm-card" style={{ opacity: 0.5, textAlign: 'left' }}>
                   <strong style={{ fontSize: 13 }}>🔒 {f.name}</strong>
-                  <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>Откроется на уровне {f.min_level}</div>
+                  <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{f.locked_reason}</div>
                 </div>
               );
             }
