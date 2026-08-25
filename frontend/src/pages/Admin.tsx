@@ -2509,17 +2509,19 @@ export default function AdminPage() {
                         <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy} onClick={() => toggleDonorExempt(selectedPlayer.vk_id, !selectedPlayer.donor_exempt)}>
                           🎟 {selectedPlayer.donor_exempt ? 'Выключить обход' : 'Обход дон-гейта'}
                         </button>
-                        <button
-                          type="button"
-                          className={selectedPlayer.hidden ? 'fm-btn fm-btn-sm' : 'fm-btn fm-btn-sm fm-btn-outline'}
-                          disabled={busy}
-                          onClick={() => togglePlayerHidden(selectedPlayer.vk_id, !selectedPlayer.hidden)}
-                          title={selectedPlayer.hidden ? 'Показать игрока другим' : 'Скрыть игрока от других'}
-                        >
-                          👁 {selectedPlayer.hidden ? 'Показать игрокам' : 'Скрыть от игроков'}
-                        </button>
                       </div>
                     )}
+                    <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className={selectedPlayer.hidden ? 'fm-btn fm-btn-sm' : 'fm-btn fm-btn-sm fm-btn-outline'}
+                        disabled={busy}
+                        onClick={() => togglePlayerHidden(selectedPlayer.vk_id, !selectedPlayer.hidden)}
+                        title={selectedPlayer.hidden ? 'Показать игрока другим' : 'Скрыть игрока от других'}
+                      >
+                        👁 {selectedPlayer.hidden ? 'Показать игрокам' : 'Скрыть от игроков'}
+                      </button>
+                    </div>
                     <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                       <span>Дополнения:</span>
                       {Object.entries(LOCATION_TITLES).map(([code, title]) => {

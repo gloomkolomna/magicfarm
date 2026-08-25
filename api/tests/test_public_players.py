@@ -99,9 +99,24 @@ def test_admin_hidden_forbidden_for_player(player_client):
     assert player_client.post("/api/admin/players/123/hidden", json={"hidden": True}).status_code == 403
 
 
-def test_cannot_hide_admin(admin_client):
+def test_hide_admin_from_players(admin_client):
     r = admin_client.post("/api/admin/players/400977/hidden", json={"hidden": True})
-    assert r.status_code == 400
+    assert r.status_code == 200
+    assert r.json()["hidden"] is True
+
+    with make_user_client(123, "player") as c:
+        ids = [p["vk_id"] for p in c.get("/api/players/search", params={"q": ""}).json()]
+        assert 400977 not in ids
+        assert c.get("/api/players/400977/farm").status_code == 404
+
+    with make_user_client(795384, "admin") as c:
+        assert c.get("/api/players/400977/farm").status_code == 200
+
+    r2 = admin_client.post("/api/admin/players/400977/hidden", json={"hidden": False})
+    assert r2.status_code == 200
+    assert r2.json()["hidden"] is False
+    with make_user_client(123, "player") as c:
+        assert 400977 in [p["vk_id"] for p in c.get("/api/players/search", params={"q": ""}).json()]
 
 
 def test_farm_returns_read_only_snapshot(player_client):

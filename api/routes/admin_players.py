@@ -238,8 +238,6 @@ def set_player_hidden(
     target = db.query(User).filter(User.vk_id == vk_id).first()
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
-    if target.role == "admin":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нельзя скрыть администратора")
     target.hidden = bool(req.hidden)
     db.commit()
     db.refresh(target)
