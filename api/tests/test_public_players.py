@@ -1,5 +1,5 @@
 from tests.conftest import TestingSessionLocal, make_user_client
-from models import Field, FieldCell, Inventory, Plot, Product, User
+from models import Field, FieldCell, Inventory, Plant, Plot, Product, User
 
 
 def _add_user(vk_id, display_name=None, level=0, coins=0, crosses_total=0, status="active", hidden=False):
@@ -177,6 +177,26 @@ def test_farm_items_include_image(player_client):
     prods = res.json()["products"]
     assert len(prods) == 1
     assert prods[0]["image"] == "/uploads/prod_img.png"
+
+
+def test_farm_plant_image_uses_grown_stage(player_client):
+    _add_user(9016, display_name="Огород")
+    s = TestingSessionLocal()
+    try:
+        plant = Plant(code="img_plant_f", name="Стадийное растение", emoji="🌿",
+                      image_url="/uploads/base.png", image_grown_url="/uploads/grown.png",
+                      image_harvested_url="/uploads/harvested.png")
+        s.add(plant)
+        s.flush()
+        s.add(Inventory(user_id=9016, plant_id=plant.id, qty=3))
+        s.commit()
+    finally:
+        s.close()
+    res = player_client.get("/api/players/9016/farm")
+    assert res.status_code == 200
+    plants = res.json()["plants"]
+    assert len(plants) == 1
+    assert plants[0]["image"] == "/uploads/harvested.png"
 
 
 def test_player_field_public_requires_auth(client):

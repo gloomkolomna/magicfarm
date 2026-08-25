@@ -1,5 +1,5 @@
 from tests.conftest import TestingSessionLocal, make_user_client
-from models import Ingredient, Inventory, Product, User, UserIngredient
+from models import Ingredient, Inventory, Plant, Product, User, UserIngredient
 
 
 def _add_user(vk_id, hidden=False):
@@ -389,17 +389,26 @@ def test_trade_offer_items_include_image(player_client):
         s.flush()
         ing_id = ing.id
         s.add(UserIngredient(user_id=7010, ingredient_id=ing_id, qty=1))
+        plant = Plant(code="img_plant_t", name="Стадийное растение", emoji="🌿",
+                      image_url="/uploads/base.png", image_grown_url="/uploads/grown.png",
+                      image_harvested_url="/uploads/harvested.png")
+        s.add(plant)
+        s.flush()
+        plant_id = plant.id
+        s.add(Inventory(user_id=7010, plant_id=plant_id, qty=3))
         s.commit()
     finally:
         s.close()
 
     res = player_client.post("/api/trades", json=_offer_payload(7010, [
+        {"kind": "plant", "item_id": plant_id, "qty": 1, "direction": "want"},
         {"kind": "product", "item_id": prod_id, "qty": 1, "direction": "give"},
         {"kind": "product", "item_id": prod_id, "qty": 1, "direction": "want"},
         {"kind": "ingredient", "item_id": ing_id, "qty": 1, "direction": "want"},
     ]))
     assert res.status_code == 201, res.text
     by_kind = {(it["kind"], it["direction"]): it for it in res.json()["items"]}
+    assert by_kind[("plant", "want")]["item_image"] == "/uploads/harvested.png"
     assert by_kind[("product", "give")]["item_image"] == "/uploads/prod_img.png"
     assert by_kind[("product", "want")]["item_image"] == "/uploads/prod_img.png"
     assert by_kind[("ingredient", "want")]["item_image"] == "/uploads/ing_img.png"

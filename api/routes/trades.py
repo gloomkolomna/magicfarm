@@ -83,7 +83,8 @@ def _item_meta(db: Session, kind: str, item_id: int) -> tuple[str, str | None, s
     if kind == "plant":
         from models import Plant
         p = db.query(Plant).filter(Plant.id == item_id).first()
-        return (p.name if p else "?", p.emoji if p else None, p.image_url if p else None)
+        image = (p.image_harvested_url or p.image_grown_url or p.image_url) if p else None
+        return (p.name if p else "?", p.emoji if p else None, image)
     if kind == "product":
         from models import Product
         p = db.query(Product).filter(Product.id == item_id).first()

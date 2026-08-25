@@ -303,7 +303,9 @@ def get_player_farm(
             for pr in productions
         ],
         plants=[
-            FarmItemOut(item_id=i.plant.id, name=i.plant.name, emoji=i.plant.emoji, image=i.plant.image_url, qty=i.qty or 0)
+            FarmItemOut(item_id=i.plant.id, name=i.plant.name, emoji=i.plant.emoji,
+                        image=i.plant.image_harvested_url or i.plant.image_grown_url or i.plant.image_url,
+                        qty=i.qty or 0)
             for i in plants
         ],
         products=[
