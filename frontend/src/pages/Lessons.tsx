@@ -27,7 +27,7 @@ export default function LessonsPage() {
 
   return (
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: '8px 6px' }}>
-      <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>🎬 Видео-уроки</h1>
+      <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>🎬 Видеоуроки</h1>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
         {LESSON_CATEGORIES.map((c) => (
           <button

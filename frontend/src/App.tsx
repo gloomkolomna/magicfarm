@@ -68,6 +68,7 @@ const DlcStoryGate = lazyPage(() =>
   import('./pages/Prehistory').then((m) => ({ default: m.DlcStoryGate as unknown as ComponentType })),
 ) as unknown as ComponentType<{ locationCode: string; name: string; emoji: string; children: ReactNode }>;
 const LessonsPage = lazyPage(() => import('./pages/Lessons'));
+const RulesPage = lazyPage(() => import('./pages/Rules'));
 const FarmsPage = lazyPage(() => import('./pages/Farms'));
 const TradesPage = lazyPage(() => import('./pages/Trades'));
 const ChatPage = lazyPage(() => import('./pages/Chat'));
@@ -283,6 +284,7 @@ function App() {
           <Route path="/achievements" element={<MiniAppShell><AchievementsPage /></MiniAppShell>} />
           <Route path="/story" element={<MiniAppShell><PrehistoryPage /></MiniAppShell>} />
           <Route path="/lessons" element={<MiniAppShell><LessonsPage /></MiniAppShell>} />
+          <Route path="/rules" element={<MiniAppShell><RulesPage /></MiniAppShell>} />
           <Route path="/farms" element={<MiniAppShell><FarmsPage /></MiniAppShell>} />
           <Route path="/trades" element={<MiniAppShell><TradesPage /></MiniAppShell>} />
           <Route path="/chat" element={<MiniAppShell><ChatPage /></MiniAppShell>} />

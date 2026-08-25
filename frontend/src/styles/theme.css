@@ -278,6 +278,99 @@ button.fm-card {
 }
 .fm-pop { animation: fm-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
+/* ── Правила (Markdown) ── */
+.fm-rules {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.fm-rules h1,
+.fm-rules h2 {
+  font-family: var(--font-display);
+  color: var(--flax-light);
+  line-height: 1.3;
+  margin: 28px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.fm-rules h1 { font-size: 24px; }
+.fm-rules h2 { font-size: 20px; }
+.fm-rules h3 {
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--flax);
+  margin: 22px 0 8px;
+}
+.fm-rules h4 { font-size: 15px; margin: 16px 0 6px; color: var(--text-primary); }
+.fm-rules p { margin: 0 0 12px; }
+.fm-rules strong { color: var(--text-primary); }
+.fm-rules em { color: var(--text-primary); }
+.fm-rules a { color: var(--accent); }
+.fm-rules ul,
+.fm-rules ol { padding-left: 22px; margin: 0 0 12px; }
+.fm-rules li { margin: 0 0 6px; }
+.fm-rules code {
+  font-family: 'Fira Code', 'Courier New', monospace;
+  background: var(--surface-strong);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.fm-rules pre {
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 0 0 14px;
+}
+.fm-rules pre code { background: none; padding: 0; }
+.fm-rules blockquote {
+  border-left: 3px solid var(--leaf);
+  background: var(--surface);
+  padding: 12px 16px;
+  margin: 14px 0;
+  color: var(--text-muted);
+  font-style: italic;
+  border-radius: 0 8px 8px 0;
+}
+.fm-rules blockquote p { margin: 0 0 8px; }
+.fm-rules blockquote p:last-child { margin: 0; }
+.fm-rules hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+.fm-rules table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 14px;
+  font-size: 14px;
+}
+.fm-rules th,
+.fm-rules td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; }
+.fm-rules th {
+  background: var(--surface-strong);
+  color: var(--flax);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+.fm-rules .toc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+.fm-rules .toc-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--flax);
+  margin-bottom: 8px;
+}
+.fm-rules .toc ol { padding-left: 20px; margin: 0; }
+.fm-rules .toc li { padding: 2px 0; }
+.fm-rules .toc a { color: var(--accent); text-decoration: none; font-size: 14px; }
+
 /* ── Спиннер загрузки ── */
 @keyframes fm-spin {
   to { transform: rotate(360deg); }
