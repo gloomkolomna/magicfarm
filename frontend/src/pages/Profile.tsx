@@ -176,6 +176,9 @@ export default function ProfilePage() {
       )}
 
       <h2>📷 Дневник вышивки</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
+        Фото отчётов хранятся 30 дней, после чего автоматически удаляются.
+      </p>
       <select className="fm-input" style={{ marginBottom: 10, width: '100%' }} value={filter} onChange={(e) => setFilter(e.target.value)}>
         <option value="">Все отчёты</option>
         <option value="plant_grow">🌱 Выращивание</option>
