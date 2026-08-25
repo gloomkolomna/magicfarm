@@ -276,6 +276,7 @@ export interface FarmItem {
   item_id: number;
   name: string;
   emoji: string | null;
+  image?: string | null;
   qty: number;
 }
 
@@ -323,6 +324,7 @@ export interface TradeOfferItem {
   item_id: number;
   item_name: string;
   item_emoji: string | null;
+  item_image: string | null;
   qty: number;
   direction: string;
   reserved?: boolean;

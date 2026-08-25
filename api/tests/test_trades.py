@@ -1,5 +1,5 @@
 from tests.conftest import TestingSessionLocal, make_user_client
-from models import Ingredient, Inventory, User, UserIngredient
+from models import Ingredient, Inventory, Product, User, UserIngredient
 
 
 def _add_user(vk_id, hidden=False):
@@ -371,3 +371,35 @@ def test_create_trade_message_too_long(player_client):
         ))
         assert r.status_code == 400
         assert "символов" in r.json()["detail"]
+
+
+def test_trade_offer_items_include_image(player_client):
+    _add_user(7010)
+    s = TestingSessionLocal()
+    try:
+        prod = Product(code="img_prod_t", name="Картинный товар", emoji="📦",
+                       image_url="/uploads/prod_img.png", stars=1, production_kind="alchemy")
+        s.add(prod)
+        s.flush()
+        prod_id = prod.id
+        s.add(Inventory(user_id=7010, product_id=prod_id, qty=2))
+        s.add(Inventory(user_id=123, product_id=prod_id, qty=5))
+        ing = Ingredient(code="img_ing_t", name="Картинный ингредиент", image_url="/uploads/ing_img.png")
+        s.add(ing)
+        s.flush()
+        ing_id = ing.id
+        s.add(UserIngredient(user_id=7010, ingredient_id=ing_id, qty=1))
+        s.commit()
+    finally:
+        s.close()
+
+    res = player_client.post("/api/trades", json=_offer_payload(7010, [
+        {"kind": "product", "item_id": prod_id, "qty": 1, "direction": "give"},
+        {"kind": "product", "item_id": prod_id, "qty": 1, "direction": "want"},
+        {"kind": "ingredient", "item_id": ing_id, "qty": 1, "direction": "want"},
+    ]))
+    assert res.status_code == 201, res.text
+    by_kind = {(it["kind"], it["direction"]): it for it in res.json()["items"]}
+    assert by_kind[("product", "give")]["item_image"] == "/uploads/prod_img.png"
+    assert by_kind[("product", "want")]["item_image"] == "/uploads/prod_img.png"
+    assert by_kind[("ingredient", "want")]["item_image"] == "/uploads/ing_img.png"

@@ -49,6 +49,7 @@ class FarmItemOut(BaseModel):
     item_id: int
     name: str
     emoji: str | None
+    image: str | None = None
     qty: int
 
 
@@ -302,15 +303,15 @@ def get_player_farm(
             for pr in productions
         ],
         plants=[
-            FarmItemOut(item_id=i.plant.id, name=i.plant.name, emoji=i.plant.emoji, qty=i.qty or 0)
+            FarmItemOut(item_id=i.plant.id, name=i.plant.name, emoji=i.plant.emoji, image=i.plant.image_url, qty=i.qty or 0)
             for i in plants
         ],
         products=[
-            FarmItemOut(item_id=i.product.id, name=i.product.name, emoji=i.product.emoji, qty=i.qty or 0)
+            FarmItemOut(item_id=i.product.id, name=i.product.name, emoji=i.product.emoji, image=i.product.image_url, qty=i.qty or 0)
             for i in products
         ],
         ingredients=[
-            FarmItemOut(item_id=i.ingredient.id, name=i.ingredient.name, emoji=None, qty=i.qty or 0)
+            FarmItemOut(item_id=i.ingredient.id, name=i.ingredient.name, emoji=None, image=i.ingredient.image_url, qty=i.qty or 0)
             for i in ingredients
         ],
         pets=[

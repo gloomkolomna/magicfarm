@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSession } from '../context/SessionContext';
 import { api, type PlayerSearchItem, type TradeOffer, type TradeItemIn } from '../api/endpoints';
+import { mediaUrl } from '../api/media';
 import { confirmDialog } from '../components/Confirm';
 import ItemPicker from '../components/ItemPicker';
 import Toast from '../components/Toast';
@@ -27,18 +28,28 @@ const KIND_EMOJI: Record<string, string> = { plant: '🌿', product: '📦', ing
 function TradeItems({ items, isMine }: { items: TradeOffer['items']; isMine: boolean }) {
   const give = items.filter((i) => i.direction === 'give');
   const want = items.filter((i) => i.direction === 'want');
+  const chip = (i: TradeOffer['items'][number], reserved?: boolean) => (
+    <span key={i.id} className="fm-chip">
+      {i.item_image ? (
+        <img src={mediaUrl(i.item_image)} alt="" style={{ height: 18, width: 'auto', verticalAlign: 'middle', marginRight: 4, borderRadius: 3 }} />
+      ) : (
+        <span style={{ marginRight: 4 }}>{i.item_emoji || '📦'}</span>
+      )}
+      {i.item_name}{reserved ? ' 🔒' : ''}
+    </span>
+  );
   return (
     <div style={{ fontSize: 13 }}>
       {give.length > 0 && (
         <div style={{ marginBottom: 4 }}>
           <strong style={{ fontSize: 12, color: 'var(--text-muted)' }}>{isMine ? 'Я отдаю' : 'Отдаёт'}:</strong>
-          <div style={{ marginTop: 2 }}>{give.map((i) => <span key={i.id} className="fm-chip">{i.item_emoji || '📦'} {i.item_name}{i.reserved ? ' 🔒' : ''}</span>)}</div>
+          <div style={{ marginTop: 2 }}>{give.map((i) => chip(i, i.reserved))}</div>
         </div>
       )}
       {want.length > 0 && (
         <div>
           <strong style={{ fontSize: 12, color: 'var(--text-muted)' }}>{isMine ? 'Хочу получить' : 'Просит взамен'}:</strong>
-          <div style={{ marginTop: 2 }}>{want.map((i) => <span key={i.id} className="fm-chip">{i.item_emoji || '📦'} {i.item_name}</span>)}</div>
+          <div style={{ marginTop: 2 }}>{want.map((i) => chip(i))}</div>
         </div>
       )}
     </div>
@@ -53,11 +64,11 @@ function buildItems(inv: { item_kind: string; item_id: number; item_name: string
   ].filter((i) => i.qty > 0);
 }
 
-function buildItemsFromFarm(farm: { plants: { item_id: number; name: string; emoji: string | null; qty: number }[]; products: { item_id: number; name: string; emoji: string | null; qty: number }[]; ingredients: { item_id: number; name: string; qty: number }[] }): AvailItem[] {
+function buildItemsFromFarm(farm: { plants: { item_id: number; name: string; emoji: string | null; image?: string | null; qty: number }[]; products: { item_id: number; name: string; emoji: string | null; image?: string | null; qty: number }[]; ingredients: { item_id: number; name: string; image?: string | null; qty: number }[] }): AvailItem[] {
   return [
-    ...farm.plants.map((i) => ({ kind: 'plant' as const, item_id: i.item_id, name: i.name, emoji: i.emoji, image: null, qty: i.qty })),
-    ...farm.products.map((i) => ({ kind: 'product' as const, item_id: i.item_id, name: i.name, emoji: i.emoji, image: null, qty: i.qty })),
-    ...farm.ingredients.map((i) => ({ kind: 'ingredient' as const, item_id: i.item_id, name: i.name, emoji: null, image: null, qty: i.qty })),
+    ...farm.plants.map((i) => ({ kind: 'plant' as const, item_id: i.item_id, name: i.name, emoji: i.emoji, image: i.image ?? null, qty: i.qty })),
+    ...farm.products.map((i) => ({ kind: 'product' as const, item_id: i.item_id, name: i.name, emoji: i.emoji, image: i.image ?? null, qty: i.qty })),
+    ...farm.ingredients.map((i) => ({ kind: 'ingredient' as const, item_id: i.item_id, name: i.name, emoji: null, image: i.image ?? null, qty: i.qty })),
   ].filter((i) => i.qty > 0);
 }
 

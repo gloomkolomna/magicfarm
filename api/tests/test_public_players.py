@@ -1,5 +1,5 @@
 from tests.conftest import TestingSessionLocal, make_user_client
-from models import Field, FieldCell, Inventory, Plot, User
+from models import Field, FieldCell, Inventory, Plot, Product, User
 
 
 def _add_user(vk_id, display_name=None, level=0, coins=0, crosses_total=0, status="active", hidden=False):
@@ -158,6 +158,25 @@ def test_farm_unknown_player_404(player_client):
 def test_farm_blocked_user_404(player_client):
     _add_user(9006, display_name="Блок", status="blocked")
     assert player_client.get("/api/players/9006/farm").status_code == 404
+
+
+def test_farm_items_include_image(player_client):
+    _add_user(9014, display_name="Склад")
+    s = TestingSessionLocal()
+    try:
+        prod = Product(code="img_prod_f", name="Картинный товар", emoji="📦",
+                       image_url="/uploads/prod_img.png", stars=1, production_kind="alchemy")
+        s.add(prod)
+        s.flush()
+        s.add(Inventory(user_id=9014, product_id=prod.id, qty=2))
+        s.commit()
+    finally:
+        s.close()
+    res = player_client.get("/api/players/9014/farm")
+    assert res.status_code == 200
+    prods = res.json()["products"]
+    assert len(prods) == 1
+    assert prods[0]["image"] == "/uploads/prod_img.png"
 
 
 def test_player_field_public_requires_auth(client):

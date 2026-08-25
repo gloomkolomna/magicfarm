@@ -41,6 +41,7 @@ class TradeItemOut(BaseModel):
     item_id: int
     item_name: str
     item_emoji: str | None
+    item_image: str | None = None
     qty: int
     direction: str
     reserved: bool = False
@@ -78,18 +79,18 @@ def _stock_qty(db: Session, user_id: int, kind: str, item_id: int) -> int:
     return row.qty if row is not None else 0
 
 
-def _item_meta(db: Session, kind: str, item_id: int) -> tuple[str, str | None]:
+def _item_meta(db: Session, kind: str, item_id: int) -> tuple[str, str | None, str | None]:
     if kind == "plant":
         from models import Plant
         p = db.query(Plant).filter(Plant.id == item_id).first()
-        return (p.name if p else "?", p.emoji if p else None)
+        return (p.name if p else "?", p.emoji if p else None, p.image_url if p else None)
     if kind == "product":
         from models import Product
         p = db.query(Product).filter(Product.id == item_id).first()
-        return (p.name if p else "?", p.emoji if p else None)
+        return (p.name if p else "?", p.emoji if p else None, p.image_url if p else None)
     from models import Ingredient
     ing = db.query(Ingredient).filter(Ingredient.id == item_id).first()
-    return (ing.name if ing else "?", None)
+    return (ing.name if ing else "?", None, ing.image_url if ing else None)
 
 
 def _user_name(db: Session, user: User) -> str:
@@ -101,10 +102,10 @@ def _offer_out(db: Session, offer: TradeOffer) -> TradeOfferOut:
     to = db.query(User).filter(User.vk_id == offer.to_user_id).first()
     items = []
     for it in offer.items:
-        name, emoji = _item_meta(db, it.kind, it.item_id)
+        name, emoji, image = _item_meta(db, it.kind, it.item_id)
         items.append(TradeItemOut(
             id=it.id, kind=it.kind, item_id=it.item_id,
-            item_name=name, item_emoji=emoji,
+            item_name=name, item_emoji=emoji, item_image=image,
             qty=it.qty, direction=it.direction,
             reserved=offer.status == "open" and it.direction == "give",
         ))
