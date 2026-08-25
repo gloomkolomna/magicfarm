@@ -285,6 +285,12 @@ button.fm-card {
   color: var(--text-secondary);
   overflow-wrap: break-word;
   word-break: break-word;
+  background: linear-gradient(180deg, rgba(10,16,8,0.60) 0%, rgba(10,16,8,0.48) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .fm-rules h1,
 .fm-rules h2 {
