@@ -22,6 +22,15 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
     return g;
   })();
 
+  const petZoneCellIds = new Set<number>();
+  (field.pet_zones ?? []).forEach((z) => {
+    field.cells.forEach((c) => {
+      if (c.kind === 'pet' && c.col >= z.col1 && c.col <= z.col2 && c.row >= z.row1 && c.row <= z.row2) {
+        petZoneCellIds.add(c.id);
+      }
+    });
+  });
+
   const KIND_FILL: Record<string, string> = {
     empty: 'transparent',
     tent: 'rgba(224,168,62,0.15)',
@@ -53,22 +62,85 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
                   style={{
                     border: noGrid ? 'none' : `1px solid ${field.grid_color || 'rgba(255,255,255,0.08)'}`,
                     background: fill,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-                    position: 'relative',
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    overflow: 'hidden', position: 'relative', padding: 2,
                     cursor: cell?.plot && playerVkId ? 'pointer' : 'default',
                   }}
                 >
-                  {cell?.kind === 'bed' && cell.occupant_user_id != null && cell.plant_image_grown && cell.plot?.status === 'grown' && (
-                    <img src={mediaUrl(cell.plant_image_grown)} alt="" style={{ width: '85%', height: '85%', objectFit: 'contain', opacity: 0.9 }} />
+                  {cell?.kind === 'bed' && cell.occupant_user_id != null && (
+                    <>
+                      {(() => {
+                        const grownImg = (cell.plot?.status === 'grown' || cell.plot?.status === 'await_replant') ? cell.plant_image_grown : cell.plant_image_young;
+                        return grownImg ? (
+                          <img src={mediaUrl(grownImg)} alt="" style={{ maxWidth: '90%', maxHeight: '80%', objectFit: 'contain', pointerEvents: 'none' }} />
+                        ) : (
+                          <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.plant_emoji}</div>
+                        );
+                      })()}
+                      {cell.plot && (
+                        <div style={{ flexShrink: 0, fontSize: 11, color: '#fff', pointerEvents: 'none', fontWeight: 600, background: 'rgba(10,16,8,0.6)', borderRadius: 6, padding: '3px 6px', maxWidth: '94%', textAlign: 'center', lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'anywhere', marginBottom: 1 }}>
+                          {cell.plot.required > 0 && (cell.plot.norm_revealed || !cell.plot.drawn_cards_json) ? `❎ ${cell.plot.norm_per_unit ?? cell.plot.required}/шт` : cell.plot.plant_name}
+                        </div>
+                      )}
+                      {cell.plot && (
+                        <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 13, color: '#7fff7f', pointerEvents: 'none', background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', lineHeight: 1.2 }}>
+                          {cell.plot.status === 'grown' ? '✓' : cell.plot.status === 'await_replant' ? '🔁' : ''}
+                        </div>
+                      )}
+                      {cell.plot && (
+                        <div style={{ position: 'absolute', top: 2, left: 3, fontSize: 11, color: '#fff', pointerEvents: 'none', fontWeight: 700, background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', lineHeight: 1.4 }}>
+                          ×{cell.plot.qty}
+                        </div>
+                      )}
+                    </>
                   )}
-                  {cell?.kind === 'bed' && cell.occupant_user_id != null && cell.plant_image_young && cell.plot?.status === 'planted' && (
-                    <img src={mediaUrl(cell.plant_image_young)} alt="" style={{ width: '60%', height: '60%', objectFit: 'contain', opacity: 0.7 }} />
-                  )}
-                  {cell?.kind === 'pet' && (
-                    <div style={{ fontSize: '3vw', opacity: 0.5 }}>🐾</div>
+                  {cell?.kind === 'pet' && !petZoneCellIds.has(cell.id) && (
+                    cell.pet?.pet_id ? (
+                      <>
+                        {cell.pet.pet_image_url ? (
+                          <img src={mediaUrl(cell.pet.pet_image_url)} alt="" style={{ maxWidth: '88%', maxHeight: '82%', objectFit: 'contain', pointerEvents: 'none' }} />
+                        ) : (
+                          <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.pet.pet_emoji || '🐾'}</div>
+                        )}
+                        <div style={{ fontSize: 9, color: '#fff', pointerEvents: 'none', background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '94%' }}>
+                          {cell.pet.pet_name}
+                        </div>
+                      </>
+                    ) : (
+                      !noGrid && <div style={{ fontSize: '3vw', opacity: 0.5 }}>🐾</div>
+                    )
                   )}
                   {cell?.kind === 'barnyard' && (
-                    <div style={{ fontSize: '3vw', opacity: 0.5 }}>🐄</div>
+                    cell.barnyard ? (
+                      <>
+                        {cell.barnyard.status === 'ready' ? (
+                          cell.barnyard.image_pen_url ? (
+                            <img src={mediaUrl(cell.barnyard.image_pen_url)} alt="" style={{ maxWidth: '92%', maxHeight: '85%', objectFit: 'contain', pointerEvents: 'none' }} />
+                          ) : (
+                            <div style={{ fontSize: '3vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.barnyard.animal_emoji || '🐄'}</div>
+                          )
+                        ) : (
+                          cell.barnyard.image_empty_pen_url ? (
+                            <img src={mediaUrl(cell.barnyard.image_empty_pen_url)} alt="" style={{ maxWidth: '92%', maxHeight: '85%', objectFit: 'contain', pointerEvents: 'none', opacity: 0.75 }} />
+                          ) : (
+                            <div style={{ fontSize: '3vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🏚️</div>
+                          )
+                        )}
+                        {cell.barnyard.status === 'building' && (
+                          <div style={{ fontSize: 10, color: '#ffd98a', pointerEvents: 'none', background: 'rgba(10,16,8,0.5)', borderRadius: 6, padding: '0 4px', marginTop: 2 }}>
+                            {cell.barnyard.accumulated}/{cell.barnyard.required} ❎
+                          </div>
+                        )}
+                        {cell.barnyard.status === 'ready' && cell.barnyard.animal_name && (
+                          <div style={{ fontSize: 11, color: '#fff', pointerEvents: 'none', background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', marginTop: 2, maxWidth: '94%', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {cell.barnyard.animal_emoji ? `${cell.barnyard.animal_emoji} ` : ''}{cell.barnyard.animal_name}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      !noGrid && <div style={{ fontSize: '3vw', opacity: 0.5 }}>🐄</div>
+                    )
                   )}
                 </div>
               );
@@ -108,9 +180,9 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
                 gridColumn: `${z.col1 + 1} / span ${spanCols}`,
                 gridRow: `${z.row1 + 1} / span ${spanRows}`,
                 position: 'relative', overflow: 'hidden',
-                border: hasPet ? 'none' : '2px dashed rgba(200,130,220,0.75)',
+                border: hasPet ? 'none' : noGrid ? 'none' : '2px dashed rgba(200,130,220,0.75)',
                 borderRadius: 6,
-                background: hasPet ? 'transparent' : 'rgba(200,130,220,0.12)',
+                background: hasPet ? 'transparent' : noGrid ? 'transparent' : 'rgba(200,130,220,0.12)',
               }}>
                 {hasPet && z.pet_image_url && (
                   <img src={mediaUrl(z.pet_image_url)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
@@ -120,7 +192,7 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
                     {z.pet_name}
                   </div>
                 )}
-                {!hasPet && (
+                {!hasPet && !noGrid && (
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(14px,3vw,28px)', lineHeight: 1, pointerEvents: 'none', opacity: 0.85 }}>
                     🐾
                   </div>

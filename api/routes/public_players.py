@@ -14,6 +14,7 @@ from models import (
 from routes.admin_players import (
     AdminFieldCellOut, AdminFieldDetailOut, AdminTentOut, PlayerPlotOut,
 )
+from routes.fields import BarnyardCellOut, PetCellOut
 from services.production_names import production_display_name
 
 router = APIRouter(prefix="/api/players", tags=["players"])
@@ -348,6 +349,24 @@ def get_player_field(
                 Plot.user_id == vk_id, Plot.cell_id.in_(cell_ids)
             ).all()
         }
+    barnyard_cell_ids = [c.id for c in f.cells if c.kind == "barnyard"]
+    slots_by_cell: dict[int, BarnyardSlot] = {}
+    if barnyard_cell_ids:
+        slots_by_cell = {
+            s.cell_id: s
+            for s in db.query(BarnyardSlot).filter(
+                BarnyardSlot.user_id == vk_id, BarnyardSlot.cell_id.in_(barnyard_cell_ids)
+            ).all()
+        }
+    pet_cell_ids = [c.id for c in f.cells if c.kind == "pet"]
+    pets_by_cell: dict[int, UserPet] = {}
+    if pet_cell_ids:
+        pets_by_cell = {
+            up.cell_id: up
+            for up in db.query(UserPet).filter(
+                UserPet.user_id == vk_id, UserPet.cell_id.in_(pet_cell_ids)
+            ).all()
+        }
     tent_ids = [t.id for t in f.tents]
     builds_by_tent: dict[int, TentBuild] = {}
     if tent_ids:
@@ -365,6 +384,8 @@ def get_player_field(
         plant_id = None
         plant_name = plant_emoji = None
         plant_image_young = plant_image_grown = plant_image_harvested = None
+        barnyard_out = None
+        pet_out = None
         p = plots_by_cell.get(c.id) if c.kind == "bed" else None
         if p is not None:
             occupant_user_id = vk_id
@@ -378,11 +399,35 @@ def get_player_field(
                 id=p.id, plant_id=p.plant_id, plant_name=p.plant.name,
                 plant_emoji=p.plant.emoji, qty=p.qty or 0, status=p.status,
                 accumulated=p.accumulated or 0, required=p.required or 0,
+                norm_per_unit=(round((p.required or 0) / p.qty) if p.qty else (p.required or 0)),
                 crystal_color=p.crystal_color, crystal_count=p.crystal_count,
+                drawn_cards_json=p.drawn_cards_json,
+                norm_revealed=p.norm_revealed,
                 cell_id=p.cell_id,
                 created_at=p.created_at.isoformat() if p.created_at else None,
                 completed_at=p.completed_at.isoformat() if p.completed_at else None,
             )
+        if c.kind == "barnyard":
+            slot = slots_by_cell.get(c.id)
+            if slot is not None:
+                barnyard_out = BarnyardCellOut(
+                    slot_id=slot.id, animal_id=slot.animal_id,
+                    animal_name=slot.animal.name if slot.animal else None,
+                    animal_emoji=slot.animal.emoji if slot.animal else None,
+                    status=slot.status, accumulated=slot.accumulated,
+                    required=slot.required,
+                    opening_order=slot.opening_order,
+                    image_empty_pen_url=slot.animal.image_empty_pen_url if slot.animal else None,
+                    image_pen_url=slot.animal.image_pen_url if slot.animal else None,
+                )
+        if c.kind == "pet":
+            up = pets_by_cell.get(c.id)
+            if up is not None and up.pet is not None:
+                pet_out = PetCellOut(
+                    pet_id=up.pet_id, pet_name=up.pet.name,
+                    pet_emoji=up.pet.emoji, pet_image_url=up.pet.image_url,
+                    bonus_description=up.pet.bonus_description,
+                )
         tent_name = tent_image = None
         if c.tent_id is not None and c.kind == "tent":
             t = db.query(Tent).filter(Tent.id == c.tent_id).first()
@@ -396,6 +441,7 @@ def get_player_field(
             plant_image_young=plant_image_young, plant_image_grown=plant_image_grown,
             plant_image_harvested=plant_image_harvested,
             plot=plot_out, tent_name=tent_name, tent_image=tent_image,
+            barnyard=barnyard_out, pet=pet_out,
         ))
 
     def _tent_out(t: Tent) -> AdminTentOut:

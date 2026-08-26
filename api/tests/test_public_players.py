@@ -1,5 +1,5 @@
 from tests.conftest import TestingSessionLocal, make_user_client
-from models import Field, FieldCell, Inventory, Plant, Plot, Product, User
+from models import BarnyardSlot, Field, FieldCell, Inventory, Plant, Plot, Product, User, UserPet
 
 
 def _add_user(vk_id, display_name=None, level=0, coins=0, crosses_total=0, status="active", hidden=False):
@@ -228,6 +228,9 @@ def test_player_field_returns_plots(player_client):
     assert beds[0]["plot"]["plant_name"] == "Джекобоб"
     assert beds[0]["plot"]["accumulated"] == 10
     assert beds[0]["plot"]["required"] == 100
+    assert beds[0]["plot"]["norm_per_unit"] == 100
+    assert beds[0]["plot"]["norm_revealed"] is False
+    assert beds[0]["plot"]["drawn_cards_json"] is None
 
 
 def test_player_field_404(player_client):
@@ -286,6 +289,36 @@ def test_player_field_includes_pets(player_client):
     assert zones[0]["pet_id"] is not None
     assert zones[0]["pet_name"] == "Енот"
     assert zones[0]["pet_emoji"] == "🦝"
+
+
+def test_player_field_includes_barnyard_and_pet(player_client):
+    from models import BarnyardSlot
+
+    _add_user(9018, display_name="Скот")
+    s = TestingSessionLocal()
+    try:
+        fld = Field(code="test_by", name="Двор", cols=4, rows=2, grid_color="#2a1a0e")
+        s.add(fld)
+        s.flush()
+        cell_by = FieldCell(field_id=fld.id, col=0, row=0, kind="barnyard")
+        cell_pet = FieldCell(field_id=fld.id, col=1, row=0, kind="pet")
+        s.add_all([cell_by, cell_pet])
+        s.flush()
+        s.add(BarnyardSlot(user_id=9018, cell_id=cell_by.id, animal_id=1, status="ready",
+                           accumulated=0, required=0, opening_order=1))
+        s.add(UserPet(user_id=9018, pet_id=1, cell_id=cell_pet.id))
+        s.commit()
+        fld_id = fld.id
+    finally:
+        s.close()
+    res = player_client.get(f"/api/players/9018/fields/{fld_id}")
+    assert res.status_code == 200
+    cells = res.json()["cells"]
+    barn = next(c for c in cells if c["kind"] == "barnyard")
+    assert barn["barnyard"]["animal_name"] == "Ватная овечка"
+    assert barn["barnyard"]["status"] == "ready"
+    pet = next(c for c in cells if c["kind"] == "pet")
+    assert pet["pet"]["pet_name"] == "Дракон Эфир"
 
 
 def test_farm_fields_includes_only_active_patient_scene(player_client):
