@@ -16,6 +16,7 @@ class NotificationOut(BaseModel):
     id: int
     text: str
     peer_vk_id: int | None = None
+    kind: str | None = None
     created_at: str
     read: bool
 
@@ -30,14 +31,14 @@ class OkOut(BaseModel):
 
 def _notif_out(n: Notification) -> NotificationOut:
     return NotificationOut(
-        id=n.id, text=n.text, peer_vk_id=n.peer_vk_id,
+        id=n.id, text=n.text, peer_vk_id=n.peer_vk_id, kind=n.kind,
         created_at=n.created_at.isoformat() if n.created_at else "",
         read=n.read_at is not None,
     )
 
 
-def notify(db: Session, user_id: int, text: str, peer_vk_id: int | None = None) -> None:
-    db.add(Notification(user_id=user_id, text=text, peer_vk_id=peer_vk_id))
+def notify(db: Session, user_id: int, text: str, peer_vk_id: int | None = None, kind: str | None = None) -> None:
+    db.add(Notification(user_id=user_id, text=text, peer_vk_id=peer_vk_id, kind=kind))
 
 
 @router.get("", response_model=list[NotificationOut])

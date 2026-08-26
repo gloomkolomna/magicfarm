@@ -369,6 +369,7 @@ export interface Notification {
   id: number;
   text: string;
   peer_vk_id?: number | null;
+  kind?: string | null;
   created_at: string;
   read: boolean;
 }

@@ -108,6 +108,7 @@ def test_trade_accept_notifies_offerer():
         assert len(notifs) == 1
         assert "принял" in notifs[0]["text"]
         assert notifs[0]["peer_vk_id"] == 7002
+        assert notifs[0]["kind"] == "trades"
 
 
 def test_gift_notifies_with_peer():
@@ -120,6 +121,7 @@ def test_gift_notifies_with_peer():
         assert len(notifs) == 1
         assert "подарок" in notifs[0]["text"]
         assert notifs[0]["peer_vk_id"] == 123
+        assert notifs[0]["kind"] is None
 
 
 def test_trade_reject_notifies_offerer():
@@ -137,6 +139,7 @@ def test_trade_reject_notifies_offerer():
         notifs = a.get("/api/notifications").json()
         assert len(notifs) == 1
         assert "отклонил" in notifs[0]["text"]
+        assert notifs[0]["kind"] == "trades"
 
 
 def test_trade_cancel_notifies_recipient():
@@ -154,5 +157,24 @@ def test_trade_cancel_notifies_recipient():
         assert len(notifs) == 2
         assert "отменил" in notifs[0]["text"]
         assert notifs[0]["peer_vk_id"] == 7001
+        assert notifs[0]["kind"] == "trades"
         assert "предложил" in notifs[1]["text"]
         assert notifs[1]["peer_vk_id"] == 7001
+        assert notifs[1]["kind"] == "trades"
+
+
+def test_trade_create_notifies_recipient_with_trades_kind():
+    _add_user(7001)
+    _add_user(7002)
+    _give_plant(7001, 1, 2)
+    with make_user_client(7001, "player") as a:
+        assert a.post("/api/trades", json={
+            "to_user_id": 7002,
+            "items": [{"kind": "plant", "item_id": 1, "qty": 1, "direction": "give"}],
+        }).status_code == 201
+    with make_user_client(7002, "player") as b:
+        notifs = b.get("/api/notifications").json()
+        assert len(notifs) == 1
+        assert "предложил" in notifs[0]["text"]
+        assert notifs[0]["peer_vk_id"] == 7001
+        assert notifs[0]["kind"] == "trades"

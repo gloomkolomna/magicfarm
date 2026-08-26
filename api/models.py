@@ -1502,5 +1502,6 @@ class Notification(Base):
     user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
     text = Column(Text, nullable=False)
     peer_vk_id = Column(Integer, nullable=True)
+    kind = Column(String(20), nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
     read_at = Column(DateTime, nullable=True)

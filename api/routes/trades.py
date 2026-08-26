@@ -278,7 +278,7 @@ def create_trade(
                 offer_id=offer.id, kind=it.kind, item_id=it.item_id, qty=it.qty,
             ))
     sender_name = _user_name(db, user)
-    notify(db, req.to_user_id, f"🔁 {sender_name} предложил(а) вам обмен", peer_vk_id=user.vk_id)
+    notify(db, req.to_user_id, f"🔁 {sender_name} предложил(а) вам обмен", peer_vk_id=user.vk_id, kind="trades")
     db.commit()
     db.refresh(offer)
     return _offer_out(db, offer)
@@ -320,7 +320,7 @@ def accept_trade(
     for hold in db.query(TradeHold).filter(TradeHold.offer_id == offer.id).all():
         db.delete(hold)
 
-    notify(db, offer.from_user_id, f"✅ {_user_name(db, user)} принял(а) ваше предложение по бартеру", peer_vk_id=offer.to_user_id)
+    notify(db, offer.from_user_id, f"✅ {_user_name(db, user)} принял(а) ваше предложение по бартеру", peer_vk_id=offer.to_user_id, kind="trades")
     db.commit()
     db.refresh(offer)
     return _offer_out(db, offer)
@@ -344,7 +344,7 @@ def cancel_trade(
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Предложение уже закрыто")
     _release_holds(db, offer.id, offer.from_user_id)
-    notify(db, offer.to_user_id, f"🗑 {_user_name(db, user)} отменил(а) своё предложение по бартеру", peer_vk_id=offer.from_user_id)
+    notify(db, offer.to_user_id, f"🗑 {_user_name(db, user)} отменил(а) своё предложение по бартеру", peer_vk_id=offer.from_user_id, kind="trades")
     db.commit()
     db.refresh(offer)
     return _offer_out(db, offer)
@@ -368,7 +368,7 @@ def reject_trade(
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Предложение уже закрыто")
     _release_holds(db, offer.id, offer.from_user_id)
-    notify(db, offer.from_user_id, f"✕ {_user_name(db, user)} отклонил(а) ваше предложение по бартеру", peer_vk_id=offer.to_user_id)
+    notify(db, offer.from_user_id, f"✕ {_user_name(db, user)} отклонил(а) ваше предложение по бартеру", peer_vk_id=offer.to_user_id, kind="trades")
     db.commit()
     db.refresh(offer)
     return _offer_out(db, offer)

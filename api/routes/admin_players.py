@@ -901,7 +901,7 @@ def restart_player(
                 db.flush()
                 db.delete(hold)
             partner = offer.to_user_id if offer.from_user_id == vk_id else offer.from_user_id
-            notify(db, partner, "♻️ Игрок перезапущен администратором — предложение по бартеру отменено", peer_vk_id=vk_id)
+            notify(db, partner, "♻️ Игрок перезапущен администратором — предложение по бартеру отменено", peer_vk_id=vk_id, kind="trades")
         db.delete(offer)
 
     gifts = db.query(Gift).filter(
