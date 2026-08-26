@@ -46,6 +46,15 @@ export default function MeadowPage() {
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
+    if (!meadow || loading) return;
+    const targets = meadow.cells
+      .filter((c) => c.countdown_to)
+      .map((c) => new Date(c.countdown_to as string).getTime());
+    if (targets.length === 0) return;
+    const soonest = Math.min(...targets);
+    if (nowTs >= soonest) load();
+  }, [nowTs, meadow, loading, load]);
+  useEffect(() => {
     if (!msg) return;
     const t = setTimeout(() => setMsg(null), 4000);
     return () => clearTimeout(t);

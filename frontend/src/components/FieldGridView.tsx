@@ -35,7 +35,7 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
         {field.map_url && (
           <img src={mediaUrl(field.map_url)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', borderRadius: 4 }} />
         )}
-        {!noGrid && field.field_kind !== 'infirmary' && (
+        {field.field_kind !== 'infirmary' && (
           <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: `repeat(${field.cols}, 1fr)`, gridTemplateRows: `repeat(${field.rows}, 1fr)` }}>
           {grid.flatMap((row, ri) =>
             row.map((cell, ci) => {
@@ -51,7 +51,7 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
                   }}
                   title={cell?.plot ? `Норма: ${cell.plot.required}❆ · накоплено ${cell.plot.accumulated}/${cell.plot.required}` : undefined}
                   style={{
-                    border: `1px solid ${field.grid_color || 'rgba(255,255,255,0.08)'}`,
+                    border: noGrid ? 'none' : `1px solid ${field.grid_color || 'rgba(255,255,255,0.08)'}`,
                     background: fill,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
                     position: 'relative',
