@@ -2,12 +2,13 @@ import { useState } from 'react';
 import type { FieldDetail } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
 
-export default function FieldGridView({ field, playerVkId, onResetNorm, onDeletePlot, noGrid }: {
+export default function FieldGridView({ field, playerVkId, onResetNorm, onDeletePlot, noGrid, viewOnly }: {
   field: FieldDetail;
   playerVkId?: number;
   onResetNorm?: (plotId: number) => void;
   onDeletePlot?: (plotId: number) => void;
   noGrid?: boolean;
+  viewOnly?: boolean;
 }) {
   const [selectedCell, setSelectedCell] = useState<{ col: number; row: number; plotId: number } | null>(null);
   const grid = (() => {
@@ -58,7 +59,7 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
                       setSelectedCell({ col: ci, row: ri, plotId: cell.plot.id });
                     }
                   }}
-                  title={cell?.plot ? `Норма: ${cell.plot.required}❆ · накоплено ${cell.plot.accumulated}/${cell.plot.required}` : undefined}
+                  title={!viewOnly && cell?.plot ? `Норма: ${cell.plot.required}❆ · накоплено ${cell.plot.accumulated}/${cell.plot.required}` : undefined}
                   style={{
                     border: noGrid ? 'none' : `1px solid ${field.grid_color || 'rgba(255,255,255,0.08)'}`,
                     background: fill,
@@ -78,17 +79,17 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
                           <div style={{ fontSize: '5vw', lineHeight: 1, pointerEvents: 'none' }}>{cell.plant_emoji}</div>
                         );
                       })()}
-                      {cell.plot && (
+                      {!viewOnly && cell.plot && (
                         <div style={{ flexShrink: 0, fontSize: 11, color: '#fff', pointerEvents: 'none', fontWeight: 600, background: 'rgba(10,16,8,0.6)', borderRadius: 6, padding: '3px 6px', maxWidth: '94%', textAlign: 'center', lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'anywhere', marginBottom: 1 }}>
                           {cell.plot.required > 0 && (cell.plot.norm_revealed || !cell.plot.drawn_cards_json) ? `❎ ${cell.plot.norm_per_unit ?? cell.plot.required}/шт` : cell.plot.plant_name}
                         </div>
                       )}
-                      {cell.plot && (
+                      {!viewOnly && cell.plot && (
                         <div style={{ position: 'absolute', top: 2, right: 3, fontSize: 13, color: '#7fff7f', pointerEvents: 'none', background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', lineHeight: 1.2 }}>
                           {cell.plot.status === 'grown' ? '✓' : cell.plot.status === 'await_replant' ? '🔁' : ''}
                         </div>
                       )}
-                      {cell.plot && (
+                      {!viewOnly && cell.plot && (
                         <div style={{ position: 'absolute', top: 2, left: 3, fontSize: 11, color: '#fff', pointerEvents: 'none', fontWeight: 700, background: 'rgba(10,16,8,0.55)', borderRadius: 6, padding: '0 4px', lineHeight: 1.4 }}>
                           ×{cell.plot.qty}
                         </div>
@@ -127,7 +128,7 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
                             <div style={{ fontSize: '3vw', lineHeight: 1, pointerEvents: 'none', opacity: 0.7 }}>🏚️</div>
                           )
                         )}
-                        {cell.barnyard.status === 'building' && (
+                        {!viewOnly && cell.barnyard.status === 'building' && (
                           <div style={{ fontSize: 10, color: '#ffd98a', pointerEvents: 'none', background: 'rgba(10,16,8,0.5)', borderRadius: 6, padding: '0 4px', marginTop: 2 }}>
                             {cell.barnyard.accumulated}/{cell.barnyard.required} ❎
                           </div>
@@ -160,10 +161,10 @@ export default function FieldGridView({ field, playerVkId, onResetNorm, onDelete
                 <div style={{ fontSize: 'clamp(10px,2.2vw,14px)', color: '#ffe9b0', textAlign: 'center', textShadow: '0 1px 3px #000', lineHeight: 1.15, fontWeight: 600 }}>
                   ⛺ {t.name}
                 </div>
-                {t.build_status === 'planted' && (
+                {!viewOnly && t.build_status === 'planted' && (
                   <div style={{ fontSize: 10, color: '#ffd98a' }}>{t.accumulated}/{t.required}</div>
                 )}
-                {t.build_status === 'slot' && (
+                {!viewOnly && t.build_status === 'slot' && (
                   <div style={{ fontSize: 10, color: '#ccc' }}>слот</div>
                 )}
               </div>
