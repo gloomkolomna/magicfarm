@@ -17,7 +17,7 @@ from models import (
 from routes.admin_catalog import AnimalOut, _animal_out
 from routes.settings import get_animal_product_norm
 from services.achievements import check_and_award
-from services.card_draw import calculate_norm, cards_to_json, draw_cards
+from services.card_draw import animal_prepare_norm, cards_to_json
 from services.pet_bonuses import apply_pet_bonus_animal_product
 from services.potion_bonuses import consume_potion, is_potion_active
 
@@ -187,12 +187,10 @@ def prepare_pen(
     if slot.status != "placed":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Загон не ждёт подготовки")
 
-    cards = draw_cards(db, 5, True)
-    required = calculate_norm(db, user, cards)
+    norm, cards = animal_prepare_norm(db, user, slot.animal_id)
 
     skip = is_potion_active(user.vk_id, "skip_animal_stitch", db)
-    if skip:
-        required = 0
+    required = 0 if skip else norm
 
     slot.required = required
     slot.accumulated = 0

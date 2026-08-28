@@ -809,6 +809,21 @@ class UserAnimalOpening(Base):
     )
 
 
+class UserAnimalNorm(Base):
+    __tablename__ = "user_animal_norms"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    animal_id = Column(Integer, ForeignKey("animals.id", ondelete="CASCADE"), nullable=False)
+    norm = Column(Integer, nullable=False)
+    drawn_cards_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "animal_id", name="uq_useranimalnorm_user_animal"),
+    )
+
+
 class GameMedia(Base):
     __tablename__ = "game_media"
 
@@ -831,6 +846,21 @@ class UserPet(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "pet_id", name="uq_userpet_user_pet"),
+    )
+
+
+class UserPetNorm(Base):
+    __tablename__ = "user_pet_norms"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    pet_id = Column(Integer, ForeignKey("pets.id", ondelete="CASCADE"), nullable=False)
+    norm = Column(Integer, nullable=False)
+    drawn_cards_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "pet_id", name="uq_userpetnorm_user_pet"),
     )
 
 

@@ -50,7 +50,7 @@ export default function LocationMap({ mapUrl, name, emoji, onBack, backLabel = '
         }}
       >
         {mapUrl ? (
-          <div style={{ position: 'relative', display: 'inline-block', lineHeight: 0, width: imgNaturalW ? `${Math.round(imgNaturalW * scale)}px` : '100%' }}>
+          <div style={{ position: 'relative', display: 'inline-block', lineHeight: 0, width: imgNaturalW ? `${imgNaturalW}px` : '100%', zoom: imgNaturalW ? scale : undefined }}>
             <img
               src={mediaUrl(mapUrl)}
               alt=""

@@ -8,7 +8,7 @@ from db import get_db
 from deps import get_current_user
 from models import Field, FieldPet, FOREST_PET_CODES, Pet, PetActionLog, PetForestTask, User, UserPet
 from routes.admin_catalog import PetOut, _pet_out
-from services.card_draw import calculate_norm, cards_to_json, draw_cards
+from services.card_draw import pet_settle_norm
 from services.msk_time import next_midnight_msk, now_msk
 
 router = APIRouter(prefix="/api/pets", tags=["pets"])
@@ -285,8 +285,8 @@ def _draw_settle(db: Session, user: User, pet_id: int):
             detail="Нет свободных слотов для питомцев. Повысьте уровень, чтобы открыть новые.",
         )
 
-    cards = draw_cards(db, 10, False)
-    required = calculate_norm(db, user, cards)
+    required, cards = pet_settle_norm(db, user, pet_id)
+    db.commit()
     return pet, cards, required
 
 

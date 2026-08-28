@@ -69,6 +69,52 @@ def plant_unit_norm(db: Session, user, plant) -> tuple[int, list[dict] | None]:
     return unit, cards
 
 
+def pet_settle_norm(db: Session, user, pet_id: int) -> tuple[int, list[dict] | None]:
+    """Норма заселения питомца: кэш пары (игрок, питомец) или вытягивание карт.
+
+    Возвращает (норма, вытянутые карты либо сохранённые карты при попадании в кэш).
+    """
+    from models import UserPetNorm
+
+    cached = db.query(UserPetNorm).filter(
+        UserPetNorm.user_id == user.vk_id,
+        UserPetNorm.pet_id == pet_id,
+    ).first()
+    if cached is not None:
+        return cached.norm, cards_from_json(cached.drawn_cards_json)
+
+    cards = draw_cards(db, 10, False)
+    norm = calculate_norm(db, user, cards)
+    db.add(UserPetNorm(
+        user_id=user.vk_id, pet_id=pet_id,
+        norm=norm, drawn_cards_json=cards_to_json(cards),
+    ))
+    return norm, cards
+
+
+def animal_prepare_norm(db: Session, user, animal_id: int) -> tuple[int, list[dict] | None]:
+    """Норма подготовки загона: кэш пары (игрок, животное) или вытягивание карт.
+
+    Возвращает (норма, вытянутые карты либо сохранённые карты при попадании в кэш).
+    """
+    from models import UserAnimalNorm
+
+    cached = db.query(UserAnimalNorm).filter(
+        UserAnimalNorm.user_id == user.vk_id,
+        UserAnimalNorm.animal_id == animal_id,
+    ).first()
+    if cached is not None:
+        return cached.norm, cards_from_json(cached.drawn_cards_json)
+
+    cards = draw_cards(db, 5, True)
+    norm = calculate_norm(db, user, cards)
+    db.add(UserAnimalNorm(
+        user_id=user.vk_id, animal_id=animal_id,
+        norm=norm, drawn_cards_json=cards_to_json(cards),
+    ))
+    return norm, cards
+
+
 def _treasure_norm(db: Session, user, color: str) -> int:
     from models import UserCrystalNorm
     treasure_color = f"treasure_{color}"
