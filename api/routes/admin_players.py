@@ -38,6 +38,7 @@ class PlayerOut(BaseModel):
     dlc_locations: list[str]
     is_donor: bool
     donor_exempt: bool
+    block_after_expiry: bool
 
 
 def _is_donor(db: Session, vk_id: int) -> bool:
@@ -73,6 +74,7 @@ def _player_out(u: User, reports_total: int, nm: dict, is_donor: bool = False, d
         dlc_locations=sorted(dlc_locations or []),
         is_donor=is_donor,
         donor_exempt=bool(u.donor_exempt),
+        block_after_expiry=bool(u.block_after_expiry),
     )
 
 
@@ -208,6 +210,7 @@ class PlayerDetailOut(BaseModel):
     barnyard: list[PlayerBarnyardOut] = []
     is_donor: bool = False
     donor_exempt: bool = False
+    block_after_expiry: bool = False
 
 
 @router.post("/donor-sync")
@@ -245,6 +248,33 @@ def set_player_donor_exempt(
     reports_total = db.query(func.count(StitchReport.id)).filter(StitchReport.user_id == vk_id).scalar() or 0
     names = resolve_vk_names([target.vk_id])
     return _player_out(target, reports_total, names.get(target.vk_id, {}), _is_donor(db, vk_id), _dlc_locations(db, vk_id))
+
+
+class BlockAfterExpiryRequest(BaseModel):
+    enabled: bool
+
+
+@router.post("/{vk_id}/block-after-expiry", response_model=PlayerOut)
+def set_player_block_after_expiry(
+    vk_id: int,
+    req: BlockAfterExpiryRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    from services.subscription import is_access_active
+
+    target = db.query(User).filter(User.vk_id == vk_id).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Игрок не найден")
+    target.block_after_expiry = bool(req.enabled)
+    if req.enabled:
+        if target.role != "admin" and target.status == "active" and not is_access_active(target):
+            target.status = "readonly"
+    elif target.status == "readonly":
+        target.status = "active"
+    db.commit()
+    db.refresh(target)
+    return _player_out_full(db, target)
 
 
 @router.post("/{vk_id}/hidden", response_model=PlayerOut)
@@ -380,6 +410,7 @@ def get_player_detail(
         barnyard=barnyard_out,
         is_donor=_is_donor(db, vk_id),
         donor_exempt=bool(player.donor_exempt),
+        block_after_expiry=bool(player.block_after_expiry),
     )
 
 

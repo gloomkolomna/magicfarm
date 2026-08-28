@@ -7,6 +7,7 @@ import tempfile
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["APP_ENV"] = "dev"
 os.environ["DEV_LOGIN_ENABLED"] = "true"
+os.environ["SUBSCRIPTION_TASKS_ENABLED"] = "false"
 os.environ["ADMIN_VK_IDS"] = "400977,795384"
 os.environ["SECRET_KEY"] = "test-secret-not-for-prod"
 os.environ["VK_APP_SECRET"] = "test-secret"

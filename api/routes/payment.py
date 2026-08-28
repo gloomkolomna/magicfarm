@@ -17,7 +17,9 @@ from deps import get_current_user, require_role
 from models import LOCATION_NAMES, PaymentLog, PaymentOrder, User
 from services.subscription import (
     PERIOD_DAYS,
+    RENEWAL_WINDOW_DAYS,
     apply_dlc_topup,
+    can_renew_now,
     dlc_catalog,
     days_left,
     extend_subscription,
@@ -26,6 +28,7 @@ from services.subscription import (
     is_trial_active,
     parse_dlc_codes,
     price_rub_for,
+    renewal_opens_at,
     topup_price_rub,
 )
 
@@ -180,6 +183,12 @@ def create_subscription_order(
                 detail="Продление доступно только действующим донам группы «Крестики от Корги»",
             )
 
+    if user.role != "admin" and user.block_after_expiry:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Продление подписки недоступно",
+        )
+
     if not config.PAY_GATEWAY_ENABLED:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Оплата не настроена")
 
@@ -216,6 +225,13 @@ def create_subscription_order(
             amount_rub = topup_price_rub(db, new_codes, period_days)
             kind = "dlc_topup"
             dlc_codes = new_codes
+        elif not can_renew_now(user):
+            opens = renewal_opens_at(user.subscription_until)
+            opens_str = opens.strftime("%d.%m.%Y") if opens is not None else ""
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Продление станет доступно за {RENEWAL_WINDOW_DAYS} дней до окончания подписки — с {opens_str}",
+            )
 
     amount_kop = amount_rub * 100
 

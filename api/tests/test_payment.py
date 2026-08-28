@@ -134,7 +134,7 @@ def test_create_order_allowed_after_trial_end(player_client, monkeypatch):
 def test_renewal_allowed_with_trial_overlap(player_client, monkeypatch):
     player_client.get("/api/me")
     _enable_gateway(monkeypatch)
-    _activate_subscription(days=10, codes="infirmary")
+    _activate_subscription(days=5, codes="infirmary")
 
     r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["infirmary"], "receipt_email": "player@example.com"})
     assert r.status_code == 200
@@ -232,7 +232,7 @@ def test_dlc_removal_blocked_while_active(player_client, monkeypatch, db):
 def test_dlc_same_set_renews_full_price(player_client, monkeypatch, db):
     player_client.get("/api/me")
     _enable_gateway(monkeypatch)
-    _activate_subscription(days=10, codes="infirmary")
+    _activate_subscription(days=5, codes="infirmary")
 
     r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["infirmary"], "receipt_email": "player@example.com"})
     assert r.status_code == 200
@@ -506,3 +506,118 @@ def test_blocked_player_cannot_pay_subscription(monkeypatch):
             headers=_auth(_token(123)),
         )
         assert r.status_code == 403
+
+
+def _set_block_after_expiry(vk_id=123, enabled=True):
+    with TestingSessionLocal() as s:
+        u = s.query(User).filter(User.vk_id == vk_id).first()
+        u.block_after_expiry = enabled
+        s.commit()
+
+
+def test_renewal_blocked_outside_window(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=10, codes="infirmary")
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["infirmary"], "receipt_email": "player@example.com"})
+    assert r.status_code == 403
+    assert "Продление станет доступно" in r.json()["detail"]
+
+    with TestingSessionLocal() as db:
+        assert db.query(PaymentOrder).count() == 0
+
+
+def test_renewal_allowed_at_4_days_left(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=4, codes="infirmary")
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["infirmary"], "receipt_email": "player@example.com"})
+    assert r.status_code == 200
+    assert r.json()["kind"] == "subscription"
+
+
+def test_renewal_allowed_after_expiry(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _expire_trial()
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=-1, codes="")
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": [], "receipt_email": "player@example.com"})
+    assert r.status_code == 200
+    assert r.json()["amount_rub"] == 300
+
+
+def test_renewal_only_once_per_period(player_client, monkeypatch, db):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=4, codes="")
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": [], "receipt_email": "player@example.com"})
+    assert r.status_code == 200
+    body = _sign({"transaction_id": "farm-order-1", "game_id": "farm", "vk_id": 123,
+                  "amount_kop": 30000, "status": "success"})
+    assert player_client.post("/api/payment/webhook", **body).status_code == 200
+
+    with TestingSessionLocal() as s:
+        u = s.query(User).filter(User.vk_id == 123).first()
+        assert u.subscription_until - _utcnow() > timedelta(days=29)
+
+    r2 = player_client.post("/api/payment/create-order", json={"dlc_codes": [], "receipt_email": "player@example.com"})
+    assert r2.status_code == 403
+    assert "Продление станет доступно" in r2.json()["detail"]
+
+
+def test_dlc_topup_allowed_outside_window(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=10, codes="infirmary")
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["infirmary", "brewery"], "receipt_email": "player@example.com"})
+    assert r.status_code == 200
+    assert r.json()["kind"] == "dlc_topup"
+
+
+def test_block_after_expiry_blocks_renewal_in_window(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=4, codes="infirmary")
+    _set_block_after_expiry()
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["infirmary"], "receipt_email": "player@example.com"})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Продление подписки недоступно"
+
+
+def test_block_after_expiry_blocks_dlc_topup(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=10, codes="infirmary")
+    _set_block_after_expiry()
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": ["infirmary", "brewery"], "receipt_email": "player@example.com"})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Продление подписки недоступно"
+
+
+def test_block_after_expiry_blocks_new_purchase(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _expire_trial()
+    _enable_gateway(monkeypatch)
+    _set_block_after_expiry()
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": [], "receipt_email": "player@example.com"})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Продление подписки недоступно"
+
+
+def test_block_after_expiry_removed_allows_renewal(player_client, monkeypatch):
+    player_client.get("/api/me")
+    _enable_gateway(monkeypatch)
+    _activate_subscription(days=4, codes="")
+    _set_block_after_expiry()
+    _set_block_after_expiry(enabled=False)
+
+    r = player_client.post("/api/payment/create-order", json={"dlc_codes": [], "receipt_email": "player@example.com"})
+    assert r.status_code == 200

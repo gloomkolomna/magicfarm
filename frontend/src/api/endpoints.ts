@@ -642,6 +642,7 @@ export interface Player {
   dlc_locations?: string[];
   is_donor?: boolean;
   donor_exempt?: boolean;
+  block_after_expiry?: boolean;
 }
 
 export interface StitchReport {
@@ -1649,6 +1650,8 @@ export const api = {
     client.post<{ synced: number }>('/admin/players/donor-sync').then((r) => r.data),
   adminSetDonorExempt: (vkId: number, enabled: boolean) =>
     client.post<Player>(`/admin/players/${vkId}/donor-exempt`, { enabled }).then((r) => r.data),
+  adminSetBlockAfterExpiry: (vkId: number, enabled: boolean) =>
+    client.post<Player>(`/admin/players/${vkId}/block-after-expiry`, { enabled }).then((r) => r.data),
 
   // ── Нормы кристаллов ──
   crystalStandard: () =>

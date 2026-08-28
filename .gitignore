@@ -58,4 +58,6 @@ desktop.ini
 /.playwright-mcp
 /.pptx_work
 
-docs/
+/docs/
+/.opencode/
+/.swarm/

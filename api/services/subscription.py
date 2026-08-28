@@ -11,6 +11,8 @@ DEFAULT_TRIAL_DAYS = 7
 DEFAULT_BASE_PRICE_RUB = 300
 DEFAULT_DLC_PRICE_RUB = 50
 PERIOD_DAYS = 30
+RENEWAL_WINDOW_DAYS = 5
+REMINDER_DAYS = (5, 3, 1)
 
 
 def dlc_price_key(code: str) -> str:
@@ -85,6 +87,18 @@ def days_left(until: datetime.datetime | None) -> int | None:
     if delta.total_seconds() <= 0:
         return 0
     return delta.days + (1 if delta.seconds > 0 else 0)
+
+
+def renewal_opens_at(until: datetime.datetime | None) -> datetime.datetime | None:
+    if until is None:
+        return None
+    return until - datetime.timedelta(days=RENEWAL_WINDOW_DAYS)
+
+
+def can_renew_now(user) -> bool:
+    if not is_subscription_active(user):
+        return True
+    return (days_left(user.subscription_until) or 0) <= RENEWAL_WINDOW_DAYS
 
 
 def parse_dlc_codes(raw: str | None) -> list[str]:

@@ -89,6 +89,7 @@ class User(Base):
     subscription_until = Column(DateTime, nullable=True)
     subscription_dlc_codes = Column(String, nullable=True)
     donor_exempt = Column(Boolean, nullable=False, default=False, server_default="0")
+    block_after_expiry = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
 
     plots = relationship("Plot", back_populates="user", cascade="all, delete-orphan")
@@ -181,6 +182,19 @@ class UserDlcUnlock(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "location_code", name="uq_userdlcunlock_user_location"),
+    )
+
+
+class SubscriptionReminder(Base):
+    __tablename__ = "subscription_reminders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    reminder_key = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "reminder_key", name="uq_subreminder_user_key"),
     )
 
 

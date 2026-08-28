@@ -695,6 +695,24 @@ export default function AdminPage() {
     }
   }
 
+  async function toggleBlockAfterExpiry(vkId: number, enabled: boolean) {
+    setBusy(true); setMsg(null);
+    try {
+      const updated = await api.adminSetBlockAfterExpiry(vkId, enabled);
+      if (selectedPlayer?.vk_id === vkId) setSelectedPlayer(updated);
+      const patch = (p: Player) => (p.vk_id === vkId ? { ...p, block_after_expiry: updated.block_after_expiry } : p);
+      setPlayers((prev) => prev.map(patch));
+      setAllPlayers((prev) => prev.map(patch));
+      setMsg(updated.block_after_expiry
+        ? '🔒 Будущая блокировка выставлена — после подписки игрок перейдёт в режим просмотра'
+        : '🔒 Будущая блокировка снята — игрок может продлить подписку');
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function togglePlayerHidden(vkId: number, hidden: boolean) {
     setBusy(true); setMsg(null);
     try {
@@ -2499,7 +2517,7 @@ export default function AdminPage() {
                     )}
                   </div>
                   <div className="fm-card" style={{ marginBottom: 14, fontSize: 13 }}>
-                    <div>ID: {selectedPlayer.vk_id} · Роль: {selectedPlayer.role} · Статус: {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.emoji} {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.label ?? selectedPlayer.status}{selectedPlayer.hidden ? ' · 👁 скрыт от игроков' : ''}</div>
+                    <div>ID: {selectedPlayer.vk_id} · Роль: {selectedPlayer.role} · Статус: {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.emoji} {PLAYER_STATUS_META[selectedPlayer.status ?? 'active']?.label ?? selectedPlayer.status}{selectedPlayer.hidden ? ' · 👁 скрыт от игроков' : ''}{selectedPlayer.block_after_expiry ? ' · 🔒 будущая блокировка' : ''}</div>
                     <div>Крестики: {selectedPlayer.crosses_balance} (всего {selectedPlayer.crosses_total}) · Монеты: {selectedPlayer.coins} · Раунд: {selectedPlayer.round}</div>
                     <div>
                       🐶 Дон: {selectedPlayer.is_donor ? '✅ активен' : '— нет'}
@@ -2536,6 +2554,17 @@ export default function AdminPage() {
                         )}
                         <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" disabled={busy} onClick={() => toggleDonorExempt(selectedPlayer.vk_id, !selectedPlayer.donor_exempt)}>
                           🎟 {selectedPlayer.donor_exempt ? 'Выключить обход' : 'Обход дон-гейта'}
+                        </button>
+                        <button
+                          type="button"
+                          className={selectedPlayer.block_after_expiry ? 'fm-btn fm-btn-sm fm-btn-danger' : 'fm-btn fm-btn-sm fm-btn-outline'}
+                          disabled={busy}
+                          onClick={() => toggleBlockAfterExpiry(selectedPlayer.vk_id, !selectedPlayer.block_after_expiry)}
+                          title={selectedPlayer.block_after_expiry
+                            ? 'После окончания подписки игрок переводится в режим просмотра и не может продлить подписку'
+                            : 'Игрок доиграет текущую подписку, после чего перейдёт в режим просмотра без возможности продления'}
+                        >
+                          🔒 {selectedPlayer.block_after_expiry ? 'Снять будущую блокировку' : 'Будущая блокировка'}
                         </button>
                       </div>
                     )}
@@ -2822,6 +2851,9 @@ export default function AdminPage() {
                                   )}
                                   {p.hidden && (
                                     <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title="Скрыт от других игроков">👁</span>
+                                  )}
+                                  {p.block_after_expiry && (
+                                    <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title="Будущая блокировка: после подписки — только просмотр">🔒</span>
                                   )}
                                 </td>
                                 <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.crosses_balance}</td>

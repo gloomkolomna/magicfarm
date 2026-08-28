@@ -65,6 +65,9 @@ DONUT_API_KEY = os.getenv("DONUT_API_KEY", "")
 DONUT_TIMEOUT_SECONDS = _env_int("DONUT_TIMEOUT_SECONDS", 5)
 DONOR_SYNC_INTERVAL_MINUTES = _env_int("DONOR_SYNC_INTERVAL_MINUTES", 60)
 
+# ── Фоновые задачи подписки (уведомления 5/3/1 день, авто-readonly) ──
+SUBSCRIPTION_TASKS_ENABLED = _env_bool("SUBSCRIPTION_TASKS_ENABLED", True)
+
 
 # ── Загрузки (фото вышивки) ──
 UPLOADS_DIR = os.getenv("UPLOADS_DIR", os.path.join(API_DIR, "uploads"))

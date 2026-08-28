@@ -12,6 +12,8 @@ function formatDate(iso: string | null): string {
   return d ? d.toLocaleDateString('ru-RU') : '—';
 }
 
+const RENEWAL_WINDOW_DAYS = 5;
+
 const OFFERTA_URL = 'https://belovolovhome.ru/magicfarm/game/offerta.html';
 const PRIVACY_URL = 'https://belovolovhome.ru/magicfarm/game/private.html';
 const GROUP_URL = 'https://vk.ru/krestiki_s_korgi';
@@ -39,6 +41,13 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
   const activeSub = !!user?.subscription_active;
   const currentCodes = user?.subscription_dlc_codes ?? [];
   const [selected, setSelected] = useState<string[]>(activeSub ? [] : currentCodes);
+  const renewBlocked = !!user?.block_after_expiry;
+  const subDaysLeft = user?.subscription_days_left ?? null;
+  const windowOpen = subDaysLeft != null && subDaysLeft <= RENEWAL_WINDOW_DAYS;
+  const subDate = parseDate(user?.subscription_until ?? null);
+  const windowOpensStr = subDate
+    ? new Date(subDate.getTime() - RENEWAL_WINDOW_DAYS * 86400000).toLocaleDateString('ru-RU')
+    : null;
 
   useEffect(() => {
     api.paymentPrice().then(setPrice).catch(() => {});
@@ -184,66 +193,102 @@ export function SubscriptionBox({ onPaid }: { onPaid?: () => void }) {
               В составе: базовая подписка{currentNames.length ? ` + ${currentNames.join(', ')}` : ''}
             </div>
 
-            {newDlc.length > 0 && (
-              <div style={BLOCK_STYLE}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>Докупить ДЛС</div>
-                {newDlc.map((d) => (
-                  <label key={d.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={selected.includes(d.code)} onChange={() => toggle(d.code)} disabled={busy} />
-                    <span>
-                      + {d.name}{' '}
-                      <span style={{ color: 'var(--text-muted)' }}>
-                        (доплата {d.topup_rub} ₽{topupDays != null ? ` за ${topupDays} дн.` : ''})
-                      </span>
-                    </span>
-                  </label>
-                ))}
-                <button
-                  className="fm-btn"
-                  onClick={() => pay('topup')}
-                  disabled={busy || !selectedNew.length}
-                  style={{ padding: '12px 16px', fontSize: 16 }}
-                >
-                  Добавить в подписку за {topupTotal} ₽
-                </button>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  ДЛС добавятся до конца оплаченного периода, срок подписки не изменится. Полная цена ДЛС — со следующего продления.
+            {renewBlocked ? (
+              <div style={{ fontSize: 15, color: 'var(--text-secondary)' }}>
+                Продление подписки недоступно
+              </div>
+            ) : (
+              <>
+                {newDlc.length > 0 && (
+                  <div style={BLOCK_STYLE}>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>Докупить ДЛС</div>
+                    {newDlc.map((d) => (
+                      <label key={d.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={selected.includes(d.code)} onChange={() => toggle(d.code)} disabled={busy} />
+                        <span>
+                          + {d.name}{' '}
+                          <span style={{ color: 'var(--text-muted)' }}>
+                            (доплата {d.topup_rub} ₽{topupDays != null ? ` за ${topupDays} дн.` : ''})
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                    <button
+                      className="fm-btn"
+                      onClick={() => pay('topup')}
+                      disabled={busy || !selectedNew.length}
+                      style={{ padding: '12px 16px', fontSize: 16 }}
+                    >
+                      Добавить в подписку за {topupTotal} ₽
+                    </button>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      ДЛС добавятся до конца оплаченного периода, срок подписки не изменится. Полная цена ДЛС — со следующего продления.
+                    </div>
+                  </div>
+                )}
+
+                <div style={BLOCK_STYLE}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>Продление</div>
+                  {windowOpen ? (
+                    <>
+                      <div style={{ fontSize: 15 }}>
+                        Базовая подписка{currentNames.length ? ` + ${currentNames.join(', ')}` : ''} · {price.period_days} дн. — <b>{renewTotal} ₽</b>
+                      </div>
+                      <button
+                        className="fm-btn"
+                        onClick={() => pay('renew')}
+                        disabled={busy}
+                        style={{ padding: '12px 16px', fontSize: 16 }}
+                      >
+                        Продлить на {price.period_days} дн. — {renewTotal} ₽
+                      </button>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        Отказаться от ДЛС можно при следующем продлении: сумма изменится с нового периода, возврат средств не осуществляется.
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                      До окончания подписки осталось <b>{subDaysLeft} дн.</b> Продление откроется за{' '}
+                      {RENEWAL_WINDOW_DAYS} дней до конца — <b>с {windowOpensStr}</b>.
+                    </div>
+                  )}
                 </div>
-              </div>
+
+                {(windowOpen || newDlc.length > 0) && (
+                  <>
+                    {emailField}
+                    {agreeField}
+                  </>
+                )}
+              </>
             )}
-
-            <div style={BLOCK_STYLE}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Продление</div>
-              <div style={{ fontSize: 15 }}>
-                Базовая подписка{currentNames.length ? ` + ${currentNames.join(', ')}` : ''} · {price.period_days} дн. — <b>{renewTotal} ₽</b>
-              </div>
-              <button
-                className="fm-btn"
-                onClick={() => pay('renew')}
-                disabled={busy}
-                style={{ padding: '12px 16px', fontSize: 16 }}
-              >
-                Продлить на {price.period_days} дн. — {renewTotal} ₽
-              </button>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Отказаться от ДЛС можно при следующем продлении: сумма изменится с нового периода, возврат средств не осуществляется.
-              </div>
-            </div>
-
-            {emailField}
-            {agreeField}
             {status && <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{status}</div>}
           </>
         ) : user?.trial_active ? (
-          <>
-            <div style={{ fontSize: 16 }}>
-              ⏳ Идёт пробный период — до <b>{formatDate(user.trial_until)}</b>
-            </div>
-            <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
-              Оформление подписки станет доступно после окончания пробного периода.
-              Мы заранее напомним — за 5, 3 и 1 день до его конца.
-            </div>
-          </>
+          renewBlocked ? (
+            <>
+              <div style={{ fontSize: 16 }}>
+                ⏳ Идёт пробный период — до <b>{formatDate(user.trial_until)}</b>
+              </div>
+              <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                Продление подписки недоступно
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 16 }}>
+                ⏳ Идёт пробный период — до <b>{formatDate(user.trial_until)}</b>
+              </div>
+              <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                Оформление подписки станет доступно после окончания пробного периода.
+                Мы заранее напомним — за 5, 3 и 1 день до его конца.
+              </div>
+            </>
+          )
+        ) : renewBlocked ? (
+          <div style={{ fontSize: 15, color: 'var(--text-secondary)', textAlign: 'center' }}>
+            Продление подписки недоступно
+          </div>
         ) : (
           <>
             <div style={{ fontSize: 16 }}>

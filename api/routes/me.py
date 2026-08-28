@@ -38,6 +38,8 @@ class MeResponse(BaseModel):
     subscription_dlc_codes: list[str]
     days_left: int | None
     trial_days_left: int | None
+    subscription_days_left: int | None
+    block_after_expiry: bool
     is_donor: bool
     donor_exempt: bool
     game_open: bool
@@ -89,6 +91,8 @@ def get_me(
         subscription_dlc_codes=parse_dlc_codes(user.subscription_dlc_codes),
         days_left=days_left(access_until(user)),
         trial_days_left=days_left(user.trial_until),
+        subscription_days_left=days_left(user.subscription_until),
+        block_after_expiry=bool(user.block_after_expiry),
         is_donor=is_donor(db, user.vk_id),
         donor_exempt=bool(user.donor_exempt),
         game_open=game_open,
