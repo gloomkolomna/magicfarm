@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useSession } from '../context/SessionContext';
 import { api, BODY_PARTS, type AdminPaymentOrder, type AdminPaymentLog, BODY_PART_LABELS, LOCATION_TITLES, potionBonusLabel, potionIngredientLabel, type AdminOrder, type AdminRecipe, type AllowedPlayer, type Animal, type Achievement, type AchievementKind, type ClinicAnimalType, type CocktailItemIn, type CocktailRecipeAdmin, type CrystalCard, type Customer, type Disease, type FieldDetail, type FieldInfo, type GameMedia, type Ingredient,   type LevelGate, type LogEntry, LESSON_CATEGORIES, lessonCategoryLabel, UNLOCK_OPTIONS, type Patient, type Pet, type Plant, type Player, type PlayerDetail, type PotionRecipe, type PotionRecipeCreate, type Product, type ProductionTemplate, type Remedy, type Setting, type StitchReport, type StorySlide, type Lesson, type DlcLocation } from '../api/endpoints';
 import { compressImage, mediaUrl } from '../api/media';
+import { useMediaQuery } from '../utils/useMediaQuery';
 import FieldEditor from '../components/FieldEditor';
 import FieldGridView from '../components/FieldGridView';
 import Toast from '../components/Toast';
@@ -45,6 +46,30 @@ function fmtDate(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z');
   return d.toLocaleDateString('ru-RU');
+}
+
+function playerName(p: Player): string {
+  return p.first_name || p.last_name ? `${p.first_name} ${p.last_name}`.trim() : `#${p.vk_id}`;
+}
+
+function playerChips(p: Player): { key: string; emoji: string; title: string }[] {
+  const chips: { key: string; emoji: string; title: string }[] = [];
+  if (p.status && p.status !== 'active') chips.push({ key: 'status', emoji: PLAYER_STATUS_META[p.status]?.emoji ?? p.status, title: PLAYER_STATUS_META[p.status]?.label ?? p.status });
+  if (p.is_donor) chips.push({ key: 'donor', emoji: '🐶', title: 'Дон группы «Крестики от Корги»' });
+  if (p.donor_exempt) chips.push({ key: 'exempt', emoji: '🎟', title: 'Обход дон-гейта' });
+  if (p.hidden) chips.push({ key: 'hidden', emoji: '👁', title: 'Скрыт от других игроков' });
+  if (p.block_after_expiry) chips.push({ key: 'lock', emoji: '🔒', title: 'Будущая блокировка: после подписки — только просмотр' });
+  return chips;
+}
+
+function renderPlayerChips(p: Player, style?: CSSProperties) {
+  return playerChips(p).map((c) => (
+    <span key={c.key} className="fm-chip" style={{ fontSize: 11, ...style }} title={c.title}>{c.emoji}</span>
+  ));
+}
+
+function playerDlcCodes(p: Player): string[] {
+  return Array.from(new Set([...(p.subscription_dlc_codes ?? []), ...(p.dlc_locations ?? [])]));
 }
 
 const DLC_ICONS: Record<string, string> = {
@@ -99,6 +124,7 @@ export default function AdminPage() {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
   const [playerPage, setPlayerPage] = useState(0);
+  const playersMobile = useMediaQuery('(max-width: 768px)');
   const PER_PAGE = 100;
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -672,6 +698,22 @@ export default function AdminPage() {
       const res = await api.adminDonorSync();
       await loadCore();
       setMsg(`✓ Дон-статусы синхронизированы (${res.synced})`);
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refreshPlayers() {
+    setBusy(true); setMsg(null);
+    try {
+      const list = await api.adminPlayers();
+      const filtered = playerSearch.trim() ? list.filter((p) => matchesAny(p, playerSearch)) : list;
+      setAllPlayers(list);
+      setPlayers(filtered);
+      setPlayerPage((page) => Math.min(page, Math.max(0, Math.ceil(filtered.length / PER_PAGE) - 1)));
+      setMsg('✓ Список игроков обновлён');
     } catch (e: any) {
       setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
     } finally {
@@ -2799,79 +2841,92 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
-                  <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+                  <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <input
                       className="fm-input"
                       type="text"
                       placeholder="Поиск по всем полям (ID, имя, роль, монеты…)"
                       value={playerSearch}
                       onChange={(e) => { setPlayerSearch(e.target.value); doSearch(e.target.value); }}
-                      style={{ flex: 1, minWidth: 0 }}
+                      style={{ flex: '1 1 160px', minWidth: 0 }}
                     />
+                    <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" style={{ flexShrink: 0 }} disabled={busy} onClick={refreshPlayers}>⟳ Обновить</button>
                     <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" style={{ flexShrink: 0 }} disabled={busy} onClick={syncDonors}>🔄 Доны</button>
                   </div>
                   {players.length === 0 ? (
                     <div className="fm-card" style={{ color: 'var(--text-muted)' }}>Игроков нет.</div>
                   ) : (
                     <>
-                      <div className="fm-card" style={{ overflowX: 'auto', padding: 0 }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                          <thead>
-                            <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                              <th style={{ padding: '8px 12px', textAlign: 'left' }}>Игрок</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'right' }}>❎</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'right' }}>🪙</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'right' }}>📷</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'left' }}>⏳ Триал до</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'left' }}>💳 Подписка до</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'left' }}>ДЛС</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {players.slice(playerPage * PER_PAGE, (playerPage + 1) * PER_PAGE).map((p) => (
-                              <tr
-                                key={p.vk_id}
-                                onClick={() => selectPlayer(p)}
-                                style={{ cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
-                                className="fm-rise"
-                              >
-                                <td style={{ padding: '8px 12px' }}>
-                                  <strong>{p.first_name || p.last_name ? `${p.first_name} ${p.last_name}`.trim() : `#${p.vk_id}`}</strong>
-                                  <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 11 }}>{p.role}</span>
-                                  {p.status && p.status !== 'active' && (
-                                    <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title={PLAYER_STATUS_META[p.status]?.label}>
-                                      {PLAYER_STATUS_META[p.status]?.emoji ?? p.status}
-                                    </span>
-                                  )}
-                                  {p.is_donor && (
-                                    <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title="Дон группы «Крестики от Корги»">🐶</span>
-                                  )}
-                                  {p.donor_exempt && (
-                                    <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title="Обход дон-гейта">🎟</span>
-                                  )}
-                                  {p.hidden && (
-                                    <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title="Скрыт от других игроков">👁</span>
-                                  )}
-                                  {p.block_after_expiry && (
-                                    <span className="fm-chip" style={{ marginLeft: 6, fontSize: 11 }} title="Будущая блокировка: после подписки — только просмотр">🔒</span>
-                                  )}
-                                </td>
-                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.crosses_balance}</td>
-                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.coins}</td>
-                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.reports_total}</td>
-                                <td style={{ padding: '8px 12px' }}>{fmtDate(p.trial_until)}</td>
-                                <td style={{ padding: '8px 12px' }}>{fmtDate(p.subscription_until)}</td>
-                                <td style={{ padding: '8px 12px' }}>
-                                  {(() => {
-                                    const codes = Array.from(new Set([...(p.subscription_dlc_codes ?? []), ...(p.dlc_locations ?? [])]));
-                                    return codes.length ? codes.map((c) => DLC_ICONS[c] ?? c).join(' ') : '—';
-                                  })()}
-                                </td>
+                      {playersMobile ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {players.slice(playerPage * PER_PAGE, (playerPage + 1) * PER_PAGE).map((p) => (
+                            <div
+                              key={p.vk_id}
+                              className="fm-card fm-rise"
+                              style={{ cursor: 'pointer', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}
+                              onClick={() => selectPlayer(p)}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <strong style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{playerName(p)}</strong>
+                                {renderPlayerChips(p)}
+                              </div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{p.role} · #{p.vk_id}</div>
+                              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13 }}>
+                                <span>❎ {p.crosses_balance}</span>
+                                <span>🪙 {p.coins}</span>
+                                <span>📷 {p.reports_total}</span>
+                              </div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <span>⏳ Триал до {fmtDate(p.trial_until)}</span>
+                                <span>💳 Подписка до {fmtDate(p.subscription_until)}</span>
+                                {playerDlcCodes(p).length > 0 && (
+                                  <span>ДЛС: {playerDlcCodes(p).map((c) => DLC_ICONS[c] ?? c).join(' ')}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="fm-card" style={{ overflowX: 'auto', padding: 0 }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                                <th style={{ padding: '8px 12px', textAlign: 'left' }}>Игрок</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'right' }}>❎</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'right' }}>🪙</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'right' }}>📷</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'left' }}>⏳ Триал до</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'left' }}>💳 Подписка до</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'left' }}>ДЛС</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody>
+                              {players.slice(playerPage * PER_PAGE, (playerPage + 1) * PER_PAGE).map((p) => (
+                                <tr
+                                  key={p.vk_id}
+                                  onClick={() => selectPlayer(p)}
+                                  style={{ cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+                                  className="fm-rise"
+                                >
+                                  <td style={{ padding: '8px 12px' }}>
+                                    <strong>{playerName(p)}</strong>
+                                    <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 11 }}>{p.role}</span>
+                                    {renderPlayerChips(p, { marginLeft: 6 })}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.crosses_balance}</td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.coins}</td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>{p.reports_total}</td>
+                                  <td style={{ padding: '8px 12px' }}>{fmtDate(p.trial_until)}</td>
+                                  <td style={{ padding: '8px 12px' }}>{fmtDate(p.subscription_until)}</td>
+                                  <td style={{ padding: '8px 12px' }}>
+                                    {playerDlcCodes(p).length ? playerDlcCodes(p).map((c) => DLC_ICONS[c] ?? c).join(' ') : '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                       {players.length > PER_PAGE && (
                         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 10, fontSize: 13 }}>
                           <button type="button" className="fm-btn fm-btn-sm fm-btn-outline" disabled={playerPage === 0} onClick={() => setPlayerPage((p) => p - 1)}>← Назад</button>
