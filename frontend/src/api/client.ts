@@ -61,11 +61,15 @@ client.interceptors.response.use(
       !original._retry &&
       !url.includes('/auth/session')
     ) {
-      original._retry = true;
       const newToken = await relogin();
       if (newToken) {
-        original.headers.Authorization = `Bearer ${newToken}`;
-        return client.request(original);
+        const retryConfig = {
+          ...original,
+          _retry: true,
+          headers: { ...(original.headers || {}) },
+        };
+        retryConfig.headers.Authorization = `Bearer ${newToken}`;
+        return client.request(retryConfig);
       }
     }
     if (status === 402) {
