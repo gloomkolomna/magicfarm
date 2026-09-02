@@ -212,6 +212,32 @@ def test_craft_info_with_production_kind(admin_client):
     assert res.json()["norm_per_unit"] == (2 + 1) * 100
 
 
+def test_craft_info_breakdown_fields_with_production_kind(admin_client):
+    _set_processing_crystal(admin_client, 2)
+    with make_user_client(334, "player") as c:
+        prod_id, _ = _product_and_plant(c)
+        res = c.get(f"/api/farm/products/{prod_id}/craft-info", params={"production_kind": "alchemy"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["norm_per_unit"] == (2 + 1) * 100
+    assert data["base_norm"] == 100
+    assert data["tent_bonus"] == 2
+    assert data["plant_level"] == 1
+
+
+def test_craft_info_breakdown_without_production_kind(admin_client):
+    _set_processing_crystal(admin_client, 2)
+    with make_user_client(335, "player") as c:
+        prod_id, _ = _product_and_plant(c)
+        res = c.get(f"/api/farm/products/{prod_id}/craft-info")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["norm_per_unit"] == 100
+    assert data["base_norm"] == 100
+    assert data["tent_bonus"] is None
+    assert data["plant_level"] == 1
+
+
 def test_craft_info_without_norm_returns_zero(admin_client):
     with make_user_client_no_onboarding(333, "player") as c:
         prod_id, _ = _product_and_plant(c)

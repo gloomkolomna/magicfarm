@@ -194,6 +194,9 @@ def test_craft_info_from_animal_product(admin_client):
     assert d["source_product_name"] == "Радужная шерсть"
     assert d["stock_qty"] == 4
     assert d["norm_per_unit"] == 200
+    assert d["base_norm"] == 200
+    assert d["tent_bonus"] is None
+    assert d["plant_level"] is None
 
 
 def test_craft_in_barnyard_tent(admin_client):

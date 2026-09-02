@@ -449,12 +449,12 @@ export default function FieldPage() {
     } catch {}
   }
 
-  async function selectCraftProduct(id: number | null) {
+  async function selectCraftProduct(id: number | null, kind?: string | null) {
     setCraftProduct(id);
     setCraftInfo(null);
     if (id == null) return;
     try {
-      setCraftInfo(await api.productCraftInfo(id, tentModal?.kind ?? undefined));
+      setCraftInfo(await api.productCraftInfo(id, kind ?? tentModal?.kind ?? undefined));
     } catch {}
   }
 
@@ -694,7 +694,7 @@ export default function FieldPage() {
     setTentShowVideo(false);
     if (t.build_status === 'built') {
       const first = products.find((x) => x.production_kind === t.kind && x.craftable);
-      void selectCraftProduct(first ? first.id : null);
+      void selectCraftProduct(first ? first.id : null, t.kind);
       void reloadCraftSessions();
       if (t.kind === 'barnyard') {
         setBarnyardWithdrawSel(null);
@@ -1575,6 +1575,11 @@ export default function FieldPage() {
                   {craftInfo.norm_per_unit > 0 ? (
                     <>
                       <div style={{ marginBottom: 4 }}>Норма за 1 товар: {craftInfo.norm_per_unit} ❎</div>
+                      {craftInfo.source_kind === 'plant' && craftInfo.tent_bonus != null && craftInfo.plant_level != null && craftInfo.base_norm != null && (
+                        <div style={{ marginBottom: 4, color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.4, overflowWrap: 'break-word' }}>
+                          = (бонус шатра {craftInfo.tent_bonus} + ур. растения {craftInfo.plant_level}) × ваша норма {craftInfo.base_norm}
+                        </div>
+                      )}
                       <div style={{ color: 'var(--text-accent)', fontWeight: 700 }}>
                         Итого за {Math.max(0, Number(craftQty) || 0)} шт: {craftInfo.norm_per_unit * Math.max(0, Number(craftQty) || 0)} ❎
                       </div>

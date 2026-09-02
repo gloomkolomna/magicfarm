@@ -507,6 +507,9 @@ export interface CraftInfo {
   source_product_emoji: string | null;
   stock_qty: number;
   norm_per_unit: number;
+  base_norm: number | null;
+  tent_bonus: number | null;
+  plant_level: number | null;
 }
 
 export interface CraftStart {

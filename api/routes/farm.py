@@ -320,6 +320,9 @@ class CraftInfoOut(BaseModel):
     source_product_emoji: str | None
     stock_qty: int
     norm_per_unit: int
+    base_norm: int | None
+    tent_bonus: int | None
+    plant_level: int | None
 
 
 @router.get("/products/{product_id}/craft-info", response_model=CraftInfoOut)
@@ -344,13 +347,16 @@ def product_craft_info(
             Inventory.user_id == user.vk_id, Inventory.plant_id == product.plant_id
         ).first()
 
-        norm = get_user_production_norm(user, plant_obj.level)
+        base_norm = get_user_production_norm(user, plant_obj.level)
+        norm = base_norm
+        tent_bonus: int | None = None
         if norm is not None and production_kind:
             from models import ProductionTemplate
             pt = db.query(ProductionTemplate).filter(
                 ProductionTemplate.code == production_kind
             ).first()
             crystal = pt.processing_crystal if pt is not None else 0
+            tent_bonus = crystal
             norm = (crystal + plant_obj.level) * norm
 
         return CraftInfoOut(
@@ -363,6 +369,9 @@ def product_craft_info(
             source_product_emoji=None,
             stock_qty=(inv.qty or 0) if inv else 0,
             norm_per_unit=norm or 0,
+            base_norm=base_norm,
+            tent_bonus=tent_bonus,
+            plant_level=plant_obj.level,
         )
 
     from models import Recipe
@@ -386,6 +395,9 @@ def product_craft_info(
         source_product_emoji=recipe.source_product.emoji,
         stock_qty=(inv.qty or 0) if inv else 0,
         norm_per_unit=get_user_production_norm(user, recipe.level) or 0,
+        base_norm=get_user_production_norm(user, recipe.level),
+        tent_bonus=None,
+        plant_level=None,
     )
 
 
