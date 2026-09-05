@@ -129,7 +129,7 @@ export default function TradesPage() {
   useEffect(() => {
     const id = setInterval(() => {
       load().catch(() => {});
-    }, 15000);
+    }, 5000);
     return () => clearInterval(id);
   }, []);
 

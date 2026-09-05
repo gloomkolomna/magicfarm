@@ -284,7 +284,7 @@ def respond(
         text += f" · вы получили: {received_txt}"
     if given_txt:
         text += f" · вы отдали: {given_txt}"
-    notify(db, post.author_id, text, peer_vk_id=user.vk_id, kind="trades")
+    notify(db, post.author_id, text, peer_vk_id=user.vk_id, kind="board")
     db.commit()
     db.refresh(post)
     return _post_out(db, post)

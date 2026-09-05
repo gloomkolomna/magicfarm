@@ -131,7 +131,7 @@ export default function BoardPage() {
   useEffect(() => {
     const id = setInterval(() => {
       load().catch(() => {});
-    }, 15000);
+    }, 3000);
     return () => clearInterval(id);
   }, []);
 
@@ -177,7 +177,8 @@ export default function BoardPage() {
       setDelivering(true);
       await load();
     } catch (e) {
-      setMsg('✗ ' + errDetail(e));
+      await load();
+      setMsg(/закрыто|занято/.test(errDetail(e)) ? 'Объявление уже занято' : '✗ ' + errDetail(e));
     } finally { setBusy(false); }
   }
 
@@ -189,7 +190,8 @@ export default function BoardPage() {
       setMsg('✓ Объявление снято');
       await load();
     } catch (e) {
-      setMsg('✗ ' + errDetail(e));
+      await load();
+      setMsg(/закрыто|занято/.test(errDetail(e)) ? 'Объявление уже закрыто' : '✗ ' + errDetail(e));
     } finally { setBusy(false); }
   }
 

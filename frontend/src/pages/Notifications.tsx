@@ -38,6 +38,8 @@ export default function NotificationsPage() {
     api.markNotificationRead(n.id).catch(() => {});
     if (n.kind === 'trades') {
       nav('/trades');
+    } else if (n.kind === 'board') {
+      nav('/board');
     } else if (n.peer_vk_id != null) {
       nav(`/chat/${n.peer_vk_id}`);
     }
@@ -65,7 +67,7 @@ export default function NotificationsPage() {
               style={{
                 fontSize: 14,
                 textAlign: 'left',
-                cursor: n.kind === 'trades' || n.peer_vk_id != null ? 'pointer' : 'default',
+                cursor: n.kind === 'trades' || n.kind === 'board' || n.peer_vk_id != null ? 'pointer' : 'default',
                 opacity: n.read ? 0.8 : 1,
                 borderColor: n.read ? undefined : 'rgba(255,200,90,0.4)',
               }}
@@ -73,7 +75,7 @@ export default function NotificationsPage() {
             >
               <div style={{ whiteSpace: 'pre-wrap' }}>{n.text}</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-                {fmt(n.created_at)}{n.kind === 'trades' ? ' · нажмите, чтобы открыть бартер →' : n.peer_vk_id != null ? ' · нажмите, чтобы открыть чат →' : ''}
+                {fmt(n.created_at)}{n.kind === 'trades' ? ' · нажмите, чтобы открыть бартер →' : n.kind === 'board' ? ' · нажмите, чтобы открыть доску →' : n.peer_vk_id != null ? ' · нажмите, чтобы открыть чат →' : ''}
               </div>
             </button>
           ))}

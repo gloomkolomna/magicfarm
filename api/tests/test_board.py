@@ -245,6 +245,7 @@ def test_respond_notifies_author_with_items():
     try:
         n = s.query(Notification).filter(Notification.user_id == 7001).first()
         assert n is not None
+        assert n.kind == "board"
         assert "получили" in n.text
         assert "Досочный ингредиент" in n.text
         assert "отдали" in n.text
