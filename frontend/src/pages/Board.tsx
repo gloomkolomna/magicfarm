@@ -93,6 +93,7 @@ export default function BoardPage() {
   const [wantItems, setWantItems] = useState<PickItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [delivering, setDelivering] = useState(false);
 
   const [message, setMessage] = useState('');
   const [giveRows, setGiveRows] = useState<RowForm[]>(EMPTY_ROWS);
@@ -127,6 +128,19 @@ export default function BoardPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      load().catch(() => {});
+    }, 15000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!delivering) return;
+    const t = setTimeout(() => setDelivering(false), 3000);
+    return () => clearTimeout(t);
+  }, [delivering]);
+
   const giveOf = useMemo(() => byKind(giveItems), [giveItems]);
   const wantOf = useMemo(() => byKind(wantItems), [wantItems]);
 
@@ -160,7 +174,7 @@ export default function BoardPage() {
     setBusy(true); setMsg(null);
     try {
       await api.respondBoardPost(id);
-      setMsg('✓ Обмен выполнен!');
+      setDelivering(true);
       await load();
     } catch (e) {
       setMsg('✗ ' + errDetail(e));
@@ -221,6 +235,15 @@ export default function BoardPage() {
     <div style={{ maxWidth: 'var(--shell-max-width)', margin: '0 auto', padding: 'var(--shell-pad)' }}>
       <h1 style={{ fontSize: 20, margin: '0 0 10px' }}>📋 Доска объявлений</h1>
       {msg && <Toast text={msg} onClose={() => setMsg(null)} />}
+
+      {delivering && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div className="fm-card fm-rise" style={{ textAlign: 'center', width: '100%', maxWidth: 320 }}>
+            <div style={{ fontSize: 46, marginBottom: 8 }}>🚚</div>
+            <div style={{ fontSize: 17, fontWeight: 600, overflowWrap: 'anywhere' }}>Товар доставляется</div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
         {([['board', '📋 Доска'], ['mine', `📌 Мои (${mine.length})`], ['create', '➕ Разместить'], ['history', '📜 История']] as const).map(([key, label]) => (
@@ -284,11 +307,9 @@ export default function BoardPage() {
 
           <div style={{ fontSize: 14, fontWeight: 600, margin: '12px 0 6px' }}>📤 Я отдаю</div>
           {renderRows('give')}
-          <button className="fm-btn fm-btn-outline fm-btn-sm" onClick={() => setGiveRows([...giveRows, { kind: 'plant', item_id: '' }])}>➕ Добавить предмет</button>
 
           <div style={{ fontSize: 14, fontWeight: 600, margin: '14px 0 6px' }}>📥 Хочу получить</div>
           {renderRows('want')}
-          <button className="fm-btn fm-btn-outline fm-btn-sm" onClick={() => setWantRows([...wantRows, { kind: 'plant', item_id: '' }])}>➕ Добавить предмет</button>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             <button className="fm-btn fm-btn-sm" disabled={busy} onClick={submitPost}>📋 Разместить объявление</button>

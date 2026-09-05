@@ -126,6 +126,13 @@ export default function TradesPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      load().catch(() => {});
+    }, 15000);
+    return () => clearInterval(id);
+  }, []);
+
   const itemsOf = useMemo(() => byKind(items), [items]);
   const recipientItemsOf = useMemo(() => byKind(recipientItems), [recipientItems]);
 

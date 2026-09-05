@@ -76,6 +76,8 @@ def _validate_items(items: list[BoardItemIn]) -> list[BoardItemIn]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Укажите, что вы отдаёте")
     if not any(i.direction == "want" for i in result):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Укажите, что вы хотите получить")
+    if len([i for i in result if i.direction == "give"]) > 1 or len([i for i in result if i.direction == "want"]) > 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Обмен только 1 к 1: не более одного предмета с каждой стороны")
     return result
 
 
@@ -105,6 +107,15 @@ def _can_respond(db: Session, viewer_id: int, post: BoardPost) -> bool:
             if _stock_qty(db, viewer_id, it.kind, it.item_id) < it.qty:
                 return False
     return True
+
+
+def _items_text(db: Session, items: list[BoardPostItem]) -> str:
+    parts = []
+    for it in items:
+        name, emoji, _ = _item_meta(db, it.kind, it.item_id)
+        label = f"{emoji} {name}".strip() if emoji else name
+        parts.append(f"{label} ×{it.qty}")
+    return ", ".join(parts)
 
 
 def _post_out(db: Session, post: BoardPost, viewer_id: int | None = None) -> BoardPostOut:
@@ -264,7 +275,16 @@ def respond(
     for hold in db.query(BoardHold).filter(BoardHold.post_id == post.id).all():
         db.delete(hold)
 
-    notify(db, post.author_id, f"✅ {_user_name(db, user)} откликнулся(ась) на ваше объявление на доске", peer_vk_id=user.vk_id, kind="trades")
+    received = [it for it in post.items if it.direction == "want"]
+    given = [it for it in post.items if it.direction == "give"]
+    received_txt = _items_text(db, received)
+    given_txt = _items_text(db, given)
+    text = f"✅ {_user_name(db, user)} откликнулся(ась) на ваше объявление на доске"
+    if received_txt:
+        text += f" · вы получили: {received_txt}"
+    if given_txt:
+        text += f" · вы отдали: {given_txt}"
+    notify(db, post.author_id, text, peer_vk_id=user.vk_id, kind="trades")
     db.commit()
     db.refresh(post)
     return _post_out(db, post)

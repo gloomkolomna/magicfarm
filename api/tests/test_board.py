@@ -104,6 +104,16 @@ def test_create_board_message_too_long(player_client):
     assert "символов" in r.json()["detail"]
 
 
+def test_create_board_requires_one_to_one(player_client):
+    r = player_client.post("/api/board", json=_payload([
+        {"kind": "plant", "item_id": 1, "qty": 1, "direction": "give"},
+        {"kind": "plant", "item_id": 2, "qty": 1, "direction": "give"},
+        {"kind": "plant", "item_id": 2, "qty": 1, "direction": "want"},
+    ]))
+    assert r.status_code == 400
+    assert "1 к 1" in r.json()["detail"]
+
+
 def test_create_board_reserves_give_items(player_client):
     _give_plant(123, 1, 3)
     r = player_client.post("/api/board", json=_payload([
@@ -212,6 +222,34 @@ def test_respond_requires_want_items():
         res = b.post(f"/api/board/{pid}/respond")
         assert res.status_code == 400
         assert "недостаточно" in res.json()["detail"].lower()
+
+
+def test_respond_notifies_author_with_items():
+    from models import Notification
+
+    _add_user(7001)
+    _add_user(7002)
+    ing_id = _make_ingredient()
+    _give_plant(7001, 1, 1)
+    _give_ingredient(7002, ing_id, 1)
+    with make_user_client(7001, "player") as a:
+        r = a.post("/api/board", json=_payload([
+            {"kind": "plant", "item_id": 1, "qty": 1, "direction": "give"},
+            {"kind": "ingredient", "item_id": ing_id, "qty": 1, "direction": "want"},
+        ]))
+        pid = r.json()["id"]
+    with make_user_client(7002, "player") as b:
+        assert b.post(f"/api/board/{pid}/respond").status_code == 200
+
+    s = TestingSessionLocal()
+    try:
+        n = s.query(Notification).filter(Notification.user_id == 7001).first()
+        assert n is not None
+        assert "получили" in n.text
+        assert "Досочный ингредиент" in n.text
+        assert "отдали" in n.text
+    finally:
+        s.close()
 
 
 def test_respond_own_post_400(player_client):
