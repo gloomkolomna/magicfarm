@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/board", tags=["board"])
 
 BOARD_KINDS = ("plant", "product", "ingredient")
 BOARD_DIRECTIONS = ("give", "want")
-BOARD_TTL_DAYS = 7
+BOARD_TTL_DAYS = 3
 BOARD_MESSAGE_MAX = 1000
 
 
