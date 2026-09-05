@@ -343,6 +343,36 @@ export interface TradeOffer {
   items: TradeOfferItem[];
 }
 
+export interface BoardItemIn {
+  kind: 'plant' | 'product' | 'ingredient';
+  item_id: number;
+  qty: number;
+  direction: 'give' | 'want';
+}
+
+export interface BoardItem {
+  id: number;
+  kind: string;
+  item_id: number;
+  item_name: string;
+  item_emoji: string | null;
+  item_image: string | null;
+  qty: number;
+  direction: string;
+}
+
+export interface BoardPost {
+  id: number;
+  author_id: number;
+  author_name: string;
+  status: string;
+  message: string | null;
+  created_at: string | null;
+  expires_at: string | null;
+  items: BoardItem[];
+  can_respond: boolean;
+}
+
 export interface ChatMessage {
   id: number;
   from_user_id: number;
@@ -2415,6 +2445,15 @@ export const api = {
   acceptTrade: (id: number) => client.post<TradeOffer>(`/trades/${id}/accept`).then((r) => r.data),
   cancelTrade: (id: number) => client.post<TradeOffer>(`/trades/${id}/cancel`).then((r) => r.data),
   rejectTrade: (id: number) => client.post<TradeOffer>(`/trades/${id}/reject`).then((r) => r.data),
+
+  // ── Доска объявлений ──
+  board: () => client.get<BoardPost[]>('/board').then((r) => r.data),
+  boardMine: () => client.get<BoardPost[]>('/board/mine').then((r) => r.data),
+  boardHistory: () => client.get<BoardPost[]>('/board/history').then((r) => r.data),
+  createBoardPost: (data: { message?: string | null; items: BoardItemIn[] }) =>
+    client.post<BoardPost>('/board', data).then((r) => r.data),
+  respondBoardPost: (id: number) => client.post<BoardPost>(`/board/${id}/respond`).then((r) => r.data),
+  cancelBoardPost: (id: number) => client.post<BoardPost>(`/board/${id}/cancel`).then((r) => r.data),
 
   // ── Чат ──
   chatConversations: () => client.get<Conversation[]>('/chat/conversations').then((r) => r.data),

@@ -71,6 +71,7 @@ const LessonsPage = lazyPage(() => import('./pages/Lessons'));
 const RulesPage = lazyPage(() => import('./pages/Rules'));
 const FarmsPage = lazyPage(() => import('./pages/Farms'));
 const TradesPage = lazyPage(() => import('./pages/Trades'));
+const BoardPage = lazyPage(() => import('./pages/Board'));
 const ChatPage = lazyPage(() => import('./pages/Chat'));
 const NotificationsPage = lazyPage(() => import('./pages/Notifications'));
 const PaywallPage = lazyPage(() => import('./pages/Paywall')) as unknown as ComponentType<{ onWatch?: () => void }>;
@@ -287,6 +288,7 @@ function App() {
           <Route path="/rules" element={<MiniAppShell><RulesPage /></MiniAppShell>} />
           <Route path="/farms" element={<MiniAppShell><FarmsPage /></MiniAppShell>} />
           <Route path="/trades" element={<MiniAppShell><TradesPage /></MiniAppShell>} />
+          <Route path="/board" element={<MiniAppShell><BoardPage /></MiniAppShell>} />
           <Route path="/chat" element={<MiniAppShell><ChatPage /></MiniAppShell>} />
           <Route path="/chat/:vkId" element={<MiniAppShell><ChatPage /></MiniAppShell>} />
           <Route path="/notifications" element={<MiniAppShell><NotificationsPage /></MiniAppShell>} />

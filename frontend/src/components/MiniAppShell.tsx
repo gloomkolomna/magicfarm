@@ -35,6 +35,7 @@ const BASE_TABS: Tab[] = [
   { path: '/lessons', label: '🎬 Видеоуроки', section: 'profile' },
   { path: '/rules', label: '📜 Правила игры', section: 'profile' },
   { path: '/trades', label: '🤝 Бартер', section: 'profile' },
+  { path: '/board', label: '📋 Доска объявлений', section: 'profile' },
   { path: '/chat', label: '💬 Чат', section: 'profile' },
   { path: '/farms', label: '🌾 Фермы игроков', section: 'profile' },
 ];

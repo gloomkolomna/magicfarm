@@ -42,6 +42,7 @@ from routes.story import router as story_router, admin_router as admin_story_rou
 from routes.lessons import router as lessons_router, admin_router as admin_lessons_router
 from routes.public_players import router as public_players_router
 from routes.trades import router as trades_router
+from routes.board import router as board_router
 from routes.chat import router as chat_router
 from routes.gifts import router as gifts_router
 from routes.notifications import router as notifications_router
@@ -119,6 +120,7 @@ app.include_router(lessons_router)
 app.include_router(admin_lessons_router)
 app.include_router(public_players_router)
 app.include_router(trades_router)
+app.include_router(board_router)
 app.include_router(chat_router)
 app.include_router(gifts_router)
 app.include_router(notifications_router)

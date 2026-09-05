@@ -1549,3 +1549,41 @@ class Notification(Base):
     kind = Column(String(20), nullable=True)
     created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
     read_at = Column(DateTime, nullable=True)
+
+
+class BoardPost(Base):
+    __tablename__ = "board_posts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    author_id = Column(Integer, ForeignKey("users.vk_id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, nullable=False, default="open", server_default="open")
+    message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=__import__("datetime").datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    fulfilled_by = Column(Integer, nullable=True)
+    fulfilled_at = Column(DateTime, nullable=True)
+
+    items = relationship("BoardPostItem", back_populates="post", cascade="all, delete-orphan")
+
+
+class BoardPostItem(Base):
+    __tablename__ = "board_post_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    post_id = Column(Integer, ForeignKey("board_posts.id", ondelete="CASCADE"), nullable=False)
+    kind = Column(String, nullable=False)
+    item_id = Column(Integer, nullable=False)
+    qty = Column(Integer, nullable=False)
+    direction = Column(String, nullable=False)
+
+    post = relationship("BoardPost", back_populates="items")
+
+
+class BoardHold(Base):
+    __tablename__ = "board_holds"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    post_id = Column(Integer, ForeignKey("board_posts.id", ondelete="CASCADE"), nullable=False)
+    kind = Column(String, nullable=False)
+    item_id = Column(Integer, nullable=False)
+    qty = Column(Integer, nullable=False)
