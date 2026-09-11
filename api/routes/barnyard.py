@@ -321,7 +321,6 @@ def tent_storage(
                 qty=i.qty,
                 price_per_unit=animal_product_unit_price(
                     db, user.vk_id, i.product.animal_id if i.product else None,
-                    i.product.production_kind if i.product else None,
                 ),
             ).model_dump()
             for i in items

@@ -72,8 +72,8 @@ def _sell(pc, product_id, qty):
     })
 
 
-# sewing: (5 база + 30 наценка) × 0.5 = 17 за 1 ед.; далее +5 за каждое последующее животное
-BASE_UNIT = 17
+# база 5 монет за 1 ед. (первое животное); далее +5 за каждое последующее животное
+BASE_UNIT = 5
 
 
 def test_install_assigns_sequential_opening_orders(admin_client):
@@ -133,7 +133,7 @@ def test_sell_first_animal_product_no_bonus(admin_client):
     with make_user_client(PLAYER_VK, "player") as pc:
         res = _sell(pc, wool_id, 2)
         assert res.status_code == 200, res.text
-        assert res.json()["coins_earned"] == 35
+        assert res.json()["coins_earned"] == BASE_UNIT * 2
 
 
 def test_sell_second_animal_product_plus_five(admin_client):
@@ -152,7 +152,7 @@ def test_sell_second_animal_product_plus_five(admin_client):
 
         res = _sell(pc, egg_id, 3)
         assert res.status_code == 200, res.text
-        assert res.json()["coins_earned"] == 52 + 15
+        assert res.json()["coins_earned"] == (BASE_UNIT + 5) * 3
 
 
 def test_sell_third_animal_product_plus_ten(admin_client):
@@ -198,7 +198,7 @@ def test_bonus_not_cut_by_sale_ratio(admin_client):
     with make_user_client(PLAYER_VK, "player") as pc:
         res = _sell(pc, egg_id, 1)
         assert res.status_code == 200, res.text
-        assert res.json()["coins_earned"] == 3 + 5
+        assert res.json()["coins_earned"] == BASE_UNIT + 5
 
 
 def test_sell_after_release_keeps_bonus(admin_client):
