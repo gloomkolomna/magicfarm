@@ -232,7 +232,7 @@ export function ForestBarScenePage() {
                 ) : (
                   <div style={{ fontSize: 'clamp(24px,8vw,52px)', lineHeight: 1 }}>🍸</div>
                 )}
-                <div style={{ position: 'absolute', left: 2, right: 2, bottom: 1, fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe6c0', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600, background: 'rgba(10,16,8,0.45)', borderRadius: 4, padding: '0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ position: 'absolute', left: 3, right: 3, bottom: 3, fontSize: 11, lineHeight: 1.25, color: '#fff', textAlign: 'center', textShadow: '0 1px 2px #000', fontWeight: 600, background: 'rgba(10,16,8,0.78)', borderRadius: 5, padding: '2px 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {activeShaker ? `🍸 ${activeShaker.recipe_name ?? 'Шейкер'}` : 'Место шейкера'}
                 </div>
               </ZoneRect>
@@ -245,7 +245,7 @@ export function ForestBarScenePage() {
                 ) : (
                   <div style={{ fontSize: 'clamp(24px,8vw,52px)', lineHeight: 1 }}>📖</div>
                 )}
-                <div style={{ position: 'absolute', left: 2, right: 2, bottom: 1, fontSize: 'clamp(9px,2.2vw,13px)', color: '#ffe6c0', textAlign: 'center', textShadow: '0 1px 3px #000', fontWeight: 600, background: 'rgba(10,16,8,0.45)', borderRadius: 4, padding: '0 4px' }}>
+                <div style={{ position: 'absolute', left: 3, right: 3, bottom: 3, fontSize: 11, lineHeight: 1.25, color: '#fff', textAlign: 'center', textShadow: '0 1px 2px #000', fontWeight: 600, background: 'rgba(10,16,8,0.78)', borderRadius: 5, padding: '2px 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   Книга коктейлей
                 </div>
               </ZoneRect>
