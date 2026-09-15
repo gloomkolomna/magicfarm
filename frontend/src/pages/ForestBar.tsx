@@ -6,6 +6,7 @@ import 'swiper/css';
 import { useSession } from '../context/SessionContext';
 import { api, type BarZone, type FieldDetail, type FieldInfo, type Shaker } from '../api/endpoints';
 import { mediaUrl } from '../api/media';
+import { confirmDialog } from '../components/Confirm';
 import LocationMap from '../components/LocationMap';
 import Toast from '../components/Toast';
 
@@ -189,6 +190,20 @@ export function ForestBarScenePage() {
     } finally { setBusy(false); }
   }
 
+  async function cancelNow() {
+    if (!activeShaker) return;
+    if (!(await confirmDialog('Убрать шейкер и выбрать другой рецепт? Ингредиенты не тратятся.'))) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.cancelShaker();
+      setShakerModal(false);
+      setMsg('✓ Шейкер убран');
+      await load();
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.response?.data?.detail || 'Ошибка'));
+    } finally { setBusy(false); }
+  }
+
   function endMixVideo() {
     setMixVideoOpen(false);
     if (pendingMixMsg) {
@@ -350,6 +365,7 @@ export function ForestBarScenePage() {
           ) : (
             <div className="fm-card" style={{ fontSize: 13, color: 'var(--text-muted)' }}>Не хватает ингредиентов.</div>
           )}
+          <button className="fm-btn fm-btn-outline" style={{ width: '100%', marginTop: 8 }} disabled={busy} onClick={cancelNow}>🗑 Убрать шейкер</button>
         </Modal>
       )}
 

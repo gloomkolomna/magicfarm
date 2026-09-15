@@ -314,6 +314,49 @@ def test_mix_without_shaker(player_client):
     assert r.status_code == 409
 
 
+def test_cancel_shaker_frees_slot(admin_client):
+    ing = _seed_ingredient()
+    rem = _seed_remedy()
+    rid = _create_recipe(admin_client, ing, rem)
+    _seed_all_stock(123, ing, rem)
+
+    with make_user_client(123, "player") as c:
+        assert c.post("/api/cocktails/shaker", json={"recipe_id": rid}).status_code == 201
+        r = c.delete("/api/cocktails/shaker")
+        assert r.status_code == 204
+        assert c.get("/api/cocktails/shaker").json() is None
+        assert c.post("/api/cocktails/shaker", json={"recipe_id": rid}).status_code == 201
+
+
+def test_cancel_shaker_without_shaker(player_client):
+    r = player_client.delete("/api/cocktails/shaker")
+    assert r.status_code == 409
+
+
+def test_cancel_shaker_keeps_stock(admin_client):
+    ing = _seed_ingredient()
+    rem = _seed_remedy()
+    rid = _create_recipe(admin_client, ing, rem)
+    _seed_all_stock(123, ing, rem)
+
+    with make_user_client(123, "player") as c:
+        assert c.post("/api/cocktails/shaker", json={"recipe_id": rid}).status_code == 201
+        assert c.delete("/api/cocktails/shaker").status_code == 204
+
+    from models import Inventory, UserIngredient, UserRemedy
+    from tests.conftest import TestingSessionLocal
+    s = TestingSessionLocal()
+    try:
+        prod = s.query(Inventory).filter(Inventory.user_id == 123, Inventory.product_id == 1).first()
+        assert prod.qty == 1
+        ui = s.query(UserIngredient).filter(UserIngredient.user_id == 123, UserIngredient.ingredient_id == ing).first()
+        assert ui.qty == 1
+        ur = s.query(UserRemedy).filter(UserRemedy.user_id == 123, UserRemedy.remedy_id == rem).first()
+        assert ur.qty == 1
+    finally:
+        s.close()
+
+
 def test_repeat_mix(admin_client):
     ing = _seed_ingredient()
     rem = _seed_remedy()

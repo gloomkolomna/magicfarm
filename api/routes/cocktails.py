@@ -325,6 +325,21 @@ def mix_cocktail(
     )
 
 
+@router.delete("/shaker", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_shaker(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    s = db.query(Shaker).filter(
+        Shaker.user_id == user.vk_id, Shaker.status != "done"
+    ).first()
+    if s is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Шейкер не установлен")
+    db.delete(s)
+    db.commit()
+    return None
+
+
 # ── Admin ──
 
 admin_router = APIRouter(prefix="/api/admin/cocktail-recipes", tags=["admin-cocktail-recipes"])

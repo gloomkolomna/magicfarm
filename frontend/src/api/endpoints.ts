@@ -2127,6 +2127,8 @@ export const api = {
     client.post<Shaker>('/cocktails/shaker', { recipe_id: recipeId }).then((r) => r.data),
   mixCocktail: () =>
     client.post<{ id: number; recipe_name: string | null; coins_earned: number; coins_balance: number }>('/cocktails/shaker/mix').then((r) => r.data),
+  cancelShaker: () =>
+    client.delete('/cocktails/shaker').then((r) => r.data),
 
   // ── Маршруты / уровни ──
   levels: () =>
