@@ -172,6 +172,7 @@ def _get_open_offer(db: Session, offer_id: int) -> TradeOffer:
 
 
 def _transfer(db: Session, user_id: int, kind: str, item_id: int, qty: int) -> None:
+    db.flush()
     row = _stock_row(db, user_id, kind, item_id)
     if row is None:
         if kind == "plant":

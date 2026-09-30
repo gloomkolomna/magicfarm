@@ -293,6 +293,74 @@ def test_cancel_only_author(player_client):
         assert b.post(f"/api/board/{pid}/cancel").status_code == 403
 
 
+def test_expire_two_posts_same_item_single_sweep():
+    import datetime
+
+    _add_user(7001)
+    _give_plant(7001, 1, 2)
+    with make_user_client(7001, "player") as a:
+        for _ in range(2):
+            r = a.post("/api/board", json=_payload([
+                {"kind": "plant", "item_id": 1, "qty": 1, "direction": "give"},
+                {"kind": "plant", "item_id": 2, "qty": 1, "direction": "want"},
+            ]))
+            assert r.status_code == 201, r.text
+        pids = [p["id"] for p in a.get("/api/board/mine").json()]
+        assert len(pids) == 2
+
+    s = TestingSessionLocal()
+    try:
+        assert s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).first() is None
+        s.query(BoardPost).filter(BoardPost.id.in_(pids)).update(
+            {"expires_at": datetime.datetime.utcnow() - datetime.timedelta(days=1)},
+            synchronize_session=False,
+        )
+        s.commit()
+    finally:
+        s.close()
+
+    with make_user_client(7001, "player") as a:
+        assert a.get("/api/board").status_code == 200
+        assert a.get("/api/board/mine").json() == []
+        assert a.get("/api/board/mine").json() == []
+
+    s = TestingSessionLocal()
+    try:
+        rows = s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).all()
+        assert len(rows) == 1
+        assert rows[0].qty == 2
+        assert s.query(BoardHold).filter(BoardHold.post_id.in_(pids)).count() == 0
+        assert s.query(BoardPost).filter(BoardPost.id.in_(pids), BoardPost.status != "expired").count() == 0
+    finally:
+        s.close()
+
+
+def test_respond_when_want_and_give_same_item():
+    _add_user(7001)
+    _add_user(7002)
+    _give_plant(7001, 1, 2)
+    _give_plant(7002, 1, 1)
+    with make_user_client(7001, "player") as a:
+        r = a.post("/api/board", json=_payload([
+            {"kind": "plant", "item_id": 1, "qty": 1, "direction": "want"},
+            {"kind": "plant", "item_id": 1, "qty": 1, "direction": "give"},
+        ]))
+        assert r.status_code == 201, r.text
+        pid = r.json()["id"]
+    with make_user_client(7002, "player") as b:
+        res = b.post(f"/api/board/{pid}/respond")
+        assert res.status_code == 200, res.text
+    s = TestingSessionLocal()
+    try:
+        row_b = s.query(Inventory).filter(Inventory.user_id == 7002, Inventory.plant_id == 1).first()
+        row_a = s.query(Inventory).filter(Inventory.user_id == 7001, Inventory.plant_id == 1).first()
+        assert row_b is not None and row_b.qty == 1
+        assert row_a is not None and row_a.qty == 2
+        assert s.query(BoardHold).filter(BoardHold.post_id == pid).count() == 0
+    finally:
+        s.close()
+
+
 def test_expire_restores_holds():
     import datetime
 

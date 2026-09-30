@@ -95,9 +95,14 @@ def _expire_stale(db: Session) -> None:
         .all()
     )
     for post in stale:
+        claimed = db.execute(
+            update(BoardPost)
+            .where(BoardPost.id == post.id, BoardPost.status == "open")
+            .values(status="expired")
+        )
+        if claimed.rowcount != 1:
+            continue
         _release_holds(db, post.id, post.author_id)
-        post.status = "expired"
-    if stale:
         db.commit()
 
 
